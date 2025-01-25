@@ -29,7 +29,7 @@ __version__ = "4.2.0"
 __author__ = "DLmaster361 <DLmaster_361@163.com>"
 __license__ = "GPL-3.0 license"
 
-from .config import AppConfig, QueueConfig, MaaConfig
+from .core import AppConfig, QueueConfig, MaaConfig, Task, TaskManager, MainTimer
 from .models import MaaManager
 from .services import Notification, CryptoHandler, SystemHandler
 from .ui import AUTO_MAA
@@ -39,6 +39,9 @@ __all__ = [
     "AppConfig",
     "QueueConfig",
     "MaaConfig",
+    "Task",
+    "TaskManager",
+    "MainTimer",
     "MaaManager",
     "Notification",
     "CryptoHandler",
