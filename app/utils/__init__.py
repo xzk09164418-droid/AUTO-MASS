@@ -25,5 +25,6 @@ __license__ = "GPL-3.0 license"
 
 
 from .logger import get_logger
+from .security import dpapi_encrypt, dpapi_decrypt
 
-__all__ = ["get_logger"]
+__all__ = ["get_logger", "dpapi_encrypt", "dpapi_decrypt"]
