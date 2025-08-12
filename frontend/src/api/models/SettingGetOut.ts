@@ -2,6 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { GlobalConfig } from './GlobalConfig';
 export type SettingGetOut = {
     /**
      * 状态码
@@ -18,6 +19,6 @@ export type SettingGetOut = {
     /**
      * 全局设置数据
      */
-    data: Record<string, Record<string, any>>;
+    data: GlobalConfig;
 };
 
