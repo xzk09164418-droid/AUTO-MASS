@@ -23,6 +23,7 @@ __version__ = "5.0.0"
 __author__ = "DLmaster361 <DLmaster_361@163.com>"
 __license__ = "GPL-3.0 license"
 
+from .core import router as core_router
 from .info import router as info_router
 from .scripts import router as scripts_router
 from .plan import router as plan_router
@@ -32,6 +33,7 @@ from .history import router as history_router
 from .setting import router as setting_router
 
 __all__ = [
+    "core_router",
     "info_router",
     "scripts_router",
     "plan_router",
