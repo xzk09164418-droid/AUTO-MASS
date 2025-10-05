@@ -6,13 +6,11 @@ import {
   CloseOutlined,
   DeleteOutlined,
   EditOutlined,
-  HolderOutlined,
   PlusOutlined,
   QuestionCircleOutlined,
   SaveOutlined,
   SearchOutlined,
 } from '@ant-design/icons-vue'
-import draggable from 'vuedraggable'
 import type { EmulatorIndexItem, EmulatorInfo, EmulatorSearchResult } from '@/api'
 import { Service } from '@/api'
 
@@ -33,6 +31,11 @@ const emulatorIndex = ref<EmulatorIndexItem[]>([])
 const emulatorData = ref<Record<string, EmulatorInfo>>({})
 const searchResults = ref<EmulatorSearchResult[]>([])
 const showSearchModal = ref(false)
+
+// 设备信息相关状态
+const expandedEmulators = ref<Set<string>>(new Set())
+const devicesData = ref<Record<string, Record<string, { title: string; status: string }>>>({})
+const loadingDevices = ref<Set<string>>(new Set())
 
 // 编辑状态
 const editingId = ref<string | null>(null)
@@ -212,25 +215,63 @@ const handleImportFromSearch = async (result: EmulatorSearchResult) => {
   }
 }
 
-// 拖拽排序
-const handleDragEnd = async (newIndex: EmulatorIndexItem[]) => {
+// 展开/折叠设备信息
+const toggleDevices = async (uuid: string) => {
+  if (expandedEmulators.value.has(uuid)) {
+    // 如果已展开，则折叠
+    expandedEmulators.value.delete(uuid)
+    expandedEmulators.value = new Set(expandedEmulators.value)
+  } else {
+    // 如果未展开，则加载并展开
+    expandedEmulators.value.add(uuid)
+    expandedEmulators.value = new Set(expandedEmulators.value)
+    
+    // 如果还没有加载设备信息，则加载
+    if (!devicesData.value[uuid]) {
+      await loadDevices(uuid)
+    }
+  }
+}
+
+// 加载设备信息
+const loadDevices = async (uuid: string) => {
+  loadingDevices.value.add(uuid)
+  loadingDevices.value = new Set(loadingDevices.value)
+  
   try {
-    const indexList = newIndex.map(item => item.uuid)
-    const response = await Service.reorderEmulatorApiSettingEmulatorOrderPost({
-      indexList,
-    })
-    if (response.code === 200) {
-      message.success('排序已保存')
-      emulatorIndex.value = newIndex
-    } else {
-      message.error(response.message || '排序保存失败')
-      await loadEmulators() // 恢复原顺序
+    // const response = await Service.getEmulatorDevicesApiSettingEmulatorDevicesPost({
+    //   emulatorId: uuid,
+    // })
+    // if (response.code === 200) {
+    //   devicesData.value[uuid] = response.devices
+    // } else {
+    //   message.error(response.message || '获取设备信息失败')
+    //   expandedEmulators.value.delete(uuid)
+    //   expandedEmulators.value = new Set(expandedEmulators.value)
+    // }
+    
+    // 临时数据用于测试UI
+    await new Promise(resolve => setTimeout(resolve, 500))
+    devicesData.value[uuid] = {
+      '0': { title: '模拟器-1', status: '0' },
+      '1': { title: '模拟器-2', status: '1' },
     }
   } catch (e) {
-    console.error('保存排序失败', e)
-    message.error('保存排序失败')
-    await loadEmulators() // 恢复原顺序
+    console.error('获取设备信息失败', e)
+    message.error('获取设备信息失败')
+    // 加载失败时取消展开
+    expandedEmulators.value.delete(uuid)
+    expandedEmulators.value = new Set(expandedEmulators.value)
+  } finally {
+    loadingDevices.value.delete(uuid)
+    loadingDevices.value = new Set(loadingDevices.value)
   }
+}
+
+// 刷新设备信息
+const refreshDevices = async (uuid: string) => {
+  await loadDevices(uuid)
+  message.success('刷新成功')
 }
 
 // 路径选择
@@ -365,165 +406,205 @@ const handleRemoveBossKey = () => {
           </a-empty>
         </div>
 
-        <draggable
-          v-else
-          v-model="emulatorIndex"
-          item-key="uuid"
-          @end="handleDragEnd"
-          handle=".drag-handle"
-          animation="200"
-        >
-          <template #item="{ element }">
-            <div class="emulator-card">
-              <div class="card-header">
-                <div class="card-title">
-                  <HolderOutlined class="drag-handle" />
-                  <span v-if="editingId !== element.uuid">{{
-                    emulatorData[element.uuid]?.name || '未命名'
-                  }}</span>
-                  <a-input
-                    v-else
-                    v-model:value="editingData.name"
-                    placeholder="模拟器名称"
-                    style="max-width: 300px"
-                  />
+        <div v-else class="emulator-list">
+          <div v-for="element in emulatorIndex" :key="element.uuid" class="emulator-card">
+            <div class="card-header">
+              <div class="card-title">
+                <span v-if="editingId !== element.uuid">{{
+                  emulatorData[element.uuid]?.name || '未命名'
+                }}</span>
+                <a-input
+                  v-else
+                  v-model:value="editingData.name"
+                  placeholder="模拟器名称"
+                  style="max-width: 300px"
+                />
+              </div>
+              <div class="card-actions">
+                <template v-if="editingId === element.uuid">
+                  <a-button
+                    type="primary"
+                    size="small"
+                    :icon="h(SaveOutlined)"
+                    @click="handleSave(element.uuid)"
+                  >
+                    保存
+                  </a-button>
+                  <a-button size="small" :icon="h(CloseOutlined)" @click="handleCancel">
+                    取消
+                  </a-button>
+                </template>
+                <template v-else>
+                  <a-button
+                    type="link"
+                    size="small"
+                    @click="toggleDevices(element.uuid)"
+                  >
+                    {{ expandedEmulators.has(element.uuid) ? '折叠设备' : '查看设备' }}
+                  </a-button>
+                  <a-button
+                    type="link"
+                    size="small"
+                    :icon="h(EditOutlined)"
+                    @click="handleEdit(element.uuid)"
+                  >
+                    编辑
+                  </a-button>
+                  <a-popconfirm
+                    title="确定要删除此模拟器配置吗？"
+                    ok-text="确定"
+                    cancel-text="取消"
+                    @confirm="handleDelete(element.uuid)"
+                  >
+                    <a-button type="link" danger size="small" :icon="h(DeleteOutlined)">
+                      删除
+                    </a-button>
+                  </a-popconfirm>
+                </template>
+              </div>
+            </div>
+
+            <div v-if="editingId === element.uuid" class="card-content">
+              <a-row :gutter="16">
+                <a-col :span="12">
+                  <div class="form-item-vertical">
+                    <div class="form-label-wrapper">
+                      <span class="form-label">模拟器类型</span>
+                      <a-tooltip title="如: MuMu12, BlueStacks, LDPlayer等">
+                        <QuestionCircleOutlined class="help-icon" />
+                      </a-tooltip>
+                    </div>
+                    <a-select
+                      v-model:value="editingData.type"
+                      placeholder="选择模拟器类型"
+                      :options="emulatorTypeOptions"
+                      style="width: 100%"
+                    />
+                  </div>
+                </a-col>
+                <a-col :span="12">
+                  <div class="form-item-vertical">
+                    <div class="form-label-wrapper">
+                      <span class="form-label">最大等待时间（秒）</span>
+                      <a-tooltip title="启动模拟器后的最大等待时间">
+                        <QuestionCircleOutlined class="help-icon" />
+                      </a-tooltip>
+                    </div>
+                    <a-input-number
+                      v-model:value="editingData.max_wait_time"
+                      placeholder="输入最大等待时间"
+                      style="width: 100%"
+                      min="10"
+                      max="300"
+                      step="5"
+                    />
+                  </div>
+                </a-col>
+              </a-row>
+
+              <div class="form-item-vertical">
+                <div class="form-label-wrapper">
+                  <span class="form-label">模拟器路径</span>
+                  <a-tooltip title="模拟器可执行文件的完整路径">
+                    <QuestionCircleOutlined class="help-icon" />
+                  </a-tooltip>
                 </div>
-                <div class="card-actions">
-                  <template v-if="editingId === element.uuid">
-                    <a-button
-                      type="primary"
-                      size="small"
-                      :icon="h(SaveOutlined)"
-                      @click="handleSave(element.uuid)"
-                    >
-                      保存
-                    </a-button>
-                    <a-button size="small" :icon="h(CloseOutlined)" @click="handleCancel">
-                      取消
-                    </a-button>
-                  </template>
-                  <template v-else>
-                    <a-button
-                      type="link"
-                      size="small"
-                      :icon="h(EditOutlined)"
-                      @click="handleEdit(element.uuid)"
-                    >
-                      编辑
-                    </a-button>
-                    <a-popconfirm
-                      title="确定要删除此模拟器配置吗？"
-                      ok-text="确定"
-                      cancel-text="取消"
-                      @confirm="handleDelete(element.uuid)"
-                    >
-                      <a-button type="link" danger size="small" :icon="h(DeleteOutlined)">
-                        删除
-                      </a-button>
-                    </a-popconfirm>
-                  </template>
+                <div style="display: flex; gap: 8px">
+                  <a-input
+                    v-model:value="editingData.path"
+                    placeholder="输入模拟器路径"
+                    :disabled="true"
+                  />
+                  <a-button @click="selectEmulatorPath">选择路径</a-button>
                 </div>
               </div>
 
-              <div v-if="editingId === element.uuid" class="card-content">
-                <a-row :gutter="16">
-                  <a-col :span="12">
-                    <div class="form-item-vertical">
-                      <div class="form-label-wrapper">
-                        <span class="form-label">模拟器类型</span>
-                        <a-tooltip title="如: MuMu12, BlueStacks, LDPlayer等">
-                          <QuestionCircleOutlined class="help-icon" />
-                        </a-tooltip>
-                      </div>
-                      <a-select
-                        v-model:value="editingData.type"
-                        placeholder="选择模拟器类型"
-                        :options="emulatorTypeOptions"
-                        style="width: 100%"
-                      />
-                    </div>
-                  </a-col>
-                  <a-col :span="12">
-                    <div class="form-item-vertical">
-                      <div class="form-label-wrapper">
-                        <span class="form-label">最大等待时间（秒）</span>
-                        <a-tooltip title="启动模拟器后的最大等待时间">
-                          <QuestionCircleOutlined class="help-icon" />
-                        </a-tooltip>
-                      </div>
-                      <a-input-number
-                        v-model:value="editingData.max_wait_time"
-                        placeholder="输入最大等待时间"
-                        style="width: 100%"
-                        min="10"
-                        max="300"
-                        step="5"
-                      />
-                    </div>
-                  </a-col>
-                </a-row>
-
-                <div class="form-item-vertical">
-                  <div class="form-label-wrapper">
-                    <span class="form-label">模拟器路径</span>
-                    <a-tooltip title="模拟器可执行文件的完整路径">
-                      <QuestionCircleOutlined class="help-icon" />
-                    </a-tooltip>
-                  </div>
-                  <div style="display: flex; gap: 8px">
-                    <a-input
-                      v-model:value="editingData.path"
-                      placeholder="输入模拟器路径"
-                      :disabled="true"
-                    />
-                    <a-button @click="selectEmulatorPath">选择路径</a-button>
-                  </div>
+              <div class="form-item-vertical">
+                <div class="form-label-wrapper">
+                  <span class="form-label">老板键</span>
+                  <a-tooltip title="快速隐藏模拟器的快捷键组合">
+                    <QuestionCircleOutlined class="help-icon" />
+                  </a-tooltip>
                 </div>
-
-                <div class="form-item-vertical">
-                  <div class="form-label-wrapper">
-                    <span class="form-label">老板键</span>
-                    <a-tooltip title="快速隐藏模拟器的快捷键组合">
-                      <QuestionCircleOutlined class="help-icon" />
-                    </a-tooltip>
-                  </div>
-                  <div style="display: flex; gap: 8px; margin-bottom: 8px">
-                    <a-input
-                      v-model:value="bossKeyInput"
-                      :placeholder="
-                        recordingBossKey ? '请按下快捷键组合...' : '输入快捷键，如 Ctrl+Q'
-                      "
-                      :disabled="recordingBossKey"
-                      @press-enter="handleSetBossKey"
-                    />
-                    <a-button v-if="!recordingBossKey" type="default" @click="startRecordBossKey">
-                      录制
-                    </a-button>
-                    <a-button v-else type="primary" danger @click="stopRecordBossKey">
-                      取消录制
-                    </a-button>
-                    <a-button @click="handleSetBossKey" :disabled="recordingBossKey">
-                      设置
-                    </a-button>
-                  </div>
-                  <div
-                    v-if="editingData.boss_keys && editingData.boss_keys.length > 0"
-                    class="boss-key-list"
+                <div style="display: flex; gap: 8px; margin-bottom: 8px">
+                  <a-input
+                    v-model:value="bossKeyInput"
+                    :placeholder="
+                      recordingBossKey ? '请按下快捷键组合...' : '输入快捷键，如 Ctrl+Q'
+                    "
+                    :disabled="recordingBossKey"
+                    @press-enter="handleSetBossKey"
+                  />
+                  <a-button v-if="!recordingBossKey" type="default" @click="startRecordBossKey">
+                    录制
+                  </a-button>
+                  <a-button v-else type="primary" danger @click="stopRecordBossKey">
+                    取消录制
+                  </a-button>
+                  <a-button @click="handleSetBossKey" :disabled="recordingBossKey"> 设置 </a-button>
+                </div>
+                <div
+                  v-if="editingData.boss_keys && editingData.boss_keys.length > 0"
+                  class="boss-key-list"
+                >
+                  <a-tag
+                    v-for="key in editingData.boss_keys"
+                    :key="key"
+                    closable
+                    @close="handleRemoveBossKey()"
                   >
-                    <a-tag
-                      v-for="key in editingData.boss_keys"
-                      :key="key"
-                      closable
-                      @close="handleRemoveBossKey()"
-                    >
-                      {{ key }}
-                    </a-tag>
-                  </div>
+                    {{ key }}
+                  </a-tag>
                 </div>
               </div>
             </div>
-          </template>
-        </draggable>
+
+            <!-- 设备信息展示区域 -->
+            <div v-if="expandedEmulators.has(element.uuid)" class="devices-section">
+              <div class="devices-header">
+                <h4>设备列表</h4>
+                <a-button
+                  size="small"
+                  @click="refreshDevices(element.uuid)"
+                  :loading="loadingDevices.has(element.uuid)"
+                >
+                  刷新
+                </a-button>
+              </div>
+
+              <a-spin :spinning="loadingDevices.has(element.uuid)">
+                <div v-if="!devicesData[element.uuid] || Object.keys(devicesData[element.uuid]).length === 0" class="empty-devices">
+                  <a-empty description="暂无设备信息" />
+                </div>
+
+                <div v-else class="devices-grid">
+                  <div
+                    v-for="(device, index) in devicesData[element.uuid]"
+                    :key="index"
+                    class="device-card-item"
+                  >
+                    <div class="device-header">
+                      <span class="device-index">设备 #{{ index }}</span>
+                      <a-tag :color="device.status === '0' ? 'success' : 'default'">
+                        {{ device.status === '0' ? '在线' : '离线' }}
+                      </a-tag>
+                    </div>
+                    <div class="device-info">
+                      <div class="info-item">
+                        <span class="info-label">名称:</span>
+                        <span class="info-value">{{ device.title }}</span>
+                      </div>
+                      <div class="info-item">
+                        <span class="info-label">状态码:</span>
+                        <span class="info-value">{{ device.status }}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </a-spin>
+            </div>
+          </div>
+        </div>
       </a-spin>
     </div>
 
@@ -657,6 +738,88 @@ const handleRemoveBossKey = () => {
 
 .boss-key-list {
   margin-top: 8px;
+}
+
+/* 设备信息展示样式 */
+.devices-section {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-color);
+}
+
+.devices-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.devices-header h4 {
+  margin: 0;
+  color: var(--text-color-primary);
+}
+
+.empty-devices {
+  padding: 24px 0;
+  text-align: center;
+}
+
+.devices-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+}
+
+.device-card-item {
+  background: var(--bg-color-elevated);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 12px;
+  transition: all 0.3s;
+}
+
+.device-card-item:hover {
+  border-color: var(--primary-color);
+  box-shadow: 0 2px 8px rgba(24, 144, 255, 0.1);
+}
+
+.device-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.device-index {
+  font-weight: 500;
+  color: var(--text-color-primary);
+}
+
+.device-info {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.info-item {
+  display: flex;
+  align-items: center;
+}
+
+.info-label {
+  color: var(--text-color-secondary);
+  margin-right: 8px;
+  min-width: 60px;
+  font-size: 12px;
+}
+
+.info-value {
+  color: var(--text-color-primary);
+  font-size: 12px;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .ant-list-item-meta {

@@ -4,7 +4,7 @@
 /* eslint-disable */
 import type { EmulatorSearchResult } from './EmulatorSearchResult';
 /**
- * 自动搜索模拟器响应
+ * 模拟器搜索响应
  */
 export type EmulatorSearchOut = {
     /**
@@ -20,8 +20,8 @@ export type EmulatorSearchOut = {
      */
     message?: string;
     /**
-     * 找到的模拟器列表
+     * 搜索到的模拟器列表
      */
-    emulators: Array<EmulatorSearchResult>;
+    emulators?: Array<EmulatorSearchResult>;
 };
 

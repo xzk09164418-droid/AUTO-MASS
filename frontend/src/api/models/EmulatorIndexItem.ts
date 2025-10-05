@@ -7,12 +7,8 @@
  */
 export type EmulatorIndexItem = {
     /**
-     * 模拟器配置UUID
+     * 模拟器UUID
      */
     uuid: string;
-    /**
-     * 模拟器名称
-     */
-    name: string;
 };
 

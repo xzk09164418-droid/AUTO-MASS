@@ -2,18 +2,17 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-import type { EmulatorInfo } from './EmulatorInfo';
 /**
  * 更新模拟器配置请求
  */
 export type EmulatorUpdateIn = {
     /**
-     * 模拟器ID
+     * 模拟器UUID
      */
-    emulatorId: string;
+    emulator_uuid: string;
     /**
      * 需要更新的模拟器配置数据
      */
-    data: EmulatorInfo;
+    data: Record<string, any>;
 };
 
