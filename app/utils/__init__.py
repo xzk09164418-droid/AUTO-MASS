@@ -31,6 +31,7 @@ from .ImageUtils import ImageUtils
 from .LogMonitor import LogMonitor, strptime
 from .ProcessManager import ProcessManager
 from .security import dpapi_encrypt, dpapi_decrypt
+from .emulator import MumuManager, LDManager, search_all_emulators, EMULATOR_TYPE_BOOK
 
 __all__ = [
     "constants",
@@ -41,4 +42,8 @@ __all__ = [
     "dpapi_encrypt",
     "dpapi_decrypt",
     "strptime",
+    "MumuManager",
+    "LDManager",
+    "search_all_emulators",
+    "EMULATOR_TYPE_BOOK",
 ]
