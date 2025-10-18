@@ -25,8 +25,7 @@ __author__ = "DLmaster361 <DLmaster_361@163.com>"
 __license__ = "GPL-3.0 license"
 
 
-from .skland import skland_sign_in
 from .general import GeneralManager
 from .MAA import MaaManager
 
-__all__ = ["skland_sign_in", "GeneralManager", "MaaManager"]
+__all__ = ["GeneralManager", "MaaManager"]
