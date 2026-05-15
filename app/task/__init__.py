@@ -24,6 +24,7 @@
 from .MAA import MaaManager
 from .MaaEnd import MaaEndManager
 from .SRC import SrcManager
+from .M9A import M9AManager
 from .general import GeneralManager
 
-__all__ = ["MaaManager", "SrcManager", "GeneralManager", "MaaEndManager"]
+__all__ = ["MaaManager", "SrcManager", "M9AManager", "GeneralManager", "MaaEndManager"]
