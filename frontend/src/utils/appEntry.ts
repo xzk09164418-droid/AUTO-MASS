@@ -1,0 +1,182 @@
+// appEntry.ts - 统一的应用进入逻辑
+import router from '@/router'
+import { bootstrapRealtimeResidents } from '@/bootstrap/realtimeResidents'
+import { connectWithRetry, initializeAppLifecycle } from '@/composables/useAppLifecycle'
+import { startTitlebarVersionCheck } from '@/composables/useVersionService'
+import { readUpdatePauseState, useUpdateChecker } from '@/composables/useUpdateChecker'
+import { markAsInitialized } from '@/composables/useAppInitialization'
+
+const logger = window.electronAPI.getLogger('应用入口')
+
+// 标记版本服务是否已启动，避免重复启动
+let versionServicesStarted = false
+
+/**
+ * 启动所有版本检查服务
+ * 包括：
+ * 1. 标题栏版本信息检查（10分钟一次）
+ * 2. 版本更新检查（4小时一次，带弹窗提醒）
+ */
+function startVersionServices() {
+  if (versionServicesStarted) {
+    logger.info('版本检查服务已启动，跳过重复启动')
+    return
+  }
+
+  void (async () => {
+    try {
+      logger.info('开始启动版本检查服务...')
+
+      // 暂停更新期间服务照常待命（各定时器自行门控跳过检查），到期后自动恢复
+      // 读取失败视为状态未知（null），仅按非暂停记录日志，实际检查由 tick 内门控兜底
+      const paused = (await readUpdatePauseState()) === true
+
+      // 1. 启动标题栏版本信息定时检查（10分钟一次）
+      await startTitlebarVersionCheck()
+      logger.info(
+        paused
+          ? '标题栏版本检查服务已待命（更新已暂停，暂停期内不检查）'
+          : '标题栏版本检查服务已启动（每10分钟检查一次）'
+      )
+
+      // 2. 启动版本更新检查（4小时一次）
+      const { startPolling } = useUpdateChecker()
+      void startPolling().catch(error => {
+        const errorMsg = error instanceof Error ? error.message : String(error)
+        logger.error(`启动版本更新检查服务失败: ${errorMsg}`)
+      })
+
+      versionServicesStarted = true
+      logger.info(
+        paused
+          ? '版本检查服务已在后台待命（更新已暂停，暂停期内不发起自动检查）'
+          : '所有版本检查服务已在后台启动'
+      )
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error)
+      logger.error(`启动版本检查服务失败: ${errorMsg}`)
+    }
+  })()
+}
+
+/**
+ * 统一的进入应用函数，会自动尝试建立WebSocket连接
+ * @param reason 进入应用的原因，用于日志记录
+ * @param forceEnter 是否强制进入（即使WebSocket连接失败）
+ * @returns Promise<boolean> 是否成功进入应用
+ */
+export async function enterApp(
+  reason: string = '正常进入',
+  forceEnter: boolean = true
+): Promise<boolean> {
+  logger.info(`${reason}：开始进入应用流程，尝试建立WebSocket连接...`)
+
+  // 先注册应用级常驻订阅与调度中心常驻订阅，再建立连接，保证生命周期与任务创建消息不丢失
+  bootstrapRealtimeResidents()
+  initializeAppLifecycle()
+
+  let wsConnected = false
+
+  try {
+    // 尝试建立WebSocket连接
+    wsConnected = await connectWithRetry()
+    if (wsConnected) {
+      logger.info(`${reason}：WebSocket连接建立成功`)
+    } else {
+      logger.warn(`${reason}：WebSocket连接建立失败`)
+    }
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error)
+    logger.error(`${reason}：WebSocket连接尝试失败: ${errorMsg}`)
+  }
+
+  // 决定是否进入应用
+  if (wsConnected || forceEnter) {
+    if (!wsConnected && forceEnter) {
+      logger.warn(`${reason}：WebSocket连接失败，但强制进入应用`)
+    }
+
+    // 标记应用已初始化完成
+    markAsInitialized()
+
+    // 预加载调度中心
+    preloadSchedulerView(reason)
+
+    // 跳转到主页
+    if (router.currentRoute.value.path !== '/home') {
+      router.push('/home')
+    }
+    logger.info(`${reason}：已进入应用`)
+
+    // 启动版本检查服务
+    startVersionServices()
+
+    return true
+  } else {
+    logger.error(`${reason}：WebSocket连接失败且不允许强制进入`)
+    return false
+  }
+}
+
+/**
+ * 跳过初始化（忽略WebSocket连接状态）
+ * @param reason 进入原因
+ */
+export async function forceEnterApp(reason: string = '强行进入'): Promise<void> {
+  logger.info(`${reason}：跳过初始化流程开始`)
+  logger.info(`${reason}：尝试建立WebSocket连接...`)
+
+  bootstrapRealtimeResidents()
+  initializeAppLifecycle()
+
+  try {
+    const wsConnected = await connectWithRetry()
+    if (wsConnected) {
+      logger.info(`${reason}：WebSocket连接成功！`)
+    } else {
+      logger.warn(`${reason}：WebSocket连接失败，但继续进入应用`)
+    }
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error)
+    logger.error(`${reason}：WebSocket连接异常: ${errorMsg}`)
+  }
+
+  // 无论WebSocket是否成功，都进入应用
+  logger.info(`${reason}：跳转到主页...`)
+
+  // 标记应用已初始化完成
+  markAsInitialized()
+
+  if (router.currentRoute.value.path !== '/home') {
+    router.push('/home')
+  }
+  logger.info(`${reason}：已跳过初始化`)
+
+  // 启动版本检查服务
+  startVersionServices()
+
+  // 预加载调度中心
+  preloadSchedulerView(reason)
+}
+
+/**
+ * 预加载调度中心
+ * 静默加载调度中心逻辑
+ */
+async function preloadSchedulerView(reason: string) {
+  logger.info(`${reason}：调度中心初始化...`)
+
+  try {
+    // 动态导入并初始化调度中心逻辑
+    const { useSchedulerLogic } = await import('../views/scheduler/useSchedulerLogic')
+    const { initialize } = useSchedulerLogic()
+
+    if (initialize) {
+      initialize()
+      logger.info(`${reason}：调度中心就绪`)
+    }
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error)
+    logger.error(`${reason}：调度中心初始化失败: ${errorMsg}`)
+  }
+}

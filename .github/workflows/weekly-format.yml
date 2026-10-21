@@ -1,0 +1,84 @@
+#   AUTO-MAS: A Multi-Script, Multi-Config Management and Automation Software
+#   Copyright © 2025-2026 AUTO-MAS Team
+
+name: Scheduled formatting
+
+on:
+  schedule:
+    # GitHub Actions 使用 UTC，此处对应北京时间每周一 03:00。
+    # 避开 0 点的 github runner 高峰时段。
+    - cron: '0 19 * * 0'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: weekly-format-dev
+  cancel-in-progress: false
+
+jobs:
+  format:
+    name: 格式化代码
+    if: >-
+      github.repository == 'AUTO-MAS-Project/AUTO-MAS' &&
+      (github.event_name == 'schedule' || github.ref == 'refs/heads/dev')
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 检出 dev
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: dev
+          fetch-depth: 0
+
+      - name: 设置 uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: "0.12.3"
+          python-version: "3.12"
+
+      - name: 使用 Ruff 格式化
+        run: |
+          uv sync --locked
+          uv run --no-sync ruff format .
+
+      - name: 设置 Node.js 环境
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+
+      - name: 设置 Yarn
+        run: |
+          corepack enable
+          corepack prepare yarn@4.18.1 --activate
+
+      - name: 安装前端依赖
+        working-directory: frontend
+        run: yarn install --immutable --mode=skip-build
+
+      - name: 修复前端 Lint
+        working-directory: frontend
+        run: yarn lint:fix
+
+      - name: 格式化前端代码
+        working-directory: frontend
+        run: yarn format
+
+      - name: 修复前端 Markdown Lint
+        working-directory: frontend
+        run: yarn lint:md:fix
+
+      - name: 提交格式化结果
+        run: |
+          git add --update
+          if git diff --cached --quiet; then
+            echo "没有需要提交的格式化变更。"
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "style: 自动格式化代码"
+          git pull --rebase origin dev
+          git push origin HEAD:dev

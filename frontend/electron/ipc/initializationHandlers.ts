@@ -1,0 +1,618 @@
+/**
+ * 初始化相关的 IPC 处理器
+ * 使用新的服务
+ */
+
+import { ipcMain, BrowserWindow, IpcMainInvokeEvent } from 'electron'
+import * as path from 'path'
+import { getAppRoot } from '../services/environmentService'
+import { InitializationService, BackendService } from '../services'
+import { getLogger } from '../services/logger'
+import type { RuntimeBinaryAlignResult } from '../services/runtimeBinaryService'
+import type { ApiEndpoints, MirrorConfig } from '../services/mirrorService'
+import type { RuntimeLaunchMode } from '../services/runtime'
+import { resolveRuntimeLaunchConfig, resolveRuntimeLaunchMode } from '../services/runtime'
+import type {
+  CriticalFilesCheck,
+  InitializationRunStage,
+  RuntimeRetryMode,
+  RuntimeStageOutcome,
+} from '../services/runtimeInitializationService'
+import {
+  listRuntimeMappableMirrorKeys,
+  mapDoctorChecksToCriticalFiles,
+} from '../services/runtimeInitializationService'
+import type {
+  RuntimeUpdateOutcome,
+  RuntimeUpdateRetryAction,
+} from '../services/runtimeUpdateService'
+import {
+  cancelBackendUpdate,
+  retryBackendUpdate,
+  updateBackendViaRuntime,
+} from '../services/runtimeUpdateService'
+
+const logger = getLogger('初始化处理器')
+
+// 防止重复注册：强退失败后重建窗口会再走一遍 createWindow
+let isRegistered = false
+const mirrorTypes = new Set<keyof MirrorConfig>(['python', 'get_pip', 'git', 'repo', 'pip_mirror'])
+const apiEndpointKeys = new Set<keyof ApiEndpoints>(['local', 'websocket'])
+
+const isMirrorType = (value: unknown): value is keyof MirrorConfig =>
+  typeof value === 'string' && mirrorTypes.has(value as keyof MirrorConfig)
+
+const isApiEndpointKey = (value: unknown): value is keyof ApiEndpoints =>
+  typeof value === 'string' && apiEndpointKeys.has(value as keyof ApiEndpoints)
+
+/** 更新流程的进度事件通道，与初始化的分段进度通道分开，互不干扰。 */
+const BACKEND_UPDATE_PROGRESS_CHANNEL = 'backend-update-progress'
+
+const retryActions = new Set<RuntimeUpdateRetryAction>([
+  'bootstrap',
+  'workspace-sync',
+  'dependencies-sync',
+  'dependencies-rebuild',
+  'repair',
+])
+
+const isRetryAction = (value: unknown): value is RuntimeUpdateRetryAction =>
+  typeof value === 'string' && retryActions.has(value as RuntimeUpdateRetryAction)
+
+// 全局实例
+let initService: InitializationService | null = null
+let backendService: BackendService | null = null
+let runtimeBinaryUpdating = false
+
+/**
+ * 向发起 IPC 调用的渲染进程回推事件。
+ *
+ * 初始化进度回调与后端状态回调都活得比一次 IPC 调用长：窗口已关闭、应用正在退出时，
+ * Runtime 子进程仍会往 stdout 吐 bootstrap 进度，后端子进程退出也会触发状态回调。这时
+ * 再对已销毁的 `WebContents` 调用 `send` 会抛「Object has been destroyed」，并且是在
+ * 子进程事件回调里抛出、无人接住，直接成为主进程的未捕获异常。渲染进程已销毁时静默丢弃。
+ */
+function sendToSender(event: IpcMainInvokeEvent, channel: string, payload: unknown): void {
+  const sender = event.sender
+  if (sender.isDestroyed()) return
+  sender.send(channel, payload)
+}
+
+/**
+ * 获取或创建初始化服务实例
+ */
+function getInitService(targetBranch: string = 'dev'): InitializationService {
+  const appRoot = getAppRoot()
+
+  if (!initService) {
+    initService = new InitializationService(appRoot, targetBranch)
+  }
+
+  return initService
+}
+
+/**
+ * 获取后端服务实例（主进程协调关闭时用于开发模式判定与限定范围强杀）
+ */
+export function getBackendService(): BackendService {
+  if (!backendService) {
+    const appRoot = getAppRoot()
+    const initService = getInitService()
+    const mirrorService = initService.getMirrorService()
+    backendService = new BackendService(appRoot, mirrorService)
+  }
+
+  return backendService
+}
+
+/**
+ * 主进程与渲染进程共用的后端端点解析。
+ *
+ * Runtime 监督链路就绪后必须用它在 `state:running` 事件里下发的 baseUrl（协议 v1 固定
+ * 36163），不能再按 `resolveHttpPort()` 的开发/正式分流算端口；旧链路仍走镜像源服务。
+ */
+function resolveApiEndpoints(): ApiEndpoints {
+  const initService = getInitService()
+  // 完整初始化流程用 InitializationService 内部的实例启动后端，backend-start 用模块级实例，
+  // 两条路径都可能持有 Runtime 句柄，取先就绪的那个。
+  const runtimeEndpoints =
+    getBackendService().getRuntimeApiEndpoints() ??
+    initService.getBackendService().getRuntimeApiEndpoints()
+  if (runtimeEndpoints) return runtimeEndpoints
+
+  return initService.getMirrorService().getApiEndpoints()
+}
+
+export function getLocalApiEndpoint(): string {
+  return resolveApiEndpoints().local
+}
+
+/**
+ * Runtime 链路下的单步执行与重试。
+ *
+ * 界面上的「重试」与「切换镜像后重试」用的都是下面这几个安装 handler，Runtime 链路下
+ * 它们转成对应的下层命令（`environment ensure` / `workspace sync` / `dependencies sync`），
+ * 普通重试选了镜像源则整条 `bootstrap` 带 `--mirror` 重跑；显式重建保留重建命令。
+ * 返回 null 表示灰度开关关闭，走旧链路。
+ *
+ * 逐步进度通道是按步骤分的，渲染进程只看进度数值不看段名，所以这里只转发本段的进度，
+ * 否则整条 bootstrap 重跑时 `mirror` / `pip` / `git` 的完成进度会把当前步骤误标成完成。
+ *
+ * `rebuild` 对应界面上「重建环境」这个按钮：它与「重试」共用本通道，只是要求 Runtime
+ * 走重建版本的下层命令。IPC 上只传一个布尔量，主进程里统一按
+ * {@link RuntimeRetryMode} 表达；不传或传 false 都退回 `auto`，仍按上一次失败的
+ * remediation 决定，不把普通「重试」硬钉成「不重建」。
+ */
+function toRetryMode(rebuild?: boolean): RuntimeRetryMode {
+  return rebuild ? 'rebuild' : 'auto'
+}
+
+async function runStageViaRuntime(
+  event: IpcMainInvokeEvent,
+  stage: InitializationRunStage,
+  progressChannel: string,
+  selectedMirror?: string,
+  rebuild?: boolean
+): Promise<RuntimeStageOutcome | null> {
+  const initService = getInitService()
+  return initService.retryStageViaRuntime(
+    stage,
+    progress => {
+      if (progress.stage !== stage) return
+      sendToSender(event, progressChannel, progress)
+    },
+    selectedMirror,
+    toRetryMode(rebuild)
+  )
+}
+
+/**
+ * 界面开局要问一次的 Runtime 上下文。
+ *
+ * 三件事各有各的来源，但界面在同一时刻需要它们：走没走 Runtime（决定步骤标签与哪些段
+ * 直接置完成）、失败时「打开日志」拿不到 Runtime 日志路径要退回哪个文件、
+ * 「换镜像重试」在 Runtime 下该列哪些镜像键。
+ */
+interface RuntimeInitContext {
+  mode: RuntimeLaunchMode
+  /** 本程序自己的日志文件，Runtime 没给 `logPath` 时的回退。 */
+  fallbackLogPath: string
+  /** 各段在 Runtime 链路下映射得到的旧镜像键；空数组表示该段不展示镜像选择。 */
+  mirrorKeys: Record<InitializationRunStage, string[]>
+}
+
+export function resolveRuntimeInitContext(): RuntimeInitContext {
+  return {
+    // 灰度开关升级为三级来源后要按 appRoot 读持久化设置，不能再零参解析。
+    mode: resolveRuntimeLaunchMode(getAppRoot()),
+    fallbackLogPath: path.join(getAppRoot(), 'debug', 'frontend.log'),
+    mirrorKeys: listRuntimeMappableMirrorKeys(),
+  }
+}
+
+/**
+ * Runtime 链路下的关键文件检查。
+ *
+ * 旧链路数 exe 文件，新链路问 Runtime `doctor`：受管布局里 `repo` 缺失就是没装过。
+ * 返回 null 表示灰度开关关闭或 doctor 没跑成，调用方继续走旧的文件存在性检查。
+ */
+export async function checkCriticalFilesViaRuntime(): Promise<CriticalFilesCheck | null> {
+  const runtimeService = getInitService().getRuntimeService()
+  if (!runtimeService) return null
+
+  const checks = await runtimeService.doctor()
+  if (!checks) {
+    logger.warn('Runtime doctor 未给出检查结果，按未初始化处理')
+    return { pythonExists: false, pipExists: false, gitExists: false, mainPyExists: false }
+  }
+
+  const result = mapDoctorChecksToCriticalFiles(checks)
+  logger.info(`Runtime doctor 检查结果 - 受管仓库${result.mainPyExists ? '已就绪' : '缺失'}`)
+  return result
+}
+
+/**
+ * 注册所有初始化相关的 IPC 处理器
+ */
+export function registerInitializationHandlers(_mainWindow: BrowserWindow) {
+  if (isRegistered) {
+    logger.info('初始化处理器已经注册，跳过重复注册')
+    return
+  }
+  isRegistered = true
+
+  // ==================== 镜像源初始化 ====================
+
+  ipcMain.handle('init-mirrors', async () => {
+    const initService = getInitService()
+    const mirrorService = initService.getMirrorService()
+
+    try {
+      await mirrorService.initialize()
+      logger.info('镜像源初始化成功')
+      return { success: true }
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error)
+      logger.error(`镜像源初始化失败: ${errorMsg}`)
+      return { success: false, error: errorMsg }
+    }
+  })
+
+  // ==================== Python 安装 ====================
+
+  ipcMain.handle('install-python', async (event, selectedMirror?: string, rebuild?: boolean) => {
+    if (selectedMirror) {
+      logger.info(`使用指定镜像源安装Python: ${selectedMirror}`)
+    }
+
+    const runtimeOutcome = await runStageViaRuntime(
+      event,
+      'python',
+      'python-progress',
+      selectedMirror,
+      rebuild
+    )
+    if (runtimeOutcome) return runtimeOutcome
+
+    const appRoot = getAppRoot()
+    const initService = getInitService()
+    const mirrorService = initService.getMirrorService()
+
+    const { PythonInstaller } = await import('../services/environmentService.js')
+    const installer = new PythonInstaller(appRoot, mirrorService)
+
+    const result = await installer.install(progress => {
+      sendToSender(event, 'python-progress', progress)
+    }, selectedMirror)
+
+    if (!result.success) {
+      logger.error(`Python安装失败: ${result.error}`)
+    }
+
+    return result
+  })
+
+  // ==================== Pip 安装 ====================
+
+  ipcMain.handle('install-pip', async (event, selectedMirror?: string, rebuild?: boolean) => {
+    if (selectedMirror) {
+      logger.info(`使用指定镜像源安装Pip: ${selectedMirror}`)
+    }
+
+    const runtimeOutcome = await runStageViaRuntime(
+      event,
+      'pip',
+      'pip-progress',
+      selectedMirror,
+      rebuild
+    )
+    if (runtimeOutcome) return runtimeOutcome
+
+    const appRoot = getAppRoot()
+    const initService = getInitService()
+    const mirrorService = initService.getMirrorService()
+
+    const { PipInstaller } = await import('../services/environmentService.js')
+    const installer = new PipInstaller(appRoot, mirrorService)
+
+    const result = await installer.install(progress => {
+      sendToSender(event, 'pip-progress', progress)
+    }, selectedMirror)
+
+    if (!result.success) {
+      logger.error(`Pip安装失败: ${result.error}`)
+    }
+
+    return result
+  })
+
+  // ==================== Git 安装 ====================
+
+  ipcMain.handle('install-git', async (event, selectedMirror?: string, rebuild?: boolean) => {
+    if (selectedMirror) {
+      logger.info(`使用指定镜像源安装Git: ${selectedMirror}`)
+    }
+
+    const runtimeOutcome = await runStageViaRuntime(
+      event,
+      'git',
+      'git-progress',
+      selectedMirror,
+      rebuild
+    )
+    if (runtimeOutcome) return runtimeOutcome
+
+    const appRoot = getAppRoot()
+    const initService = getInitService()
+    const mirrorService = initService.getMirrorService()
+
+    const { GitInstaller } = await import('../services/environmentService.js')
+    const installer = new GitInstaller(appRoot, mirrorService)
+
+    const result = await installer.install(progress => {
+      sendToSender(event, 'git-progress', progress)
+    }, selectedMirror)
+
+    if (!result.success) {
+      logger.error(`Git安装失败: ${result.error}`)
+    }
+
+    return result
+  })
+
+  // ==================== 源码拉取 ====================
+
+  ipcMain.handle(
+    'pull-repository',
+    async (event, targetBranch: string = 'dev', selectedMirror?: string, rebuild?: boolean) => {
+      if (selectedMirror) {
+        logger.info(`使用指定镜像源拉取源码: ${selectedMirror}`)
+      }
+
+      // Runtime 链路的目标分支由目标版本推导（`release/<版本>`），targetBranch 不参与。
+      const runtimeOutcome = await runStageViaRuntime(
+        event,
+        'repository',
+        'repository-progress',
+        selectedMirror,
+        rebuild
+      )
+      if (runtimeOutcome) return runtimeOutcome
+
+      const appRoot = getAppRoot()
+      const initService = getInitService(targetBranch)
+      const mirrorService = initService.getMirrorService()
+
+      const { RepositoryService } = await import('../services/repositoryService.js')
+      const repoService = new RepositoryService(appRoot, mirrorService, targetBranch)
+
+      const result = await repoService.pullRepository(progress => {
+        sendToSender(event, 'repository-progress', progress)
+      }, selectedMirror)
+
+      if (!result.success) {
+        logger.error(`源码拉取失败: ${result.error}`)
+      }
+
+      return result
+    }
+  )
+
+  // ==================== 依赖安装 ====================
+
+  ipcMain.handle(
+    'install-dependencies',
+    async (event, selectedMirror?: string, rebuild?: boolean) => {
+      if (selectedMirror) {
+        logger.info(`使用指定镜像源安装依赖: ${selectedMirror}`)
+      }
+
+      const runtimeOutcome = await runStageViaRuntime(
+        event,
+        'dependency',
+        'dependency-progress',
+        selectedMirror,
+        rebuild
+      )
+      if (runtimeOutcome) return runtimeOutcome
+
+      const appRoot = getAppRoot()
+      const initService = getInitService()
+      const mirrorService = initService.getMirrorService()
+
+      const { DependencyService } = await import('../services/dependencyService.js')
+      const depService = new DependencyService(appRoot, mirrorService)
+
+      const result = await depService.installDependencies(progress => {
+        sendToSender(event, 'dependency-progress', progress)
+      }, selectedMirror)
+
+      if (!result.success) {
+        logger.error(`依赖安装失败: ${result.error}`)
+      }
+
+      return result
+    }
+  )
+
+  // ==================== 获取镜像源列表 ====================
+
+  ipcMain.handle('get-mirrors', async (_event, type: unknown) => {
+    if (!isMirrorType(type)) throw new TypeError(`不支持的镜像源类型: ${String(type)}`)
+
+    const initService = getInitService()
+    const mirrorService = initService.getMirrorService()
+
+    const mirrors = mirrorService.getMirrors(type)
+    return mirrors
+  })
+
+  // ==================== 获取 API 端点 ====================
+
+  ipcMain.handle('get-api-endpoint', async (_event, key: unknown) => {
+    if (!isApiEndpointKey(key)) throw new TypeError(`不支持的 API 端点: ${String(key)}`)
+
+    return resolveApiEndpoints()[key]
+  })
+
+  // ==================== 完整初始化流程（Runtime 首次初始化与旧链路共用） ====================
+
+  ipcMain.handle(
+    'initialize',
+    async (event, targetBranch: string = 'dev', startBackend: boolean = true) => {
+      logger.info(`开始初始化 - 目标分支: ${targetBranch}, 启动后端: ${startBackend}`)
+
+      const initService = getInitService(targetBranch)
+
+      const result = await initService.initialize(progress => {
+        // 发送进度到渲染进程
+        sendToSender(event, 'initialization-progress', progress)
+      }, startBackend)
+
+      if (result.success) {
+        // 保存后端服务实例
+        backendService = initService.getBackendService()
+
+        // 设置状态回调
+        backendService.setStatusCallback(status => {
+          sendToSender(event, 'backend-status', status)
+        })
+
+        logger.info(`初始化成功完成，阶段: ${result.completedStages.join(', ')}`)
+      } else {
+        logger.error(`初始化失败 - 错误: ${result.error}, 失败阶段: ${result.failedStage}`)
+      }
+
+      return result
+    }
+  )
+
+  // ==================== 仅更新模式 ====================
+
+  ipcMain.handle('check-runtime-binary-update', async () => {
+    const runtime = getInitService().getRuntimeService()
+    return runtime ? runtime.checkRuntimeBinaryUpdate() : { status: 'skipped' }
+  })
+
+  ipcMain.handle('update-runtime-binary', async (event): Promise<RuntimeBinaryAlignResult> => {
+    const init = getInitService()
+    const runtime = init.getRuntimeService()
+    if (!runtime || runtime.launchConfig.mode !== 'managed') {
+      return { status: 'failed', error: '当前运行模式不支持更新 Runtime。' }
+    }
+    if (runtimeBinaryUpdating || runtime.isBusy) {
+      return { status: 'failed', error: '运行环境操作尚未结束，请稍后再试。' }
+    }
+
+    runtimeBinaryUpdating = true
+    try {
+      return await runtime.updateRuntimeBinary(
+        progress => sendToSender(event, 'runtime-binary-progress', progress),
+        async () => {
+          // 先占用 Runtime 操作，再停止残留后端，避免等待退出时又开始 bootstrap。
+          for (const backend of new Set([getBackendService(), init.getBackendService()])) {
+            const result = await backend.stopBackend()
+            if (!result.success) {
+              throw new Error(result.error || '无法停止后端，请重启程序后重试。')
+            }
+          }
+        }
+      )
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      logger.error(`更新 Runtime 失败: ${message}`)
+      return { status: 'failed', error: message }
+    } finally {
+      runtimeBinaryUpdating = false
+    }
+  })
+
+  // ==================== 后端服务管理 ====================
+
+  ipcMain.handle('backend-start', async event => {
+    logger.info('启动后端服务')
+
+    const backend = getBackendService()
+
+    // 设置状态回调
+    backend.setStatusCallback(status => {
+      sendToSender(event, 'backend-status', status)
+    })
+
+    const result = await backend.startBackend()
+
+    if (!result.success) {
+      logger.error(`后端启动失败: ${result.error}`)
+    }
+
+    return result
+  })
+
+  ipcMain.handle('backend-stop', async () => {
+    logger.info('停止后端服务')
+
+    const backend = getBackendService()
+    const result = await backend.stopBackend()
+
+    if (!result.success) {
+      logger.error(`后端停止失败: ${result.error}`)
+    }
+
+    return result
+  })
+
+  ipcMain.handle('backend-restart', async event => {
+    logger.info('重启后端服务')
+
+    const backend = getBackendService()
+
+    // 设置状态回调
+    backend.setStatusCallback(status => {
+      sendToSender(event, 'backend-status', status)
+    })
+
+    const result = await backend.restartBackend()
+
+    if (!result.success) {
+      logger.error(`后端重启失败: ${result.error}`)
+    }
+
+    return result
+  })
+
+  ipcMain.handle('backend-status', () => {
+    const backend = getBackendService()
+    return backend.getStatus()
+  })
+
+  ipcMain.handle('check-runtime-backend-update', async () => {
+    return getBackendService().checkRuntimeBackendUpdate()
+  })
+
+  // ==================== Runtime 链路的后端更新 ====================
+
+  // 标题栏更新入口走哪条链路由 `get-runtime-launch-mode` 决定（off 走原有下载安装包流程，
+  // development 直接禁用，managed 走下面的 update-backend-via-runtime）；该通道由 main.ts
+  // 统一注册，返回持久化设置与生效来源，这里不再重复注册。
+  ipcMain.handle(
+    'update-backend-via-runtime',
+    async (event, targetVersion: unknown): Promise<RuntimeUpdateOutcome> => {
+      logger.info(`收到 Runtime 后端更新请求，目标版本: ${String(targetVersion)}`)
+
+      const result = await updateBackendViaRuntime(
+        typeof targetVersion === 'string' ? targetVersion : '',
+        progress => sendToSender(event, BACKEND_UPDATE_PROGRESS_CHANNEL, progress),
+        {
+          backend: getBackendService(),
+          launchConfig: resolveRuntimeLaunchConfig(getAppRoot()),
+        }
+      )
+
+      if (!result.success) {
+        logger.error(`Runtime 后端更新失败（${result.phase}）: ${result.error}`)
+      }
+      return result
+    }
+  )
+
+  ipcMain.handle(
+    'retry-backend-update',
+    async (event, action: unknown): Promise<RuntimeUpdateOutcome> => {
+      if (!isRetryAction(action)) throw new TypeError(`不支持的重试入口: ${String(action)}`)
+
+      logger.info(`重试 Runtime 后端更新: ${action}`)
+      const result = await retryBackendUpdate(action, progress =>
+        sendToSender(event, BACKEND_UPDATE_PROGRESS_CHANNEL, progress)
+      )
+
+      if (!result.success) {
+        logger.error(`Runtime 后端更新重试失败（${result.phase}）: ${result.error}`)
+      }
+      return result
+    }
+  )
+
+  ipcMain.handle('cancel-backend-update', () => cancelBackendUpdate())
+
+  // ==================== 清理 ====================
+}

@@ -1,0 +1,123 @@
+#   AUTO-MAS: A Multi-Script, Multi-Config Management and Automation Software
+#   Copyright © 2024-2025 DLmaster361
+#   Copyright © 2025 MoeSnowyFox
+#   Copyright © 2025-2026 AUTO-MAS Team
+
+#   This file is part of AUTO-MAS.
+
+#   AUTO-MAS is free software: you can redistribute it and/or modify
+#   it under the terms of the GNU Affero General Public License as
+#   published by the Free Software Foundation, either version 3 of
+#   the License, or (at your option) any later version.
+
+#   AUTO-MAS is distributed in the hope that it will be useful,
+#   but WITHOUT ANY WARRANTY; without even the implied warranty
+#   of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See
+#   the GNU Affero General Public License for more details.
+
+#   You should have received a copy of the GNU Affero General Public License
+#   along with AUTO-MAS. If not, see <https://www.gnu.org/licenses/>.
+
+#   Contact: DLmaster_361@163.com
+
+
+from datetime import datetime
+from pathlib import Path
+
+from fastapi import APIRouter, Body
+
+from app.core import Config
+from app.models.schema import *
+from app.utils import get_logger
+
+router = APIRouter(prefix="/api/history", tags=["历史记录"])
+logger = get_logger("历史记录 API")
+
+
+@router.get(
+    "/replays",
+    tags=["Get"],
+    response_model=ReplayListOut,
+    operation_id="get_obs_replays_api_history_replays_get",
+    summary="查询保留的失败回放",
+)
+async def get_obs_replays() -> ReplayListOut:
+    from app.services.obs_replay import ObsReplay
+
+    try:
+        return ReplayListOut(
+            replays=await ObsReplay.list_replays(), directory=str(ObsReplay.directory)
+        )
+    except Exception as error:
+        return ReplayListOut(code=500, status="error", message=str(error))
+
+
+@router.post(
+    "/search",
+    tags=["Get"],
+    summary="搜索历史记录总览信息",
+    response_model=HistorySearchOut,
+    status_code=200,
+)
+async def search_history(history: HistorySearchIn) -> HistorySearchOut:
+
+    try:
+        data = await Config.search_history(
+            history.mode,
+            datetime.strptime(history.start_date, "%Y-%m-%d").date(),
+            datetime.strptime(history.end_date, "%Y-%m-%d").date(),
+        )
+        for date, users in data.items():
+            for user, records in users.items():
+                record = await Config.merge_statistic_info(records)
+                # 安全检查：确保 index 字段存在
+                if "index" not in record:
+                    record["index"] = []
+                record["index"] = [HistoryIndexItem(**_) for _ in record["index"]]
+                record = HistoryData(**record)
+                data[date][user] = record
+    except Exception as e:
+        logger.opt(exception=True).warning(
+            f"search_history失败: {type(e).__name__}: {e}"
+        )
+        return HistorySearchOut(
+            code=500,
+            status="error",
+            message=f"{type(e).__name__}: {str(e)}",
+            data={},
+        )
+    return HistorySearchOut(data=data)
+
+
+@router.post(
+    "/data",
+    tags=["Get"],
+    summary="从指定文件内获取历史记录数据",
+    response_model=HistoryDataGetOut,
+    status_code=200,
+)
+async def get_history_data(history: HistoryDataGetIn = Body(...)) -> HistoryDataGetOut:
+
+    try:
+        path = Path(history.jsonPath)
+        data = await Config.merge_statistic_info([path])
+        data.pop("index", None)
+        data["log_content"] = path.with_suffix(".log").read_text(encoding="utf-8")
+        from app.services.obs_replay import ObsReplay
+
+        try:
+            data["replays"] = await ObsReplay.list_replays(history_path=str(path))
+        except Exception:
+            logger.warning("无法读取关联回放，仍返回历史日志")
+        data = HistoryData(**data)
+    except Exception as e:
+        logger.opt(exception=True).warning(
+            f"get_history_data失败: {type(e).__name__}: {e}"
+        )
+        return HistoryDataGetOut(
+            code=500,
+            status="error",
+            message=f"{type(e).__name__}: {str(e)}",
+            data=HistoryData(**{}),
+        )
+    return HistoryDataGetOut(data=data)

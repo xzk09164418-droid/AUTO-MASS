@@ -1,0 +1,42 @@
+#   AUTO-MAS: A Multi-Script, Multi-Config Management and Automation Software
+#   Copyright © 2025 MistEO
+#   Copyright © 2025-2026 AUTO-MAS Team
+
+#   This file is part of AUTO-MAS.
+
+#   AUTO-MAS is free software: you can redistribute it and/or modify
+#   it under the terms of the GNU Affero General Public License as
+#   published by the Free Software Foundation, either version 3 of
+#   the License, or (at your option) any later version.
+
+#   AUTO-MAS is distributed in the hope that it will be useful,
+#   but WITHOUT ANY WARRANTY; without even the implied warranty
+#   of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See
+#   the GNU Affero General Public License for more details.
+
+#   You should have received a copy of the GNU Affero General Public License
+#   along with AUTO-MAS. If not, see <https://www.gnu.org/licenses/>.
+
+#   Contact: DLmaster_361@163.com
+
+name: MirrorChyan 上传最新版本
+
+on:
+  workflow_dispatch:
+
+jobs:
+  mirrorchyan:
+    runs-on: macos-latest
+
+    steps:
+      - id: uploading
+        uses: MirrorChyan/uploading-action@ea9a0f6f516fafb6b0a3046a1fe4b0dccb29eca8 # v1
+        with:
+          filetype: latest-release
+          filename: "AUTO-MAS-Setup-*.exe"
+          mirrorchyan_rid: AUTO_MAS
+
+          owner: AUTO-MAS-Project
+          repo: AUTO-MAS
+          upload_token: ${{ secrets.MirrorChyanUploadToken }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}

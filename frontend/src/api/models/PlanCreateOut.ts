@@ -1,0 +1,31 @@
+/* generated using openapi-typescript-codegen -- do not edit */
+/* istanbul ignore file */
+/* tslint:disable */
+/* eslint-disable */
+import type { BAAHPlanConfig_Output } from './BAAHPlanConfig_Output';
+import type { MaaEndPlanConfig_Output } from './MaaEndPlanConfig_Output';
+import type { MaaPlanConfig } from './MaaPlanConfig';
+import type { MSSPlanConfig_Output } from './MSSPlanConfig_Output';
+export type PlanCreateOut = {
+    /**
+     * 状态码
+     */
+    code?: number;
+    /**
+     * 操作状态
+     */
+    status?: string;
+    /**
+     * 操作消息
+     */
+    message?: string;
+    /**
+     * 新创建的计划ID
+     */
+    planId: string;
+    /**
+     * 计划配置数据
+     */
+    data: (MaaPlanConfig | MaaEndPlanConfig_Output | BAAHPlanConfig_Output | MSSPlanConfig_Output);
+};
+

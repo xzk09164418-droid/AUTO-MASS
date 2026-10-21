@@ -1,0 +1,20 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "rootDir": "electron",
+    "outDir": "dist-electron",
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "types": ["node", "electron"],
+    "paths": {
+      "@/*": ["./src/*"],
+      "@electron/*": ["./electron/*"]
+    },
+    "verbatimModuleSyntax": false
+  },
+  "include": ["electron/**/*.ts"],
+  "exclude": ["electron/**/*.test.ts"]
+}

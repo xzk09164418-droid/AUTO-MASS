@@ -1,0 +1,1059 @@
+// 应用生命周期协调器
+// 职责：应用级常驻订阅（生命周期/电源）、正常关闭流程（含 taskkill 兜底）、
+// 异常断开后的后端自动重启与恢复失败兜底。
+// 连接层（services/websocket）只负责连接与分发，后端进程管理与退出决策集中在这里。
+
+import { translate as t } from '@/i18n'
+import { ref, type Ref } from 'vue'
+import { Modal, notification } from 'ant-design-vue'
+import { Service } from '@/api'
+import { useAppClosing } from '@/composables/useAppClosing'
+import { cancelAppClose, prepareAppClose } from '@/composables/appCloseGuards'
+import { useUpdateChecker } from '@/composables/useUpdateChecker'
+import {
+  confirmCloseIfRunningTasks,
+  hasRunningTasks,
+} from '@/composables/useQueueCloseConfirmation'
+import { clearStageOptionsCache } from '@/composables/usePlanDataCoordinator'
+import { cancelBackgroundInitCheck, checkBackgroundInit } from '@/services/backgroundInitNotice'
+import { realtimeSnapshotApi } from '@/services/realtimeSnapshotApi'
+import {
+  bootstrapResidentResources,
+  disposeResidentResources,
+} from '@/services/websocket/residentResources'
+import {
+  connect,
+  connectionState,
+  isBackendDevMode,
+  onConnected,
+  onDisconnected,
+  onReconnectCycleFailed,
+  reconnectNow,
+  scheduleReconnect,
+  shutdown as shutdownConnection,
+  stopReconnect,
+} from '@/services/websocket/connection'
+import { subscribe, unsubscribe } from '@/services/websocket/subscriptions'
+import {
+  WS_BACKEND_SHUTDOWN_READY,
+  WS_CLOSE_CODE_REPLACED,
+  WS_FRONTEND_CLOSE_REQUESTED,
+  WS_FRONTEND_RESTART_REQUESTED,
+  WS_ID_MAIN,
+  WS_POWER_COUNTDOWN_CANCELLED,
+  WS_POWER_COUNTDOWN_UPDATED,
+  type WSDisconnectEvent,
+  type WSPowerCountdownData,
+} from '@/services/websocket/types'
+
+const logger = window.electronAPI.getLogger('应用生命周期')
+
+// ==================== 常量 ====================
+
+// 正常关闭流程超时（非心跳超时）：超时未收到 backend.shutdown.ready 直接 taskkill。
+// teardown 会等待所有任务真正收尾（含模拟器清理），10 秒不足以覆盖重任务场景，
+// 过早 taskkill 会打断插件与配置清理；后端挂死时由该上限兜底。
+const CLOSE_READY_TIMEOUT = 30000
+// 收到 ready 后等待后端进程正常退出的时限，超时才允许 taskkill
+const PROCESS_EXIT_TIMEOUT = 5000
+const PROCESS_POLL_INTERVAL = 300
+// 后端自动重启：时间窗内累计达到上限即进入恢复失败终态。不能按「重新连上就清零」计数：
+// 后端能接受 WS 随即崩溃时，每次恢复都会先连上再断开，计数永远到不了上限，变成无限重启
+const MAX_BACKEND_RESTART_ATTEMPTS = 3
+const BACKEND_RESTART_WINDOW_MS = 600000
+const RESTART_DELAY = 2000
+// 一轮重连失败后，后端进程仍存活时的下一轮延迟
+const NEXT_CYCLE_DELAY = 30000
+const DEV_MODE_RETRY_DELAY = 3000
+// 有意重启后端期间一轮重连失败后的下一轮延迟：更新流程随时可能把后端拉起来，
+// 等满 NEXT_CYCLE_DELAY 只会白白拖长空窗期
+const INTENTIONAL_RESTART_RETRY_DELAY = 3000
+// 有意重启窗口的兜底时限：更新流程异常中断（初始化页报错停住、用户切走不管）时标志不能
+// 永久滞留，否则之后真正的事故也不再提示与自动恢复。按最慢的一次后端更新取上限：
+// 拉取源码 + 装依赖可达数分钟
+const INTENTIONAL_RESTART_TIMEOUT = 600000
+// 倒计时消息停止更新后自动清除展示状态；主连接断开期间只标记连接中断、不清除
+const POWER_COUNTDOWN_STALE_MS = 3000
+// 断开提示的通知 key：同一次断开只保留一条，重连成功后按 key 收起
+const DISCONNECT_NOTICE_KEY = 'app-lifecycle-disconnect'
+// 被另一个前端窗口接管的提示 key：同样只保留一条，重新连上后收起
+const SUPERSEDED_NOTICE_KEY = 'app-lifecycle-superseded'
+
+export type BackendStatus = 'unknown' | 'starting' | 'running' | 'stopped' | 'error'
+
+// ==================== 模块级状态 ====================
+
+let initialized = false
+let lifecycleDisposers: Array<() => void> = []
+let residentSubscriptionIds: string[] = []
+
+// 正常关闭流程状态（权威，优先级最高）
+let closePromise: Promise<void> | null = null
+// 保存准备可以撤销；只有真正开始关闭后端后，断线才进入禁止重连的终态。
+let backendClosing = false
+let shutdownReadyReceived = false
+let closeRequestedByBackend = false
+let taskkillDone = false
+let resolveShutdownReady: ((ready: boolean) => void) | null = null
+// Runtime 监督链路：本次关闭流程开始时向主进程查一次并固定下来，正常流程与异常兜底共用，
+// 不依赖 ws_meta 协商出的 devMode（页面先于后端起来时它可能只是本地回退值）。
+let closeViaRuntime = false
+
+// 后端自动重启状态
+let restartPromise: Promise<void> | null = null
+let disconnectRecoveryPromise: Promise<void> | null = null
+let resumeRecoveryPromise: Promise<void> | null = null
+// 每次自动重启后端的发起时刻，只保留 BACKEND_RESTART_WINDOW_MS 内的
+let backendRestartTimestamps: number[] = []
+let restartFailureShown = false
+let closeRestartFailureModal: (() => void) | null = null
+let disconnectIncidentShown = false
+let closeDisconnectModal: (() => void) | null = null
+
+// 有意重启后端状态：标题栏「更新后端」先关后端，再由初始化流程重新拉起
+let intentionalRestartActive = false
+let intentionalRestartTimer: number | undefined
+
+// HTTP 快照与同时到达的 WS 事件使用单调序号协调：HTTP 是连接建立时的初始权威状态，
+// 但请求发出后到达的 WS 事件必须覆盖该快照，不能被较旧的 HTTP 响应回滚。
+let lifecycleSnapshotGeneration = 0
+let powerMutationSequence = 0
+
+const backendStatus: Ref<BackendStatus> = ref('unknown')
+const powerCountdown: Ref<WSPowerCountdownData | null> = ref(null)
+// 倒计时推送因主连接断开而中断：弹窗保留（仍可取消），剩余秒数停在最后一次推送
+const powerCountdownDisconnected: Ref<boolean> = ref(false)
+// 同一次倒计时只向主进程请求一次警示；结束或取消时撤回，避免窗口永久置顶
+let powerWarningRaised = false
+
+let powerCountdownStaleTimer: number | undefined
+
+const delay = (ms: number): Promise<void> => new Promise(resolve => window.setTimeout(resolve, ms))
+
+const isClosing = (): boolean => backendClosing
+
+// 计划内的后端重启窗口期：断开是预期的，既不提示也不自行恢复
+const isIntentionalRestart = (): boolean => intentionalRestartActive
+
+// ==================== 常驻订阅 ====================
+
+const handleShutdownReady = (): void => {
+  // 仅在本次关闭流程期间生效：第三方（如 Koishi 远程命令）触发的 /close
+  // 也会广播 ready，不能留下陈旧标志影响之后真正的关闭流程
+  if (!isClosing()) {
+    // 有意重启期间后端也会播报 ready，单独记一条日志，避免排查时误判成意外断开
+    logger.info(
+      isIntentionalRestart()
+        ? '收到 backend.shutdown.ready（后端有意重启期间，忽略）'
+        : '收到 backend.shutdown.ready（非关闭流程期间，忽略）'
+    )
+    return
+  }
+  logger.info('收到 backend.shutdown.ready，后端清理完成')
+  shutdownReadyReceived = true
+  resolveShutdownReady?.(true)
+}
+
+const handleCloseRequested = (restart = false): void => {
+  logger.info(
+    restart
+      ? '收到后端重启请求 frontend.restart.requested，收尾后重启应用'
+      : '收到后端关闭请求 frontend.close.requested，前端开始退出'
+  )
+  closeRequestedByBackend = true
+  if (isClosing()) {
+    // 已经在收尾了：重不重启只差主进程那个标记，补上即可，不必再跑一遍关闭流程
+    if (restart) void window.electronAPI?.appRestartOnQuit?.()
+    return
+  }
+  closePromise = runBackendRequestedClose(restart).catch(error => {
+    const errorMsg = error instanceof Error ? error.message : String(error)
+    logger.error(`后端请求关闭流程异常: ${errorMsg}`)
+    stopReconnect()
+    shutdownConnection('后端请求关闭异常')
+    disposeAppLifecycle()
+    // 仍走退出：标记是在收尾最开始就交给主进程的，设上了就一定会被重新拉起；
+    // 若是连那一步都没送到，这里也没什么可补的
+    return window.electronAPI?.appQuit?.()
+  })
+}
+
+const armPowerCountdownStaleTimer = (): void => {
+  powerCountdownStaleTimer = window.setTimeout(() => {
+    powerCountdownStaleTimer = undefined
+    if (connectionState().value !== 'open') {
+      // 断开期间收不到逐秒推送，不代表倒计时已结束：保留弹窗给用户留取消入口，
+      // 标记连接中断后继续观察，重新连上后由快照或新推送接管
+      powerCountdownDisconnected.value = true
+      armPowerCountdownStaleTimer()
+      return
+    }
+    // 连接正常而更新停止（已执行或已结束）：清除展示状态
+    powerCountdown.value = null
+    powerCountdownDisconnected.value = false
+    dismissPowerWarning()
+  }, POWER_COUNTDOWN_STALE_MS)
+}
+
+/**
+ * 请求主进程把窗口拉到最前并临时置顶。
+ * 光靠窗口 focus() 会被 Windows 的前台锁定挡下，用户很容易错过即将执行的电源操作。
+ */
+const raisePowerWarning = (): void => {
+  if (powerWarningRaised) return
+  powerWarningRaised = true
+  const request = window.electronAPI?.powerWarningStart?.()
+  void request?.catch(error => {
+    const errorMsg = error instanceof Error ? error.message : String(error)
+    logger.warn(`请求窗口置顶失败: ${errorMsg}`)
+  })
+}
+
+/** 撤回置顶（倒计时结束、已取消，或推送中断后按超时清除时调用）。 */
+const dismissPowerWarning = (): void => {
+  if (!powerWarningRaised) return
+  powerWarningRaised = false
+  const request = window.electronAPI?.powerWarningEnd?.()
+  void request?.catch(error => {
+    const errorMsg = error instanceof Error ? error.message : String(error)
+    logger.warn(`撤回窗口置顶失败: ${errorMsg}`)
+  })
+}
+
+const handlePowerCountdownUpdated = (data: WSPowerCountdownData): void => {
+  powerMutationSequence++
+  powerCountdown.value = data
+  powerCountdownDisconnected.value = false
+  raisePowerWarning()
+  if (powerCountdownStaleTimer !== undefined) {
+    window.clearTimeout(powerCountdownStaleTimer)
+  }
+  armPowerCountdownStaleTimer()
+}
+
+const handlePowerCountdownCancelled = (): void => {
+  powerMutationSequence++
+  logger.info('电源倒计时已取消')
+  if (powerCountdownStaleTimer !== undefined) {
+    window.clearTimeout(powerCountdownStaleTimer)
+    powerCountdownStaleTimer = undefined
+  }
+  powerCountdown.value = null
+  powerCountdownDisconnected.value = false
+  dismissPowerWarning()
+}
+
+/**
+ * 经 HTTP 取消电源倒计时，成功后立即在本地清除展示状态。
+ * 主连接断开期间后端回发的 power.countdown.cancelled 收不到，不能只等它来关弹窗。
+ * 请求失败时向调用方抛出，展示状态不变。
+ */
+const cancelPowerCountdown = async (): Promise<void> => {
+  await Service.cancelPowerTaskApiDispatchCancelPowerPost()
+  handlePowerCountdownCancelled()
+}
+
+const refreshLifecycleSnapshots = async (): Promise<void> => {
+  const generation = ++lifecycleSnapshotGeneration
+  const powerSequenceAtStart = powerMutationSequence
+
+  try {
+    const snapshot = await realtimeSnapshotApi.getPowerCountdown()
+    if (generation !== lifecycleSnapshotGeneration || isClosing()) return
+
+    // 请求期间有更新/取消事件时，WS 后续事件优先，不能被初始快照回滚。
+    if (powerMutationSequence === powerSequenceAtStart) {
+      if (
+        snapshot.active === true &&
+        typeof snapshot.operation === 'string' &&
+        typeof snapshot.remaining === 'number'
+      ) {
+        handlePowerCountdownUpdated({
+          operation: snapshot.operation,
+          remaining: snapshot.remaining,
+        })
+      } else {
+        handlePowerCountdownCancelled()
+      }
+    }
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error)
+    logger.warn(`读取电源倒计时 HTTP 快照失败: ${errorMsg}`)
+  }
+}
+
+const handleConnected = async (): Promise<void> => {
+  // 重新连上（系统恢复后重连、手动重连）说明后端实际可用：撤掉恢复失败终态和它的弹窗。
+  // 自动重启计数不在这里清零，按时间窗累计
+  dismissRestartFailure()
+  backendStatus.value = 'running'
+  endIntentionalBackendRestart('后端已重新连上')
+  dismissDisconnectIncident()
+  // 后端重启/重连后关卡数据可能已变，让计划页下次重新拉关卡选项
+  clearStageOptionsCache()
+  // 后台初始化（主定时器等）失败时 UI 其余部分照常可用，只能靠这里提示出来
+  void checkBackgroundInit()
+  await refreshLifecycleSnapshots()
+}
+
+// ==================== 正常关闭流程 ====================
+
+const waitForShutdownReady = (timeoutMs: number): Promise<boolean> => {
+  if (shutdownReadyReceived) return Promise.resolve(true)
+  return new Promise<boolean>(resolve => {
+    let settled = false
+    let timer: number | undefined
+    const settle = (ready: boolean): void => {
+      if (settled) return
+      settled = true
+      if (timer !== undefined) window.clearTimeout(timer)
+      resolveShutdownReady = null
+      resolve(ready)
+    }
+    resolveShutdownReady = settle
+    timer = window.setTimeout(() => settle(false), timeoutMs)
+  })
+}
+
+const queryBackendRunning = async (): Promise<boolean | null> => {
+  try {
+    const status = await window.electronAPI?.backendStatus?.()
+    if (typeof status?.isRunning === 'boolean') {
+      return status.isRunning
+    }
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error)
+    logger.warn(`查询后端进程状态失败: ${errorMsg}`)
+  }
+  return null
+}
+
+const waitForBackendExit = async (timeoutMs: number): Promise<boolean> => {
+  const startedAt = Date.now()
+  while (Date.now() - startedAt < timeoutMs) {
+    const running = await queryBackendRunning()
+    // IPC 失败或返回结构异常时状态为 unknown，不能据此宣称进程已经退出。
+    // 只有显式 false 才完成优雅退出确认；其余情况继续轮询并最终进入 taskkill。
+    if (running === false) return true
+    await delay(PROCESS_POLL_INTERVAL)
+  }
+  return false
+}
+
+/** 向主进程查询本次生命周期是否走 Runtime 监督链路；IPC 失败按旧链路处理。 */
+const queryRuntimeSupervised = async (): Promise<boolean> => {
+  try {
+    const status = await window.electronAPI?.backendStatus?.()
+    return status?.runtimeSupervised === true
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error)
+    logger.warn(`查询后端链路失败，按旧链路处理: ${errorMsg}`)
+    return false
+  }
+}
+
+/**
+ * Runtime 链路的停止：只请求 Electron 经 Runtime stdin 发 shutdown。
+ * 渲染进程自己 POST /close 会让后端被 Runtime 当作异常退出并自动重启，绝不能走那条路。
+ *
+ * @returns Electron 是否确认后端已关闭
+ */
+const stopBackendViaRuntime = async (): Promise<boolean> => {
+  logger.info('Runtime 链路：请求 Electron 经 Runtime 关闭后端')
+  try {
+    const result = await window.electronAPI?.stopBackend?.()
+    if (result?.success) {
+      logger.info('Runtime 已确认后端关闭')
+      return true
+    }
+    logger.error(`Runtime 关闭后端失败: ${result?.error ?? '后端服务 IPC 不可用'}`)
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error)
+    logger.error(`Runtime 关闭后端失败: ${errorMsg}`)
+  }
+  return false
+}
+
+const killBackend = async (): Promise<void> => {
+  // taskkill 幂等：整个关闭流程仅执行一次
+  if (taskkillDone) return
+  taskkillDone = true
+  // 开发模式后端由开发者独立管理（如 yarn dev:fullstack 单独启动），
+  // 收到 ready 后仍会保持运行，绝不能被前端强杀
+  if (isBackendDevMode()) {
+    logger.info('开发模式：跳过 taskkill，保留开发者管理的后端进程')
+    return
+  }
+  logger.warn('执行 taskkill 强制关闭后端')
+  try {
+    const result = await window.electronAPI?.killAllProcesses?.()
+    if (!result?.success) {
+      logger.error(`taskkill 执行失败: ${result?.error ?? '进程管理 IPC 不可用'}`)
+    }
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error)
+    logger.error(`taskkill 执行失败: ${errorMsg}`)
+  }
+}
+
+/** 释放所有常驻订阅、连接事件和 Electron 生命周期监听器（幂等）。 */
+export function disposeAppLifecycle(): void {
+  if (!initialized && lifecycleDisposers.length === 0 && residentSubscriptionIds.length === 0) {
+    return
+  }
+
+  initialized = false
+  lifecycleSnapshotGeneration++
+  for (const dispose of lifecycleDisposers.splice(0).reverse()) {
+    try {
+      dispose()
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error)
+      logger.warn(`释放生命周期监听器失败: ${errorMsg}`)
+    }
+  }
+  for (const subscriptionId of residentSubscriptionIds.splice(0)) {
+    unsubscribe(subscriptionId)
+  }
+  disposeResidentResources()
+  cancelBackgroundInitCheck()
+  if (powerCountdownStaleTimer !== undefined) {
+    window.clearTimeout(powerCountdownStaleTimer)
+    powerCountdownStaleTimer = undefined
+  }
+  // 释放后不再有倒计时推送，别把窗口留在置顶状态
+  dismissPowerWarning()
+  endIntentionalBackendRestart('生命周期协调器释放')
+  dismissDisconnectIncident()
+  // 4 小时更新检查是应用级定时器，跟着生命周期一起停，不绑任何页面
+  useUpdateChecker().stopPolling()
+  logger.info('应用生命周期协调器已释放')
+}
+
+/**
+ * Runtime 监督链路的关闭：既不发 POST /close，也不等后端进程消失。
+ *
+ * 后端由 Runtime 监督，渲染进程请求 /close 只会让它被当作异常退出并自动重启；
+ * 主进程的 backendStatus 在 Runtime 存活期间恒为运行中，等它消失只会白等超时。
+ * 停止只经 Electron → Runtime stdin shutdown 完成，Runtime 给出终态后再关闭前端。
+ */
+const runRuntimeSupervisedClose = async (): Promise<void> => {
+  logger.info('Runtime 链路：后端由 Electron 经 Runtime 关闭，前端不再请求 /close')
+  // 先收掉主连接：后端关闭期间的断开不再触发任何重连或恢复判断
+  shutdownConnection('应用关闭')
+  const stopped = await stopBackendViaRuntime()
+  disposeAppLifecycle()
+  if (!stopped) {
+    logger.error('Runtime 未能确认后端关闭，等待 Electron 主进程最终兜底')
+    return
+  }
+  logger.info('后端已退出，关闭前端')
+  await window.electronAPI?.appQuit?.()
+}
+
+const runCloseFlow = async (): Promise<void> => {
+  backendClosing = true
+  logger.info('开始执行退出并关闭后端流程')
+  const { showClosingOverlay } = useAppClosing()
+  showClosingOverlay()
+
+  // 关闭流程期间停止普通自动重连；自动重启与 taskkill 互斥由 isClosing() 保证
+  stopReconnect()
+  // 关闭流程开始即收起断开提示，不让它叠在关闭遮罩上；
+  // 关闭优先级最高，未走完的有意重启窗口一并作废
+  endIntentionalBackendRestart('进入关闭流程')
+  dismissDisconnectIncident()
+
+  closeViaRuntime = await queryRuntimeSupervised()
+  if (closeViaRuntime) {
+    await runRuntimeSupervisedClose()
+    return
+  }
+
+  // 主连接不在 open（断线中，或初始化阶段从未建立）时 ready 无从送达，也不会再有断开事件
+  // 替它解除等待：不等 ready，POST /close 后改以后端进程退出作为收尾完成的信号
+  const connectionOpen = connectionState().value === 'open'
+  if (!connectionOpen) {
+    logger.warn(`主 WebSocket 未连接（${connectionState().value}），不等待 backend.shutdown.ready`)
+  }
+  // 先挂好 ready 等待，再发 POST /close，避免消息先于等待到达
+  const readyPromise = connectionOpen
+    ? waitForShutdownReady(CLOSE_READY_TIMEOUT)
+    : Promise.resolve(false)
+
+  try {
+    await Service.closeApiCoreClosePost()
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error)
+    logger.warn(`POST /close 请求失败: ${errorMsg}`)
+  }
+
+  const ready = await readyPromise
+  let backendExitConfirmed = false
+  if (isBackendDevMode()) {
+    // 开发模式：后端由开发者独立管理，收到清理信号即视为关闭成功，
+    // 不等待进程退出、不 taskkill，直接关闭前端
+    logger.info('开发模式：后端保持运行，前端直接退出')
+    backendExitConfirmed = true
+  } else if (ready || !connectionOpen) {
+    // ready 表示 teardown 已完成；从此刻起给进程完整的正常退出窗口，
+    // 不能让 ready 到达较晚而把退出观察期压缩到接近 0。
+    // 主连接未连接时收不到 ready：后端若已崩溃，第一次轮询即确认退出；若仍存活，
+    // /close 立即返回、teardown 在后台进行（停止全部任务、关模拟器与游戏），完成后后端自行退出。
+    // 这时进程退出就是 ready 的替身，等待时限沿用 ready 的时限，不能提前 taskkill 打断收尾
+    logger.info('等待后端进程正常退出')
+    const exited = await waitForBackendExit(ready ? PROCESS_EXIT_TIMEOUT : CLOSE_READY_TIMEOUT)
+    backendExitConfirmed = exited
+    if (!backendExitConfirmed) {
+      logger.warn('后端进程未在规定时间内退出')
+      await killBackend()
+      backendExitConfirmed = await waitForBackendExit(PROCESS_EXIT_TIMEOUT)
+    }
+  } else {
+    // 超时或等待期间连接断开且未收到 ready：不自动重启，直接 taskkill
+    logger.warn('未在超时时间内收到 backend.shutdown.ready')
+    await killBackend()
+    backendExitConfirmed = await waitForBackendExit(PROCESS_EXIT_TIMEOUT)
+  }
+
+  shutdownConnection('应用关闭')
+  disposeAppLifecycle()
+  if (!backendExitConfirmed) {
+    logger.error('taskkill 后仍无法确认后端退出，等待 Electron 主进程最终兜底')
+    return
+  }
+  logger.info('后端已退出，关闭前端')
+  await window.electronAPI?.appQuit?.()
+}
+
+const runBackendRequestedClose = async (restart = false): Promise<void> => {
+  backendClosing = true
+  // 后端主动要求前端关闭：后端自行退出中，前端不再发 /close、不重启、不 taskkill
+  const { showClosingOverlay } = useAppClosing()
+  showClosingOverlay()
+  stopReconnect()
+  shutdownConnection(restart ? '后端请求重启' : '后端请求关闭')
+  if (restart) {
+    // 先把「退出后重新拉起」交给主进程，之后无论走哪条退出路径都会被重新拉起；
+    // 退出本身不作特殊处理，与「退出软件」共用同一条已协调好的流程
+    await window.electronAPI?.appRestartOnQuit?.()
+  }
+  if (await queryRuntimeSupervised()) {
+    // Runtime 链路：后端自行退出会被 Runtime 当作异常并重启，必须让 Electron 经 Runtime 收口
+    const stopped = await stopBackendViaRuntime()
+    if (!stopped) {
+      disposeAppLifecycle()
+      logger.error('Runtime 未能确认后端关闭，等待 Electron 主进程最终兜底')
+      return
+    }
+  }
+  disposeAppLifecycle()
+  await window.electronAPI?.appQuit?.()
+}
+
+/**
+ * 退出并关闭后端（幂等）。
+ * 状态优先级：关闭流程最高，期间不允许自动重启；重复调用返回同一流程。
+ */
+export function closeApp(): Promise<void> {
+  if (closePromise) return closePromise
+  closePromise = (async () => {
+    let prepared = false
+    let preparationToken: number | null | undefined
+    try {
+      // 保存期间的超时只能撤销退出，保存完成后再启动后端关闭的强制清理兜底。
+      preparationToken = await window.electronAPI?.appPrepareQuit?.()
+      if (preparationToken !== null) prepared = await prepareAppClose()
+      if (prepared && preparationToken !== undefined && preparationToken !== null) {
+        prepared = (await window.electronAPI?.appConfirmQuit?.(preparationToken)) === true
+        if (!prepared) notification.warning({ message: t('comp.closePreparationTimedOut') })
+      }
+    } catch (error) {
+      prepared = false
+      logger.error(`退出前保存失败: ${error instanceof Error ? error.message : String(error)}`)
+    }
+    // 后端主动关闭已接管退出，准备阶段的迟到结果不能撤销它或再请求一次关闭。
+    if (closeRequestedByBackend) return
+    if (!prepared) {
+      // 主进程可能已隐藏窗口并启动兜底计时；取消退出必须同时撤销它们。
+      try {
+        cancelAppClose()
+        await window.electronAPI?.appCancelQuit?.(preparationToken ?? undefined)
+      } catch (error) {
+        logger.error(`取消退出失败: ${error instanceof Error ? error.message : String(error)}`)
+      } finally {
+        closePromise = null
+      }
+      return
+    }
+    await runCloseFlow()
+  })().catch(async error => {
+    // 关闭流程异常时只在确认后端已退出后通知主进程结束；否则保留遮罩，
+    // 由 Electron 主进程的最终超时兜底再次执行串行 taskkill。
+    const errorMsg = error instanceof Error ? error.message : String(error)
+    logger.error(`关闭流程异常: ${errorMsg}`)
+    stopReconnect()
+    if (closeViaRuntime) {
+      // Runtime 链路没有 taskkill 与进程消失可等：只能再请求一次 Electron 经 Runtime 关闭
+      const stopped = await stopBackendViaRuntime()
+      shutdownConnection('关闭流程异常')
+      disposeAppLifecycle()
+      if (!stopped) {
+        logger.error('异常关闭兜底仍无法确认后端退出，等待 Electron 主进程最终兜底')
+        return
+      }
+      await window.electronAPI?.appQuit?.()
+      return
+    }
+    const devMode = isBackendDevMode()
+    if (!devMode) await killBackend()
+    const backendExitConfirmed = devMode || (await waitForBackendExit(PROCESS_EXIT_TIMEOUT))
+    shutdownConnection('关闭流程异常')
+    disposeAppLifecycle()
+    if (!backendExitConfirmed) {
+      logger.error('异常关闭兜底仍无法确认后端退出，等待 Electron 主进程最终兜底')
+      return
+    }
+    await window.electronAPI?.appQuit?.()
+  })
+  return closePromise
+}
+
+// ==================== 异常断开与自动恢复 ====================
+
+const showRestartFailureModal = (): void => {
+  // 达到恢复失败上限：仅提示一次，提供重启应用兜底
+  if (restartFailureShown) return
+  restartFailureShown = true
+  backendStatus.value = 'error'
+  stopReconnect()
+
+  const modal = Modal.error({
+    title: t('misc.couldNotRecoverBackend'),
+    content: t('misc.backendStillCannotConnect'),
+    okText: t('misc.restartApp'),
+    onOk: () => {
+      const { showClosingOverlay } = useAppClosing()
+      showClosingOverlay()
+
+      if (window.electronAPI?.appRestart) {
+        window.electronAPI.appRestart()
+      } else if (window.electronAPI?.windowClose) {
+        window.electronAPI.windowClose()
+      } else {
+        window.location.reload()
+      }
+    },
+  })
+  if (modal && typeof modal.destroy === 'function') {
+    closeRestartFailureModal = () => modal.destroy()
+  }
+}
+
+const dismissRestartFailure = (): void => {
+  restartFailureShown = false
+  closeRestartFailureModal?.()
+  closeRestartFailureModal = null
+}
+
+/** 清掉时间窗外的记录，返回窗口内已发起的自动重启次数 */
+const countRecentBackendRestarts = (): number => {
+  const windowStart = Date.now() - BACKEND_RESTART_WINDOW_MS
+  backendRestartTimestamps = backendRestartTimestamps.filter(startedAt => startedAt > windowStart)
+  return backendRestartTimestamps.length
+}
+
+const restartBackendFlow = (allowDevMode: boolean = false): Promise<void> => {
+  // 单飞行：断开、重连周期失败和系统恢复只能共享同一个后端重启流程。
+  // 关闭流程具有最高优先级，任何异步步骤后都会重新检查并退出。
+  if (restartPromise) return restartPromise
+  if (restartFailureShown || isClosing()) return Promise.resolve()
+  if (isIntentionalRestart()) {
+    // 后端由更新流程负责拉起：这里再起一个会与它抢同一个进程（先 taskkill 再启动）
+    logger.info('后端有意重启进行中，跳过自动恢复')
+    return Promise.resolve()
+  }
+  if (isBackendDevMode() && !allowDevMode) {
+    logger.warn('开发模式后端由开发者管理，跳过自动重启并继续重连')
+    scheduleReconnect(DEV_MODE_RETRY_DELAY)
+    return Promise.resolve()
+  }
+  if (countRecentBackendRestarts() >= MAX_BACKEND_RESTART_ATTEMPTS) {
+    showRestartFailureModal()
+    return Promise.resolve()
+  }
+
+  const run = async (): Promise<void> => {
+    backendRestartTimestamps.push(Date.now())
+    backendStatus.value = 'starting'
+    logger.warn(
+      `尝试恢复后端服务 (${BACKEND_RESTART_WINDOW_MS / 60000} 分钟内第 ${backendRestartTimestamps.length} 次)`
+    )
+
+    try {
+      let result: { success: boolean; error?: string; logs?: string } | undefined
+      if (window.electronAPI?.backendRestart) {
+        result = await window.electronAPI.backendRestart()
+      } else {
+        await window.electronAPI?.stopBackend?.()
+        if (isClosing()) return
+        result = await window.electronAPI?.startBackend?.()
+      }
+      if (isClosing()) return
+
+      if (!result?.success) {
+        backendStatus.value = 'error'
+        logger.error(`后端恢复失败: ${result?.error ?? '未知错误'}`)
+        if (countRecentBackendRestarts() >= MAX_BACKEND_RESTART_ATTEMPTS) {
+          showRestartFailureModal()
+        } else if (!isClosing()) {
+          scheduleReconnect(RESTART_DELAY)
+        }
+        return
+      }
+
+      logger.info('后端恢复成功，原子替换 WebSocket 连接')
+      backendStatus.value = 'running'
+      await delay(RESTART_DELAY)
+      if (isClosing()) return
+      const connected = await reconnectNow('后端恢复完成')
+      if (!connected && !isClosing()) {
+        backendStatus.value = 'error'
+        scheduleReconnect(RESTART_DELAY)
+      }
+    } catch (error) {
+      backendStatus.value = 'error'
+      const errorMsg = error instanceof Error ? error.message : String(error)
+      logger.error(`后端恢复异常: ${errorMsg}`)
+      if (countRecentBackendRestarts() >= MAX_BACKEND_RESTART_ATTEMPTS) {
+        showRestartFailureModal()
+      } else if (!isClosing()) {
+        scheduleReconnect(RESTART_DELAY)
+      }
+    }
+  }
+
+  restartPromise = run().finally(() => {
+    restartPromise = null
+  })
+  return restartPromise
+}
+
+// ==================== 后端有意重启 ====================
+// 标题栏「更新后端」会先关掉后端，再由初始化流程拉源码、装依赖并重新拉起它。
+// 这段窗口期内的断开是计划内的，不该走事故路径：提示会出现在用户自己点的更新流程里，
+// 自动恢复更会 taskkill 后抢着起一个后端，与初始化流程争同一个进程。
+// 判据必须是显式标志而不是「多久内恢复」：更新耗时从几秒到几分钟不等。
+
+/**
+ * 进入有意重启窗口。调用方必须在流程未能走到「后端重新连上」时调用
+ * {@link endIntentionalBackendRestart}；两者都没发生时由超时兜底解除。
+ *
+ * @param reason 记入日志的触发原因
+ */
+export function beginIntentionalBackendRestart(reason: string): void {
+  if (intentionalRestartTimer !== undefined) window.clearTimeout(intentionalRestartTimer)
+  intentionalRestartActive = true
+  intentionalRestartTimer = window.setTimeout(() => {
+    intentionalRestartTimer = undefined
+    if (!intentionalRestartActive) return
+    intentionalRestartActive = false
+    logger.warn('后端有意重启窗口超时未结束，恢复断开提示与自动恢复')
+  }, INTENTIONAL_RESTART_TIMEOUT)
+  logger.info(`进入后端有意重启窗口: ${reason}`)
+}
+
+/**
+ * 结束有意重启窗口，恢复正常的断开提示与自动恢复。幂等。
+ *
+ * @param reason 记入日志的结束原因
+ */
+export function endIntentionalBackendRestart(reason: string): void {
+  if (intentionalRestartTimer !== undefined) {
+    window.clearTimeout(intentionalRestartTimer)
+    intentionalRestartTimer = undefined
+  }
+  if (!intentionalRestartActive) return
+  intentionalRestartActive = false
+  logger.info(`结束后端有意重启窗口: ${reason}`)
+}
+
+// ==================== 断开提示 ====================
+// 断开先只给右上角非阻塞通知：后端偶发抖动或 Electron 主动重启后端时几秒即恢复，
+// 一断开就弹阻塞式模态框只是噪音。生产模式仅在整轮重连失败后才升级为模态框；
+// 开发模式后端由开发者手动重启，属于常规操作，始终不弹模态框。
+
+const showDisconnectNotice = (event: WSDisconnectEvent): void => {
+  if (disconnectIncidentShown) return
+  disconnectIncidentShown = true
+  logger.error(`主 WebSocket 异常断开: code=${event.code}, reason=${event.reason || '无'}`)
+  notification.warning({
+    key: DISCONNECT_NOTICE_KEY,
+    message: t('misc.lostConnectionBackend'),
+    description: t(
+      isBackendDevMode()
+        ? 'misc.devBackendReconnecting'
+        : 'misc.checkingBackendRecoveringAutomatically'
+    ),
+    // 持续到重连成功或关闭流程开始时按 key 收起，不自动消失
+    duration: null,
+  })
+}
+
+const escalateDisconnectIncident = (): void => {
+  // 只升级由断开事件开启的事故；开发模式与已升级过的事故不重复弹
+  if (!disconnectIncidentShown || closeDisconnectModal || isBackendDevMode()) return
+  notification.close(DISCONNECT_NOTICE_KEY)
+  const modal = Modal.warning({
+    title: t('misc.lostConnectionBackend'),
+    content: t('misc.checkingBackendRecoveringAutomatically'),
+    okText: t('misc.gotIt'),
+  })
+  if (modal && typeof modal.destroy === 'function') {
+    closeDisconnectModal = () => modal.destroy()
+  }
+}
+
+const dismissDisconnectIncident = (): void => {
+  disconnectIncidentShown = false
+  notification.close(DISCONNECT_NOTICE_KEY)
+  notification.close(SUPERSEDED_NOTICE_KEY)
+  closeDisconnectModal?.()
+  closeDisconnectModal = null
+}
+
+const showSupersededNotice = (event: WSDisconnectEvent): void => {
+  // 另一个前端窗口接管了后端主连接（后端以专用关闭码通知）。后端没坏，
+  // 连接层也已停止自动重连，所以只给一次非阻塞提示：不弹模态框、不自动重启后端、
+  // 不进入恢复流程，否则本窗口会把对方踢掉、两边无限互踢。
+  logger.warn(`主连接已被另一个前端窗口接管: code=${event.code}, reason=${event.reason || '无'}`)
+  dismissDisconnectIncident()
+  notification.info({
+    key: SUPERSEDED_NOTICE_KEY,
+    message: t('misc.anotherWindowTookOverBackend'),
+    description: t('misc.thisWindowStoppedReconnecting'),
+    // 本窗口不会自己恢复，提示保留到显式重连成功或关闭流程开始
+    duration: null,
+  })
+}
+
+const recoverAfterDisconnect = (): Promise<void> => {
+  if (disconnectRecoveryPromise) return disconnectRecoveryPromise
+  disconnectRecoveryPromise = (async () => {
+    const running = await queryBackendRunning()
+    if (isClosing() || restartFailureShown) return
+    if (running === false) await restartBackendFlow()
+  })().finally(() => {
+    disconnectRecoveryPromise = null
+  })
+  return disconnectRecoveryPromise
+}
+
+const handleDisconnected = (event: WSDisconnectEvent): void => {
+  if (isClosing() || closeRequestedByBackend) {
+    // 关闭流程期间断开：连接层进入终态，禁止任何重连；
+    // 未收到 ready 则立刻走 taskkill 分支
+    shutdownConnection('关闭流程中断开')
+    if (!shutdownReadyReceived) {
+      logger.warn('关闭流程期间 WebSocket 断开且未收到 ready')
+      resolveShutdownReady?.(false)
+    }
+    return
+  }
+  if (event.code === WS_CLOSE_CODE_REPLACED) {
+    // 被另一个窗口接管：后端仍在运行，backendStatus 不改，不进入恢复流程
+    showSupersededNotice(event)
+    return
+  }
+  if (isIntentionalRestart()) {
+    // 计划内重启（标题栏「更新后端」）：后端由更新流程重新拉起，连接层照常自动重连。
+    // 这里既不提示也不恢复，否则用户会在自己点的更新流程里看到「与后端失去连接」，
+    // 协调器还会 taskkill 后抢着起一个后端。
+    logger.info(`后端有意重启期间断开: code=${event.code}，等待更新流程重新拉起后端`)
+    backendStatus.value = 'starting'
+    return
+  }
+  backendStatus.value = 'stopped'
+  showDisconnectNotice(event)
+  void recoverAfterDisconnect()
+}
+
+const handleReconnectCycleFailed = async (): Promise<void> => {
+  if (isClosing() || restartFailureShown) return
+  if (isIntentionalRestart()) {
+    // 更新流程可能正在装依赖，耗时远超一轮重连（约 40 秒）：不升级弹窗、不抢着起后端，
+    // 只缩短下一轮间隔，后端一起来就能连上
+    logger.info('后端有意重启进行中，本轮重连失败后继续等待')
+    scheduleReconnect(INTENTIONAL_RESTART_RETRY_DELAY)
+    return
+  }
+  // 一整轮重连都没连上，才把非阻塞通知升级为模态框
+  escalateDisconnectIncident()
+
+  const running = await queryBackendRunning()
+  // IPC 查询期间关闭流程可能已开始：重查后再决策，避免在关闭态重建重连计时器
+  // 或触发自动重启（与 taskkill 互斥）
+  if (isClosing() || restartFailureShown) return
+
+  if (running === false) {
+    await restartBackendFlow()
+  } else {
+    // 后端进程存活或状态未知：延迟后继续下一轮重连
+    logger.warn('后端进程仍在运行或状态未知，稍后继续重连')
+    scheduleReconnect(isBackendDevMode() ? DEV_MODE_RETRY_DELAY : NEXT_CYCLE_DELAY)
+  }
+}
+
+const handleSystemResume = (): Promise<void> => {
+  if (resumeRecoveryPromise) return resumeRecoveryPromise
+  resumeRecoveryPromise = (async () => {
+    if (isClosing() || isIntentionalRestart()) return
+    logger.info('检测到系统恢复，检查后端和主 WebSocket')
+
+    const running = await queryBackendRunning()
+    let httpReachable = false
+    try {
+      await Service.getWsMetaApiCoreWsMetaGet()
+      httpReachable = true
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error)
+      logger.warn(`系统恢复后 ws_meta 检查失败: ${errorMsg}`)
+    }
+    if (isClosing()) return
+
+    if (running === false || !httpReachable) {
+      // 已处于恢复失败终态时 restartBackendFlow 直接返回：终态只停自动重启，弹窗保留
+      await restartBackendFlow()
+      return
+    }
+
+    // 后端确实可达：终态下也照常重连，连上后由 handleConnected 撤掉终态与失败弹窗，
+    // 不能让「仍无法连接」的弹窗留在已经恢复的应用上
+    await reconnectNow('系统从睡眠恢复')
+  })().finally(() => {
+    resumeRecoveryPromise = null
+  })
+  return resumeRecoveryPromise
+}
+
+// ==================== 初始化与连接 ====================
+
+/**
+ * 初始化生命周期协调器：注册应用级常驻订阅与连接事件监听。
+ * 幂等；必须在建立 WebSocket 连接前调用，重连不会重复注册，页面切换不会取消。
+ */
+export function initializeAppLifecycle(): void {
+  if (initialized) return
+
+  // 所有应用级业务订阅都必须早于主连接建立；该入口覆盖初始化向导、正常进入和手动连接。
+  bootstrapResidentResources()
+  initialized = true
+
+  // 先注册所有应用级常驻订阅，再允许建立连接；所有监听器都有明确释放函数。
+  residentSubscriptionIds = [
+    subscribe({ id: WS_ID_MAIN, type: WS_BACKEND_SHUTDOWN_READY }, () => handleShutdownReady()),
+    subscribe({ id: WS_ID_MAIN, type: WS_FRONTEND_CLOSE_REQUESTED }, () => handleCloseRequested()),
+    subscribe({ id: WS_ID_MAIN, type: WS_FRONTEND_RESTART_REQUESTED }, () =>
+      handleCloseRequested(true)
+    ),
+    subscribe({ id: WS_ID_MAIN, type: WS_POWER_COUNTDOWN_UPDATED }, message =>
+      handlePowerCountdownUpdated(message.data)
+    ),
+    subscribe({ id: WS_ID_MAIN, type: WS_POWER_COUNTDOWN_CANCELLED }, () =>
+      handlePowerCountdownCancelled()
+    ),
+  ]
+
+  lifecycleDisposers = [
+    onConnected(handleConnected),
+    onDisconnected(handleDisconnected),
+    onReconnectCycleFailed(() => {
+      void handleReconnectCycleFailed()
+    }),
+  ]
+
+  const disposeSystemResume = window.electronAPI?.onSystemResume?.(() => {
+    void handleSystemResume()
+  })
+  if (disposeSystemResume) lifecycleDisposers.push(disposeSystemResume)
+
+  const disposeCloseRequested = window.electronAPI?.onAppCloseRequested?.(confirmRunningTasks => {
+    void (async () => {
+      if (confirmRunningTasks && hasRunningTasks()) {
+        if (!(await window.electronAPI?.appWaitForQuitConfirmation?.())) return
+        await window.electronAPI?.windowFocus?.()
+        if (!(await confirmCloseIfRunningTasks())) {
+          await window.electronAPI?.appCancelQuit?.()
+          return
+        }
+      }
+      await closeApp()
+    })().catch(async error => {
+      logger.error(`处理关闭请求失败: ${error instanceof Error ? error.message : String(error)}`)
+      await window.electronAPI?.appCancelQuit?.()
+    })
+  })
+  if (disposeCloseRequested) lifecycleDisposers.push(disposeCloseRequested)
+
+  // 防止极端启动竞态：如果调用者在连接刚 open 后才完成初始化，立即补一次快照。
+  if (connectionState().value === 'open') void handleConnected()
+
+  logger.info('应用生命周期协调器已初始化')
+}
+
+/**
+ * 建立主 WebSocket 连接，失败时按间隔重试。
+ * 用于启动流程；连接失败不抛异常（初始化容错由调用方决定）。
+ */
+export async function connectWithRetry(
+  attempts: number = 3,
+  retryDelayMs: number = 2000
+): Promise<boolean> {
+  initializeAppLifecycle()
+
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      const connected = await connect()
+      if (connected) {
+        backendStatus.value = 'running'
+        return true
+      }
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error)
+      logger.warn(`第 ${attempt} 次连接异常: ${errorMsg}`)
+    }
+    if (attempt < attempts) {
+      await delay(retryDelayMs)
+    }
+  }
+  logger.warn(`WebSocket 连接失败，已重试 ${attempts} 次`)
+  return false
+}
+
+/** 手动重连（devtools/恢复入口） */
+export async function manualReconnect(): Promise<boolean> {
+  if (isClosing()) return false
+  stopReconnect()
+  // 连同失败弹窗一起撤掉，否则再次进入终态时旧弹窗失去句柄、叠在新弹窗下
+  dismissRestartFailure()
+  // 用户显式介入：重新给自动恢复完整的次数
+  backendRestartTimestamps = []
+  const connected = await reconnectNow('用户手动重连')
+  if (connected) backendStatus.value = 'running'
+  return connected
+}
+
+export function useAppLifecycle() {
+  return {
+    initializeAppLifecycle,
+    disposeAppLifecycle,
+    connectWithRetry,
+    closeApp,
+    manualReconnect,
+    backendStatus,
+    powerCountdown,
+    powerCountdownDisconnected,
+    cancelPowerCountdown,
+    connectionState: connectionState(),
+  }
+}

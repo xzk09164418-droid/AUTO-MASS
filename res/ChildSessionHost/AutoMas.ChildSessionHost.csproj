@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <PlatformTarget>x64</PlatformTarget>
+    <AssemblyName>AutoMas.ChildSessionHost</AssemblyName>
+    <RootNamespace>BetterGenshinImpact.Service.ChildSession</RootNamespace>
+    <ApplicationIcon>..\icons\AUTO-MAS.ico</ApplicationIcon>
+  </PropertyGroup>
+
+</Project>

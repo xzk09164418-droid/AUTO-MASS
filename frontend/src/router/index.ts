@@ -1,0 +1,464 @@
+import { createRouter, createWebHashHistory, type LocationQueryRaw } from 'vue-router'
+import { useAppInitialization } from '@/composables/useAppInitialization'
+import { getInitializationDecision } from '@/utils/initializationDecision'
+import { startSkippedInitializationStartup } from '@/utils/skippedInitializationStartup'
+import { MAAFW_FLAVORS } from '@/composables/useMaaFWFlavor'
+import { buildMaaFWRoutes } from './maafwFlavorRoutes'
+const logger = window.electronAPI.getLogger('路由管理')
+
+// MaaFW 与各特调的路由（每个类型：脚本编辑 / 引导 / 加用户 / 编辑用户）按特调注册表生成；
+// 组件都是页面宿主：按脚本实际类型选页面，后缀与类型不符的地址由它纠正
+const maafwRoutes = buildMaaFWRoutes(
+  MAAFW_FLAVORS,
+  () => import('../views/EditView/MaaFWFlavor/MaaFWPageHost.vue')
+)
+
+// 异步按需加载调度中心，避免弹窗窗口提前执行相关逻辑
+const SchedulerView = () => import('../views/scheduler/index.vue')
+
+let needInitLanding = true
+
+// 调试页仅在开发环境注册。import.meta.env.DEV 是编译期常量，
+// 生产构建时整个数组会被判定为死代码，这几个页面不会进入产物。
+const devRoutes = import.meta.env.DEV
+  ? [
+      {
+        path: '/TestRouter',
+        name: 'TestRouter',
+        component: () => import('../views/TestRouter.vue'),
+        meta: { title: '测试路由' },
+      },
+      {
+        path: '/OCRdev',
+        name: 'OCRdev',
+        component: () => import('../views/OCRdev.vue'),
+        meta: { title: 'OCR测试' },
+      },
+      {
+        path: '/OverlayMaskDev',
+        name: 'OverlayMaskDev',
+        component: () => import('../views/OverlayMaskDev.vue'),
+        meta: { title: '遮罩彩蛋测试' },
+      },
+    ]
+  : []
+
+const routes = [
+  {
+    path: '/',
+    redirect: () => '/initialization',
+  },
+  {
+    path: '/initialization',
+    name: 'Initialization',
+    component: () => import('../views/Initialization/index.vue'),
+    meta: { title: 'AUTO-MAS 初始化' },
+  },
+  {
+    path: '/home',
+    name: 'Home',
+    component: () => import('../views/Home.vue'),
+    meta: { title: '主页' },
+  },
+  {
+    path: '/scripts',
+    name: 'Scripts',
+    component: () => import('../views/Scripts.vue'),
+    meta: { title: '脚本管理' },
+  },
+  {
+    path: '/scripts/:id/edit/maa',
+    name: 'MAAScriptEdit',
+    component: () => import('../views/EditView/Script/MAAScriptEdit.vue'),
+    meta: { title: '编辑MAA脚本' },
+  },
+  {
+    path: '/scripts/:id/edit/src',
+    name: 'SRCScriptEdit',
+    component: () => import('../views/EditView/Script/SRCScriptEdit.vue'),
+    meta: { title: '编辑SRC脚本' },
+  },
+  {
+    path: '/scripts/:id/edit/maaend',
+    name: 'MaaEndScriptEdit',
+    component: () => import('../views/EditView/Script/MaaEndScriptEdit.vue'),
+    meta: { title: '编辑MaaEnd脚本' },
+  },
+  // MaaFW 家族的脚本页：编辑形态与新建后的分步引导（按注册表生成）
+  ...maafwRoutes.script,
+  ...maafwRoutes.setup,
+  {
+    path: '/scripts/:id/edit/hsr',
+    name: 'HSRScriptEdit',
+    component: () => import('../views/EditView/Script/HSRScriptEdit.vue'),
+    meta: { title: '编辑HSR脚本' },
+  },
+  {
+    path: '/scripts/:id/edit/general',
+    name: 'GeneralScriptEdit',
+    component: () => import('../views/EditView/Script/GeneralScriptEdit.vue'),
+    meta: { title: '编辑通用脚本' },
+  },
+  {
+    path: '/scripts/:id/edit/baah',
+    name: 'BAAHScriptEdit',
+    component: () => import('../views/EditView/Script/BAAHScriptEdit.vue'),
+    meta: { title: '编辑BAAH脚本' },
+  },
+  {
+    path: '/scripts/:id/edit/okww',
+    name: 'OkwwScriptEdit',
+    component: () => import('../views/EditView/Script/OkwwScriptEdit.vue'),
+    meta: { title: '编辑ok-ww脚本' },
+  },
+  {
+    path: '/scripts/:id/edit/oknte',
+    name: 'OkNteScriptEdit',
+    component: () => import('../views/EditView/Script/OkNteScriptEdit.vue'),
+    meta: { title: '编辑ok-nte脚本' },
+  },
+  {
+    path: '/scripts/:id/edit/bettergi',
+    name: 'BetterGIScriptEdit',
+    component: () => import('../views/EditView/Script/BetterGIScriptEdit.vue'),
+    meta: { title: '编辑BetterGI脚本' },
+  },
+  {
+    path: '/scripts/:id/edit/zzzod',
+    name: 'ZzzOdScriptEdit',
+    component: () => import('../views/EditView/Script/ZzzOdScriptEdit.vue'),
+    meta: { title: '编辑ZZZ-OD脚本' },
+  },
+  {
+    path: '/scripts/:id/edit/whimbox',
+    name: 'WhimboxScriptEdit',
+    component: () => import('../views/EditView/Script/WhimboxScriptEdit.vue'),
+    meta: { title: '编辑奇想盒脚本' },
+  },
+  {
+    path: '/scripts/:scriptId/users/add/zzzod',
+    name: 'ZzzOdUserAdd',
+    component: () => import('../views/EditView/User/ZzzOdUserEdit.vue'),
+    meta: { title: '添加ZZZ-OD用户' },
+  },
+  {
+    path: '/scripts/:scriptId/users/:userId/edit/zzzod',
+    name: 'ZzzOdUserEdit',
+    component: () => import('../views/EditView/User/ZzzOdUserEdit.vue'),
+    meta: { title: '编辑ZZZ-OD用户' },
+  },
+  {
+    path: '/scripts/:scriptId/users/add/maa',
+    name: 'MAAUserAdd',
+    component: () => import('../views/EditView/User/MAAUserEdit.vue'),
+    meta: { title: '添加MAA用户' },
+  },
+  {
+    path: '/scripts/:scriptId/users/:userId/edit/maa',
+    name: 'MAAUserEdit',
+    component: () => import('../views/EditView/User/MAAUserEdit.vue'),
+    meta: { title: '编辑MAA用户' },
+  },
+  {
+    path: '/scripts/:scriptId/users/add/src',
+    name: 'SRCUserAdd',
+    component: () => import('../views/EditView/User/SRCUserEdit.vue'),
+    meta: { title: '添加SRC用户' },
+  },
+  {
+    path: '/scripts/:scriptId/users/add/maaend',
+    name: 'MaaEndUserAdd',
+    component: () => import('../views/EditView/User/MaaEndUserEdit.vue'),
+    meta: { title: '添加MaaEnd用户' },
+  },
+  ...maafwRoutes.userAdd,
+  {
+    path: '/scripts/:scriptId/users/add/hsr',
+    name: 'HSRUserAdd',
+    component: () => import('../views/EditView/User/HSRUserEdit.vue'),
+    meta: { title: '添加HSR用户' },
+  },
+  {
+    path: '/scripts/:scriptId/users/:userId/edit/src',
+    name: 'SRCUserEdit',
+    component: () => import('../views/EditView/User/SRCUserEdit.vue'),
+    meta: { title: '编辑SRC用户' },
+  },
+  {
+    path: '/scripts/:scriptId/users/:userId/edit/maaend',
+    name: 'MaaEndUserEdit',
+    component: () => import('../views/EditView/User/MaaEndUserEdit.vue'),
+    meta: { title: '编辑MaaEnd用户' },
+  },
+  ...maafwRoutes.userEdit,
+  {
+    path: '/scripts/:scriptId/users/:userId/edit/hsr',
+    name: 'HSRUserEdit',
+    component: () => import('../views/EditView/User/HSRUserEdit.vue'),
+    meta: { title: '编辑HSR用户' },
+  },
+  {
+    path: '/scripts/:scriptId/users/add/general',
+    name: 'GeneralUserAdd',
+    component: () => import('../views/EditView/User/GeneralUserEdit.vue'),
+    meta: { title: '添加通用用户' },
+  },
+  {
+    path: '/scripts/:scriptId/users/:userId/edit/general',
+    name: 'GeneralUserEdit',
+    component: () => import('../views/EditView/User/GeneralUserEdit.vue'),
+    meta: { title: '编辑通用用户' },
+  },
+  {
+    path: '/scripts/:scriptId/users/add/baah',
+    name: 'BAAHUserAdd',
+    component: () => import('../views/EditView/User/BAAHUserEdit.vue'),
+    meta: { title: '添加BAAH用户' },
+  },
+  {
+    path: '/scripts/:scriptId/users/:userId/edit/baah',
+    name: 'BAAHUserEdit',
+    component: () => import('../views/EditView/User/BAAHUserEdit.vue'),
+    meta: { title: '编辑BAAH用户' },
+  },
+  {
+    path: '/scripts/:scriptId/users/add/okww',
+    name: 'OkwwUserAdd',
+    component: () => import('../views/EditView/User/OkwwUserEdit.vue'),
+    meta: { title: '添加ok-ww用户' },
+  },
+  {
+    path: '/scripts/:scriptId/users/:userId/edit/okww',
+    name: 'OkwwUserEdit',
+    component: () => import('../views/EditView/User/OkwwUserEdit.vue'),
+    meta: { title: '编辑ok-ww用户' },
+  },
+  {
+    path: '/scripts/:scriptId/users/add/oknte',
+    name: 'OkNteUserAdd',
+    component: () => import('../views/EditView/User/OkNteUserEdit.vue'),
+    meta: { title: '添加ok-nte用户' },
+  },
+  {
+    path: '/scripts/:scriptId/users/:userId/edit/oknte',
+    name: 'OkNteUserEdit',
+    component: () => import('../views/EditView/User/OkNteUserEdit.vue'),
+    meta: { title: '编辑ok-nte用户' },
+  },
+  {
+    path: '/scripts/:scriptId/users/add/bettergi',
+    name: 'BetterGIUserAdd',
+    component: () => import('../views/EditView/User/BetterGIUserEdit.vue'),
+    meta: { title: '添加BetterGI用户' },
+  },
+  {
+    path: '/scripts/:scriptId/users/:userId/edit/bettergi',
+    name: 'BetterGIUserEdit',
+    component: () => import('../views/EditView/User/BetterGIUserEdit.vue'),
+    meta: { title: '编辑BetterGI用户' },
+  },
+  {
+    path: '/scripts/:scriptId/users/add/whimbox',
+    name: 'WhimboxUserAdd',
+    component: () => import('../views/EditView/User/WhimboxUserEdit.vue'),
+    meta: { title: '添加奇想盒用户' },
+  },
+  {
+    path: '/scripts/:scriptId/users/:userId/edit/whimbox',
+    name: 'WhimboxUserEdit',
+    component: () => import('../views/EditView/User/WhimboxUserEdit.vue'),
+    meta: { title: '编辑奇想盒用户' },
+  },
+  {
+    path: '/plans',
+    name: 'Plans',
+    component: () => import('../views/plan/index.vue'),
+    meta: { title: '计划管理' },
+  },
+  {
+    path: '/emulators',
+    name: 'Emulators',
+    component: () => import('../views/Emulator.vue'),
+    meta: { title: '模拟器管理' },
+  },
+  {
+    path: '/queue',
+    name: 'Queue',
+    component: () => import('../views/queue/index.vue'),
+    meta: { title: '调度队列' },
+  },
+  {
+    path: '/scheduler',
+    name: 'Scheduler',
+    component: SchedulerView,
+    meta: {
+      title: '调度中心',
+      keepAlive: true, // 启用 keep-alive，保持组件存活
+    },
+  },
+  ...devRoutes,
+  {
+    path: '/history',
+    name: 'History',
+    component: () => import('../views/history/index.vue'),
+    meta: { title: '历史记录' },
+  },
+  {
+    path: '/gamesign',
+    name: 'GameSign',
+    component: () => import('../views/gamesign/index.vue'),
+    meta: { title: '游戏社区' },
+  },
+  {
+    path: '/gamesign/sign',
+    name: 'CommunityToolSign',
+    redirect: '/gamesign',
+    meta: { title: '游戏社区' },
+  },
+  {
+    path: '/gamesign/activity',
+    name: 'CommunityToolActivity',
+    redirect: {
+      path: '/gamesign',
+      query: { tab: 'activity' },
+    },
+    meta: { title: '游戏社区' },
+  },
+  {
+    path: '/theme-store',
+    name: 'ThemeStore',
+    component: () => import('../views/themeStore/index.vue'),
+    meta: { title: '主题商店' },
+  },
+  {
+    path: '/settings',
+    name: 'Settings',
+    component: () => import('../views/setting/index.vue'),
+    meta: { title: '设置' },
+  },
+  {
+    path: '/settings/mystery',
+    name: 'Mystery',
+    component: () => import('../views/mystery/index.vue'),
+    meta: { title: '神秘入口' },
+    children: [
+      {
+        path: 'tokens',
+        name: 'MysteryTokens',
+        component: () => import('../views/mystery/tokens/index.vue'),
+        meta: { title: 'Token 获取', mysteryTitleKey: 'mystery.tokens.title' },
+      },
+    ],
+  },
+  {
+    path: '/logs',
+    name: 'Logs',
+    component: () => import('../views/Logs.vue'),
+    meta: { title: '日志查看', skipGuard: true },
+  },
+  {
+    // 主进程另开的小窗口：真实显示器回来了但有任务在跑，问用户要不要拆虚拟屏
+    path: '/vdd-prompt',
+    name: 'VirtualDisplayPrompt',
+    component: () => import('../views/VirtualDisplayPrompt.vue'),
+    meta: { title: '虚拟显示器', skipGuard: true },
+  },
+]
+
+const router = createRouter({
+  history: createWebHashHistory(),
+  routes,
+})
+
+router.beforeEach(async (to, from, next) => {
+  logger.info(`路由守卫：${JSON.stringify({ to: to.path, from: from.path })}`)
+
+  const { isInitialized, isBootstrapping } = useAppInitialization()
+
+  // 声明跳过的路由：直接放行
+  if (to.meta.skipGuard === true) {
+    next()
+    return
+  }
+
+  if (to.path === '/initialization') {
+    if (!isInitialized.value && !isBootstrapping.value) {
+      const decision = await getInitializationDecision()
+      if (decision.mode === 'skip-home') {
+        needInitLanding = false
+        logger.info(`命中跳过初始化条件，直接进入主页: ${JSON.stringify(decision)}`)
+        void startSkippedInitializationStartup()
+        next('/home')
+        return
+      }
+    }
+
+    sessionStorage.removeItem('disableInitializationSkip')
+    needInitLanding = false
+    next()
+    return
+  }
+
+  const isDev = import.meta.env.DEV
+  if (isDev) {
+    // 开发模式免初始化门禁，但直达内页（如刷新后落在 /scripts）时仍需
+    // 建立主 WebSocket 连接并标记初始化，否则 isAppReady 恒为 false 导致整窗空白。
+    // 旧版由 useWebSocket 单体的全局自动连接掩盖了这一缺口。
+    if (!isInitialized.value && !isBootstrapping.value) {
+      const { beginBootstrap, finishBootstrap, markAsInitialized } = useAppInitialization()
+      beginBootstrap()
+      void (async () => {
+        try {
+          const { connectWithRetry } = await import('@/composables/useAppLifecycle')
+          await connectWithRetry()
+        } catch (error) {
+          const errorMsg = error instanceof Error ? error.message : String(error)
+          logger.error(`开发模式直达内页启动失败: ${errorMsg}`)
+        } finally {
+          // 开发模式容错：连接失败也进入应用，由生命周期协调器继续重连
+          markAsInitialized()
+          finishBootstrap()
+        }
+      })()
+    }
+    return next()
+  }
+
+  logger.info(
+    `检查初始化状态：${JSON.stringify({ isInitialized: isInitialized.value, isBootstrapping: isBootstrapping.value })}`
+  )
+  if (isBootstrapping.value) {
+    needInitLanding = false
+    if (to.path !== '/home') {
+      next('/home')
+      return
+    }
+    next()
+    return
+  }
+
+  if (!isInitialized.value) {
+    needInitLanding = false
+    next('/initialization')
+    return
+  }
+
+  if (needInitLanding) {
+    needInitLanding = false
+    next({ path: '/initialization', query: { redirect: to.fullPath } })
+    return
+  }
+
+  next()
+})
+
+export function navigateTo(
+  path: string,
+  options?: { replace?: boolean; query?: LocationQueryRaw }
+) {
+  const { replace = false, query } = options || {}
+  if (replace) return router.replace({ path, query })
+  return router.push({ path, query })
+}
+
+export default router

@@ -1,0 +1,70 @@
+{
+    "interface_version": 2,
+    "name": "AUTO-MAS MaaFW Toolkit",
+    "icon": "res/icons/AUTO-MAS.ico",
+    "mirrorchyan_multiplatform": false,
+    "github": "https://github.com/AUTO-MAS-Project/AUTO-MAS",
+    "version": "5.1.0",
+    "contact": "https://auto-mas.top/",
+    "license": "AGPL-3.0",
+    "controller": [
+        {
+            "name": "终末地PC端",
+            "type": "Win32",
+            "permission_required": true,
+            "win32": {
+                "class_regex": "UnityWndClass",
+                "window_regex": "Endfield",
+                "mouse": "PostMessageWithCursorPos",
+                "keyboard": "PostMessageWithCursorPos",
+                "screencap": "PrintWindow"
+            }
+        },
+        {
+            "name": "终末地PC端-登录表单",
+            "type": "Win32",
+            "permission_required": true,
+            "win32": {
+                "class_regex": "Qt5158QWindowToolSaveBits",
+                "window_regex": "Form",
+                "mouse": "PostMessageWithCursorPos",
+                "keyboard": "PostMessageWithCursorPos",
+                "screencap": "PrintWindow"
+            }
+        },
+        {
+            "name": "终末地PC端-登录下拉菜单",
+            "type": "Win32",
+            "permission_required": true,
+            "win32": {
+                "class_regex": "Qt5158QWindowToolSaveBits",
+                "window_regex": "Endfield",
+                "mouse": "PostMessageWithCursorPos",
+                "keyboard": "PostMessageWithCursorPos",
+                "screencap": "PrintWindow"
+            }
+        },
+        {
+            "name": "星穹铁道模拟器",
+            "type": "Adb",
+            "permission_required": true
+        }
+    ],
+    "resource": [
+        {
+            "name": "AUTO-MAS MaaFW Toolkit Resource",
+            "path": [
+                "res/MaaFW"
+            ]
+        }
+    ],
+    "task": [
+        {
+            "name": "星穹铁道模拟器-切换账号",
+            "entry": "切换账号[StarRailEmulator]",
+            "controller": [
+                "星穹铁道模拟器"
+            ]
+        }
+    ]
+}

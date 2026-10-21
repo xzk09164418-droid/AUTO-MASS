@@ -1,0 +1,256 @@
+import { translate as t } from '@/i18n'
+import { ref } from 'vue'
+import { Service } from '@/api'
+import type { GlobalConfig_Update } from '@/api'
+import { message } from 'ant-design-vue'
+import { useAudioPlayer } from '@/composables/useAudioPlayer'
+import type { ChangelogData } from '@/utils/changelog'
+import { isUpdatePaused } from '@/composables/updatePause'
+
+const logger = window.electronAPI.getLogger('更新检查器')
+
+// 获取版本号，优先使用环境变量，否则使用一个测试版本
+const version = import.meta.env.VITE_APP_VERSION || '1.0.0'
+
+// 全局状态 - 在所有组件间共享
+const updateVisible = ref(false)
+const updateData = ref<ChangelogData>({})
+const latestVersion = ref('')
+
+// 定时器相关 - 参考顶栏TitleBar.vue的实现
+const POLL_MS = 4 * 60 * 60 * 1000 // 4小时
+let updateCheckTimer: ReturnType<typeof setInterval> | null = null
+let initialUpdateCheckTimer: ReturnType<typeof setTimeout> | null = null
+// startPolling 在读设置期间可能被再次调用（appEntry 与初始化面板都会起），用它去重
+let startPollingRequest: Promise<void> | null = null
+const isPolling = ref(false)
+
+type UpdateCheckPromise = ReturnType<typeof Service.checkUpdateApiUpdateCheckPost>
+const updateCheckRequests = new Map<boolean, UpdateCheckPromise>()
+
+// 防止重复弹出的状态
+let lastShownVersion: string | null = null
+
+export const requestUpdateCheck = (forceCheck = false): UpdateCheckPromise => {
+  const inFlightRequest = updateCheckRequests.get(forceCheck)
+  if (inFlightRequest) return inFlightRequest
+
+  const request = Service.checkUpdateApiUpdateCheckPost({
+    current_version: version,
+    if_force: forceCheck,
+  })
+  updateCheckRequests.set(forceCheck, request)
+
+  const clearRequest = () => updateCheckRequests.delete(forceCheck)
+  void request.then(clearRequest, clearRequest)
+
+  return request
+}
+
+const showUpdateModal = (data: ChangelogData, version: string) => {
+  updateData.value = data
+  latestVersion.value = version
+  updateVisible.value = true
+  lastShownVersion = version
+}
+
+// 拉取 Update 配置段（自动更新开关与暂停截止日期一次读完）；返回 null 表示读取失败
+const fetchUpdateSettings = async (): Promise<GlobalConfig_Update | null> => {
+  try {
+    const response = await Service.getScriptsApiSettingGetPost()
+    if (response.code === 200 && response.data) {
+      return response.data.Update ?? {}
+    }
+    logger.warn(`获取更新设置失败: code=${response.code}`)
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error)
+    logger.warn(`获取更新设置失败: ${errorMsg}`)
+  }
+  return null
+}
+
+// 暂停更新状态三态：true=暂停中 / false=未暂停 / null=读取失败（状态未知，按失败关闭处理）
+export const readUpdatePauseState = async (): Promise<boolean | null> => {
+  const updateSettings = await fetchUpdateSettings()
+  if (!updateSettings) return null
+  return isUpdatePaused(updateSettings.PauseUntil)
+}
+
+export function useUpdateChecker() {
+  // 执行一次更新检查 - 完全参考顶栏的 pollOnce 逻辑
+  const pollOnce = async () => {
+    if (isPolling.value) return
+
+    // 一次读完开关与暂停状态；读取失败时状态未知，按失败关闭跳过本次自动检查
+    const updateSettings = await fetchUpdateSettings()
+    if (!updateSettings) {
+      logger.info('更新设置读取失败，跳过本次定时检查')
+      return
+    }
+    if (updateSettings.IfAutoUpdate !== true) {
+      logger.info('自动检查更新已关闭，跳过定时检查')
+      return
+    }
+    if (isUpdatePaused(updateSettings.PauseUntil)) {
+      // startPolling 仍会起定时器，到期后下个 tick 自动恢复
+      logger.info('更新已暂停，跳过定时检查')
+      return
+    }
+
+    isPolling.value = true
+
+    try {
+      const response = await requestUpdateCheck(false)
+
+      if (response.code === 200) {
+        if (response.if_need_update) {
+          // 检查是否已经有更新弹窗在显示，避免重复弹出
+          if (updateVisible.value) {
+            return
+          }
+
+          // 检查是否为同一版本，避免同一版本重复弹出
+          if (lastShownVersion === response.latest_version) {
+            return
+          }
+
+          // 播放有新版本音频
+          const { playSound } = useAudioPlayer()
+          await playSound('new_version_available')
+
+          showUpdateModal(response.update_info, response.latest_version)
+        }
+      }
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error)
+      logger.error(`更新检查失败: ${errorMsg}`)
+    } finally {
+      isPolling.value = false
+    }
+  }
+
+  // 手动检查更新（用于设置页面按钮）
+  const checkUpdate = async (silent = false, forceCheck = false) => {
+    const { playSound } = useAudioPlayer()
+    try {
+      const response = await requestUpdateCheck(forceCheck)
+
+      if (response.code === 200) {
+        if (response.if_need_update) {
+          // 播放有新版本音频
+          await playSound('new_version_available')
+          showUpdateModal(response.update_info, response.latest_version)
+        } else {
+          // 播放无新版本音频
+          if (!silent) {
+            await playSound('no_new_version')
+            message.success(t('misc.noUpdates'))
+          }
+        }
+      } else {
+        if (!silent) {
+          message.error(response.message || '获取更新失败')
+        }
+      }
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error)
+      logger.error(`手动更新检查失败: ${errorMsg}`)
+      if (!silent) {
+        message.error(t('misc.couldNotCheckUpdates'))
+      }
+    }
+  }
+
+  // 确认回调
+  const onUpdateConfirmed = () => {
+    updateVisible.value = false
+  }
+
+  // 启动定时检查器（应用级定时器，幂等；停止只在 disposeAppLifecycle 里做）
+  const startPolling = async () => {
+    // 如果已经在检查中，则不重复启动
+    if (updateCheckTimer) {
+      logger.info('定时任务已存在，跳过启动')
+      return
+    }
+    if (startPollingRequest) return startPollingRequest
+
+    startPollingRequest = (async () => {
+      // 一次读完开关与暂停状态；读取失败时状态未知，按失败关闭不起定时器
+      const updateSettings = await fetchUpdateSettings()
+      if (!updateSettings) {
+        logger.info('更新设置读取失败，不启动定时任务')
+        return
+      }
+      if (updateSettings.IfAutoUpdate !== true) {
+        logger.info('自动检查更新已关闭，不启动定时任务')
+        return
+      }
+      if (updateCheckTimer) return
+
+      // 暂停更新期间定时器照常待命（每次 tick 由 pollOnce 门控跳过），到期后自动恢复
+      if (isUpdatePaused(updateSettings.PauseUntil)) {
+        logger.info('更新已暂停，定时版本检查任务待命（暂停期内不检查，到期后自动恢复）')
+      } else {
+        logger.info('启动定时版本检查任务')
+      }
+
+      // 延迟3秒后再执行首次检查，确保后端已经完全启动
+      initialUpdateCheckTimer = setTimeout(async () => {
+        initialUpdateCheckTimer = null
+        await pollOnce()
+      }, 3000)
+
+      // 每 4 小时检查一次更新
+      updateCheckTimer = setInterval(pollOnce, POLL_MS)
+    })().finally(() => {
+      startPollingRequest = null
+    })
+    return startPollingRequest
+  }
+
+  // 停止定时检查器
+  const stopPolling = () => {
+    if (initialUpdateCheckTimer) {
+      clearTimeout(initialUpdateCheckTimer)
+      initialUpdateCheckTimer = null
+    }
+    if (updateCheckTimer) {
+      clearInterval(updateCheckTimer)
+      updateCheckTimer = null
+      logger.info('停止定时版本检查任务')
+    }
+  }
+
+  // 重新启动定时检查器（当设置变更时调用）
+  const restartPolling = async () => {
+    logger.info('重新启动定时检查任务')
+    stopPolling() // 先停止现有任务
+    await startPolling() // 再根据设置重新启动
+  }
+
+  return {
+    updateVisible,
+    updateData,
+    latestVersion,
+    showUpdateModal,
+    checkUpdate,
+    onUpdateConfirmed,
+    startPolling,
+    stopPolling,
+    restartPolling,
+  }
+}
+
+// 创建一个仅用于显示弹窗的轻量版本（给App.vue使用）
+export function useUpdateModal() {
+  return {
+    updateVisible,
+    updateData,
+    latestVersion,
+    showUpdateModal,
+    onUpdateConfirmed: () => {
+      updateVisible.value = false
+    },
+  }
+}

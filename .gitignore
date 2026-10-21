@@ -1,0 +1,90 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+logs/
+*.egg-info
+
+# Virtual environments
+.venv
+/.venv-python314-backup/
+/.python/
+/.tmp-install/
+/AUTO-MAS.exe
+/res/ChildSessionHost/AutoMas.ChildSessionHost.exe
+list/
+
+# 本地开发环境标记（模板见 .env.example）
+.env
+
+# IDE and editors
+.idea/
+.vscode
+*.swp
+*.swo
+.DS_Store
+
+# User files
+/config/
+/data/
+/debug/
+/history/
+/runtime/
+/script/
+/environment/
+
+# Frontend dependencies & caches
+/frontend/node_modules/
+/frontend/.yarn/cache/
+/frontend/.yarn/unplugged/
+/frontend/.pnp.*
+
+# Frontend build artifacts
+/frontend/dist/
+/frontend/dist-electron/
+/frontend/.vite/
+
+# Frontend runtime/user data (generated when running electron from frontend)
+/frontend/config/
+/frontend/data/
+/frontend/debug/
+/frontend/history/
+/frontend/repo/
+/frontend/res
+/frontend/app
+# Local AI/agent metadata
+/.claude/
+/.trae/
+
+# Local checkouts of split repositories
+/AUTO-MAS-docs/
+/skills/
+.ace-tool/
+
+# Plugin workspace (external plugin sources stay ignored)
+/plugins/*
+!/plugins/auto_mas_core/
+!/plugins/auto_mas_core/**
+!/plugins/okww_adapter/
+!/plugins/okww_adapter/**
+!/plugins/ok_script_adapter/
+!/plugins/ok_script_adapter/**
+/plugins/**/__pycache__/
+/plugins/**/*.py[oc]
+/plugins/**/*.egg-info/
+/app/core/plugins/_generated/
+
+# Test artifacts
+/test-results/
+
+# Local dev scripts & logs (本地测试用例，与代码逻辑无关)
+/dev.bat
+/.dev-logs/
+/.dev/
+
+res/docs/ok-series-common-script-report.md
+
+# 强制加入的测试源产生的字节码不纳入版本库
+tests/**/__pycache__/

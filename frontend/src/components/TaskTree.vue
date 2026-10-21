@@ -1,0 +1,413 @@
+<template>
+  <div class="task-tree-container">
+    <div v-if="taskData.length === 0" class="empty-state">
+      <div class="empty-content">
+        <div class="empty-image-container">
+          <img src="@/assets/NoData.png" :alt="t('comp.noData2')" class="empty-image" />
+        </div>
+      </div>
+    </div>
+    <div v-else class="task-tree">
+      <div v-for="script in taskData" :key="`script-${script.script_id}`" class="script-card">
+        <!-- 脚本级别 -->
+        <div class="script-header" @click="toggleScript(script.script_id)">
+          <div class="script-content">
+            <div class="script-info">
+              <CaretDownOutlined v-if="expandedScripts.has(script.script_id)" class="expand-icon" />
+              <CaretRightOutlined v-else class="expand-icon" />
+              <span class="script-name">{{ script.name }}</span>
+              <span v-if="script.user_list && script.user_list.length > 0" class="user-count">
+                ({{ script.user_list.length }}个用户)
+              </span>
+            </div>
+            <a-tag :color="getStatusColor(script.status)" size="small" class="status-tag">
+              {{ statusLabel(script.status) }}
+            </a-tag>
+          </div>
+        </div>
+
+        <!-- 用户列表 -->
+        <div v-show="expandedScripts.has(script.script_id)" class="user-list">
+          <div v-if="isWaitingWithoutUsers(script)" class="user-item last-item">
+            <div class="user-content">
+              <span class="user-name">{{ t('scheduler.overview.userNotLoaded') }}</span>
+              <a-tag :color="getStatusColor('等待')" size="small" class="status-tag">
+                {{ statusLabel('等待') }}
+              </a-tag>
+            </div>
+          </div>
+          <div v-else-if="!script.user_list || script.user_list.length === 0" class="no-users">
+            <div class="no-users-content">
+              <span class="no-users-text">{{ t('comp.noUsersYet') }}</span>
+            </div>
+          </div>
+          <div
+            v-for="(user, index) in script.user_list"
+            :key="`user-${script.script_id}-${user.user_id}`"
+            class="user-item"
+            :class="{ 'last-item': index === script.user_list.length - 1 }"
+          >
+            <div class="user-content">
+              <span class="user-name">{{ user.name }}</span>
+              <a-tag :color="getStatusColor(user.status)" size="small" class="status-tag">
+                {{ statusLabel(user.status) }}
+              </a-tag>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { useI18n } from 'vue-i18n'
+import { CaretDownOutlined, CaretRightOutlined } from '@ant-design/icons-vue'
+import { ref, watch } from 'vue'
+
+import { useStatusLabel } from '@/i18n/status'
+import { isWaitingWithoutUsers } from './taskTreePresentation'
+
+const { t } = useI18n()
+
+const logger = window.electronAPI.getLogger('任务树组件')
+
+const statusLabel = useStatusLabel()
+
+interface User {
+  user_id: string
+  status: string
+  name: string
+}
+
+interface Script {
+  script_id: string
+  status: string
+  name: string
+  user_list: User[]
+}
+
+interface Props {
+  taskData: Script[]
+}
+
+const props = defineProps<Props>()
+
+// 展开的脚本集合
+const expandedScripts = ref<Set<string>>(new Set())
+
+// 切换脚本展开状态
+const toggleScript = (scriptId: string) => {
+  if (expandedScripts.value.has(scriptId)) {
+    expandedScripts.value.delete(scriptId)
+  } else {
+    expandedScripts.value.add(scriptId)
+  }
+}
+
+// 获取状态颜色 - 使用更全面的映射和后备逻辑
+const getStatusColor = (status: string) => {
+  // 精确匹配优先
+  const exactStatusColorMap: Record<string, string> = {
+    等待: 'orange',
+    排队: 'orange',
+    挂起: 'orange',
+    运行中: 'blue',
+    运行: 'blue',
+    进行中: 'blue',
+    执行中: 'blue',
+    已完成: 'green',
+    完成: 'green',
+    成功: 'green',
+    失败: 'red',
+    异常: 'red',
+    错误: 'red',
+    暂停: 'gray',
+    取消: 'default',
+    停止: 'default',
+  }
+
+  // 先尝试精确匹配
+  if (exactStatusColorMap[status]) {
+    return exactStatusColorMap[status]
+  }
+
+  // 使用正则表达式进行模糊匹配（作为后备）
+  if (/成功|完成|已完成/.test(status)) return 'green'
+  if (/失败|错误|异常/.test(status)) return 'red'
+  if (/等待|排队|挂起/.test(status)) return 'orange'
+  if (/进行|执行|运行/.test(status)) return 'blue'
+  if (/暂停|停止/.test(status)) return 'gray'
+
+  return 'default'
+}
+
+// 移除未使用的初始化函数
+
+// 监听数据变化，自动展开新的脚本
+const updateExpandedScripts = () => {
+  const previousExpandedCount = expandedScripts.value.size
+  let addedCount = 0
+  props.taskData.forEach(script => {
+    if (!expandedScripts.value.has(script.script_id)) {
+      expandedScripts.value.add(script.script_id)
+      addedCount += 1
+    }
+  })
+  logger.debug(
+    `更新展开脚本: 脚本数=${props.taskData.length}, 新增=${addedCount}, 展开数=${expandedScripts.value.size} (原展开数=${previousExpandedCount})`
+  )
+}
+
+// 展开状态只跟脚本集合有关，只监听脚本 id 列表；用户状态每秒都在变，不必整棵 deep 监听
+watch(
+  () => props.taskData.map(script => script.script_id),
+  (newScriptIds, oldScriptIds) => {
+    if (newScriptIds.length === 0) return
+    const oldIdSet = new Set(oldScriptIds ?? [])
+    const hasNewScripts = newScriptIds.some(id => !oldIdSet.has(id))
+    if (hasNewScripts || oldScriptIds?.length !== newScriptIds.length) {
+      logger.debug(`脚本列表变化: ${oldScriptIds?.length ?? 0} -> ${newScriptIds.length}`)
+      updateExpandedScripts()
+    }
+  },
+  { immediate: true }
+)
+
+// 移除定时器和未使用变量
+
+// 暴露方法供父组件调用
+defineExpose({
+  expandAll: () => {
+    props.taskData.forEach(script => {
+      expandedScripts.value.add(script.script_id)
+    })
+  },
+  collapseAll: () => {
+    expandedScripts.value.clear()
+  },
+  updateExpandedScripts,
+})
+</script>
+
+<style scoped>
+.task-tree-container {
+  width: 100%;
+  height: 100%;
+}
+
+.task-tree {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.script-card {
+  background: var(--ant-color-bg-container);
+  border-radius: 8px;
+  border: 1px solid var(--ant-color-border-secondary);
+  overflow: hidden;
+  /* 移除transition避免数据更新时的闪烁 */
+  /* transition: all 0.3s ease; */
+}
+
+.script-card:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  border-color: var(--ant-color-primary-border);
+}
+
+.script-header {
+  cursor: pointer;
+  padding: 12px 16px;
+  background: linear-gradient(
+    135deg,
+    var(--ant-color-fill-quaternary) 0%,
+    var(--ant-color-fill-tertiary) 100%
+  );
+  /* 保留hover过渡，但减少时间 */
+  transition: background 0.1s ease;
+}
+
+.script-header:hover {
+  background: linear-gradient(
+    135deg,
+    var(--ant-color-fill-tertiary) 0%,
+    var(--ant-color-fill-secondary) 100%
+  );
+}
+
+.script-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.script-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+}
+
+.expand-icon {
+  font-size: 14px;
+  color: var(--ant-color-primary);
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.expand-icon:hover {
+  color: var(--ant-color-primary-hover);
+}
+
+.script-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ant-color-text);
+  word-break: break-word;
+}
+
+.user-count {
+  font-size: 12px;
+  color: var(--ant-color-text-tertiary);
+  font-weight: normal;
+}
+
+.user-list {
+  background: var(--ant-color-bg-layout);
+}
+
+.no-users {
+  padding: 16px;
+}
+
+.no-users-content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  background: var(--ant-color-fill-quaternary);
+  border-radius: 6px;
+  border: 1px dashed var(--ant-color-border);
+}
+
+.no-users-text {
+  font-size: 13px;
+  color: var(--ant-color-text-tertiary);
+  font-style: italic;
+}
+
+.user-item {
+  border-bottom: 1px solid var(--ant-color-border-secondary);
+}
+
+.user-item.last-item {
+  border-bottom: none;
+}
+
+.user-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  /* 保留hover过渡，但减少时间 */
+  transition: background-color 0.1s ease;
+}
+
+.user-content:hover {
+  background: var(--ant-color-fill-quaternary);
+}
+
+.user-name {
+  flex: 1;
+  font-size: 14px;
+  color: var(--ant-color-text);
+  word-break: break-word;
+  font-weight: 500;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .task-tree {
+    gap: 8px;
+  }
+
+  .script-header {
+    padding: 10px 12px;
+  }
+
+  .script-name {
+    font-size: 14px;
+  }
+
+  .user-count {
+    font-size: 11px;
+  }
+
+  .user-content {
+    padding: 8px 12px;
+  }
+
+  .user-name {
+    font-size: 13px;
+  }
+
+  .no-users {
+    padding: 12px;
+  }
+}
+
+/* 动画效果已移除 - 避免WebSocket刷新时的闪烁 */
+/* .user-list {
+  animation: slideDown 0.3s ease-out;
+} */
+
+/* 移除script-card的额外样式，避免渲染问题 */
+
+/* 优化状态标签的渲染 - 移除可能导致问题的属性 */
+.status-tag {
+  /* 防止标签内容变化时的布局抖动 */
+  min-width: 40px;
+  text-align: center;
+}
+
+/* 空状态样式 */
+.empty-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  min-height: 200px;
+  text-align: center;
+}
+
+.empty-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.empty-image-container {
+  margin-bottom: 16px;
+}
+
+.empty-image {
+  width: 80px;
+  height: auto;
+  opacity: 0.6;
+}
+
+.empty-title {
+  font-size: 16px;
+  font-weight: 500;
+  margin: 0 0 4px 0;
+  color: var(--ant-color-text);
+}
+
+.empty-description {
+  font-size: 14px;
+  color: var(--ant-color-text-secondary);
+  margin: 0;
+}
+</style>
