@@ -62,16 +62,17 @@ _logger.add(
     compression="zip",
 )
 
-_logger.add(
-    sink=sys.stderr,
-    level="DEBUG",
-    format="<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | <level>{level: <8}</level> | <cyan>{extra[module]}</cyan> | <level>{message}</level>",
-    filter=_sanitize_record,
-    enqueue=True,
-    backtrace=True,
-    diagnose=False,
-    colorize=True,
-)
+if sys.stderr is not None:
+    _logger.add(
+        sink=sys.stderr,
+        level="DEBUG",
+        format="<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | <level>{level: <8}</level> | <cyan>{extra[module]}</cyan> | <level>{message}</level>",
+        filter=_sanitize_record,
+        enqueue=True,
+        backtrace=True,
+        diagnose=False,
+        colorize=True,
+    )
 
 
 _logger = _logger.patch(lambda record: record["extra"].setdefault("module", "未知模块"))

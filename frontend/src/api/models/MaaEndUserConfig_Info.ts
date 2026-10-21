@@ -4,64 +4,64 @@
 /* eslint-disable */
 export type MaaEndUserConfig_Info = {
     /**
-     * base 来源（shared=共享/independent=独立/native=原生）
+     * 用户名
      */
-    Base?: ('shared' | 'independent' | 'native' | null);
+    Name?: (string | null);
+    /**
+     * 用户状态
+     */
+    Status?: (boolean | null);
     /**
      * 用户ID
      */
     Id?: (string | null);
     /**
-     * 是否启用快速配置
-     */
-    IfQuickConfig?: (boolean | null);
-    /**
-     * 任务后执行脚本
-     */
-    IfScriptAfterTask?: (boolean | null);
-    /**
-     * 任务前执行脚本
-     */
-    IfScriptBeforeTask?: (boolean | null);
-    /**
-     * 用户名称
-     */
-    Name?: (string | null);
-    /**
-     * 备注
-     */
-    Notes?: (string | null);
-    /**
      * 密码
      */
     Password?: (string | null);
     /**
-     * 剩余天数
+     * base 来源（shared=共享、independent=独立、native=脚本原生配置）
      */
-    RemainedDay?: (number | null);
+    Base?: ('shared' | 'independent' | 'native' | null);
     /**
-     * 资源名称
+     * 是否启用快速配置
      */
-    Resource?: (string | null);
+    IfQuickConfig?: (boolean | null);
     /**
      * 理智任务配置模式
      */
     SanityMode?: (string | null);
     /**
-     * 任务后脚本路径
+     * 资源名称
      */
-    ScriptAfterTask?: (string | null);
+    Resource?: (string | null);
+    /**
+     * 剩余天数
+     */
+    RemainedDay?: (number | null);
+    /**
+     * 是否在任务前执行脚本
+     */
+    IfScriptBeforeTask?: (boolean | null);
     /**
      * 任务前脚本路径
      */
     ScriptBeforeTask?: (string | null);
     /**
-     * 是否启用
+     * 是否在任务后执行脚本
      */
-    Status?: (boolean | null);
+    IfScriptAfterTask?: (boolean | null);
+    /**
+     * 任务后脚本路径
+     */
+    ScriptAfterTask?: (string | null);
+    /**
+     * 备注
+     */
+    Notes?: (string | null);
     /**
      * 用户标签信息
      */
-    readonly Tag?: (string | null);
+    Tag?: (string | null);
 };
 

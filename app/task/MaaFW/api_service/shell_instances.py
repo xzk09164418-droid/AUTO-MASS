@@ -79,7 +79,7 @@ def _candidate_roots(script_id: str, script_config: Any) -> list[Path]:
     """
 
     roots: list[Path] = []
-    source = str(script_config.Info.Path or "").strip()
+    source = str(script_config.get("Info", "Path") or "").strip()
     if source:
         roots.append(Path(source))
     if view_imported_from(script_id, source):
@@ -118,7 +118,10 @@ def _scan_first_root(roots: list[Path]) -> tuple[Path | None, list[ShellInstance
 
 
 def _existing_user_names(script_config: Any) -> list[str]:
-    return [str(user.Info.Name or "") for _, user in script_config.UserData.items()]
+    return [
+        str(user.get("Info", "Name") or "")
+        for _, user in script_config.UserData.items()
+    ]
 
 
 def _interface_name(items: list[Any], raw: str) -> str:
@@ -167,10 +170,10 @@ async def _load_import_context(
         translate=translate,
         instances=instances,
         script_controller=_interface_name(
-            interface.controller, str(script_config.Info.Controller or "")
+            interface.controller, str(script_config.get("Info", "Controller") or "")
         ),
         script_resource=_interface_name(
-            interface.resource, str(script_config.Info.Resource or "")
+            interface.resource, str(script_config.get("Info", "Resource") or "")
         ),
     )
 
@@ -417,7 +420,7 @@ async def apply_shell_instance_to_user(
         instanceId=instance.id,
         instanceName=instance.name,
         userId=user_id,
-        name=str(user.Info.Name or ""),
+        name=str(user.get("Info", "Name") or ""),
     )
     plan = await _plan_import(instance, context, result)
     if plan is None:
@@ -467,7 +470,7 @@ def _user_global_options(user: Any, interface: MaaFWInterface) -> dict[str, Any]
     """
 
     try:
-        raw = user.Task.TaskSnapshot
+        raw = user.get("Task", "TaskSnapshot")
         snapshot = json.loads(raw) if isinstance(raw, str) else raw
     except Exception:  # noqa: BLE001 - 坏快照就当没有
         return {}

@@ -4,28 +4,28 @@
 /* eslint-disable */
 export type OkwwUserConfig_Task = {
     /**
-     * 每日任务后运行的附加任务
+     * 每日任务体力用途
      */
-    AdditionalTasks?: (Array<'Check Weekly Garden' | 'Auto Farm all Nightmare Nest' | 'Merge Echo If discarded > 1000' | 'Teleport and Farm 4C Echo'> | null);
+    WhichToFarm?: ('Tacet Suppression' | 'Forgery Challenge' | 'Simulation Challenge' | null);
     /**
-     * 使用梦魇巢穴完成日常声骸
+     * F2 列表中的无音区序号
      */
-    FarmNightmareNestForDailyEcho?: (boolean | null);
+    WhichTacetSuppressionToFarm?: (number | null);
+    /**
+     * F2 列表中的凝素领域序号
+     */
+    WhichForgeryChallengeToFarm?: (number | null);
     /**
      * 模拟领域材料
      */
     MaterialSelection?: ('Resonator EXP' | 'Weapon EXP' | 'Shell Credit' | null);
     /**
-     * 凝素领域序号
+     * 需要时使用梦魇巢穴完成日常声骸
      */
-    WhichForgeryChallengeToFarm?: (number | null);
+    FarmNightmareNestForDailyEcho?: (boolean | null);
     /**
-     * 无音区序号
+     * 每日任务后运行的附加任务
      */
-    WhichTacetSuppressionToFarm?: (number | null);
-    /**
-     * MAS 仅接管 DailyTask 及 DailyTask 高频设置；账号切换由 MAS 侧 account_switch 实现，不再暴露上游 MultiAccountDailyTask。 每日任务体力用途
-     */
-    WhichToFarm?: ('Tacet Suppression' | 'Forgery Challenge' | 'Simulation Challenge' | null);
+    AdditionalTasks?: (Array<'Check Weekly Garden' | 'Auto Farm all Nightmare Nest' | 'Merge Echo If discarded > 1000' | 'Teleport and Farm 4C Echo'> | null);
 };
 

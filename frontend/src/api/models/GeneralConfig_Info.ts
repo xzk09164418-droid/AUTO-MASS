@@ -8,7 +8,7 @@ export type GeneralConfig_Info = {
      */
     Name?: (string | null);
     /**
-     * 根目录路径
+     * 脚本根目录
      */
     RootPath?: (string | null);
 };

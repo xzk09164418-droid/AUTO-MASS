@@ -124,7 +124,7 @@ const { t } = useI18n()
 const logger = window.electronAPI.getLogger('日志时间戳选择器')
 
 interface Props {
-  logFilePath?: string | null
+  logFilePath?: string
   handleChange: (_section: string, _key: string, _value: any) => void
   rules: Record<string, any>
 }
@@ -132,7 +132,7 @@ interface Props {
 const formData = defineModel<{
   logTimeStart?: number
   logTimeEnd?: number
-  logFilePath?: string | null
+  logFilePath?: string
 }>('formData', { required: true })
 const props = defineProps<Props>()
 

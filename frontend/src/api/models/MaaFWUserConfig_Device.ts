@@ -4,11 +4,11 @@
 /* eslint-disable */
 export type MaaFWUserConfig_Device = {
     /**
-     * 当前用户覆盖 ADB 地址，留空时使用脚本级模拟器配置
+     * 用户覆盖 ADB 地址
      */
     AdbAddress?: (string | null);
     /**
-     * Win32 / Gamepad 窗口句柄，0 表示未指定
+     * 窗口句柄
      */
     HWnd?: (number | null);
     /**

@@ -21,99 +21,22 @@
 #   Contact: DLmaster_361@163.com
 
 
-from typing import (
-    Literal,
-)
-
+from typing import Any
 from fastapi import APIRouter, Body
-from pydantic import (
-    BaseModel,
-    Field,
-)
+from pydantic import Field
 
 from app.core import Config, TaskManager
-from app.models.schema import (
-    OutBase,
-    PowerCountdownSnapshot,
-    TaskRuntimeSnapshot,
-    TaskStatusOut,
-)
+from app.core.hotkey_manager import HotkeyManager
+from app.models.schema import *
 from app.services import System
 from app.utils import get_logger
 
-
-class DispatchIn(BaseModel):
-    taskId: str = Field(
-        ...,
-        description="目标任务ID, 设置类任务可选对应脚本ID或用户ID, 代理类任务可选对应队列ID或脚本ID",
-    )
-
-
-class TaskCreateIn(DispatchIn):
-    mode: Literal["AutoProxy", "ScriptConfig", "Update", "CycleRun"] = Field(
-        ...,
-        description="任务模式; CycleRun 为循环运行, 仅接受循环队列, 其脚本按 AutoProxy 执行",
-    )
-    resumeFromScriptId: str | None = Field(
-        default=None,
-        description="可选：仅对队列任务生效；从指定脚本ID开始执行（之前的脚本将被标记为跳过）",
-    )
-    userId: str | None = Field(
-        default=None,
-        description="可选：仅对脚本的自动代理任务生效；只运行该脚本下的这一个用户",
-    )
-    userIds: list[str] | None = Field(
-        default=None,
-        description="可选：仅对脚本的自动代理任务生效；只运行指定的多个用户",
-    )
-    queueUserIds: dict[str, list[str]] | None = Field(
-        default=None,
-        description="可选：仅对队列任务生效；按脚本ID指定本次要运行的用户；未列出的脚本不限, 空列表表示该脚本本次整项跳过",
-    )
-    viewOnly: bool = Field(
-        default=False,
-        description="可选：仅 ScriptConfig 生效；只读查看会话（不注入基线、不回读字段），用于预览历史备份",
-    )
-    instanceIdx: int | None = Field(
-        default=None,
-        description="可选：仅 ScriptConfig 生效；直控指定会话窗口打开的原生实例（临时切换活跃，会话结束还原）",
-    )
-
-
-class TaskCreateOut(OutBase):
-    taskId: str = Field(..., description="新创建的任务ID")
-
-
-class PowerIn(BaseModel):
-    signal: Literal[
-        "NoAction",
-        "Shutdown",
-        "ShutdownForce",
-        "Reboot",
-        "Hibernate",
-        "Sleep",
-        "KillSelf",
-        "RestartSelf",
-        "Logoff",
-    ] = Field(..., description="电源操作信号")
-
-
-class PowerOut(OutBase):
-    signal: Literal[
-        "NoAction",
-        "Shutdown",
-        "ShutdownForce",
-        "Reboot",
-        "Hibernate",
-        "Sleep",
-        "KillSelf",
-        "RestartSelf",
-        "Logoff",
-    ] = Field(..., description="电源操作信号")
-
-
 router = APIRouter(prefix="/api/dispatch", tags=["任务调度"])
 logger = get_logger("任务调度 API")
+
+
+class NavigationActionOut(OutBase):
+    data: dict[str, Any] = Field(default_factory=dict, description="启停或上下任务切换结果")
 
 
 @router.get(
@@ -211,6 +134,77 @@ async def stop_task(task: DispatchIn = Body(...)) -> OutBase:
 
 
 @router.post(
+    "/navigation/toggle",
+    tags=["Action"],
+    summary="控制程序启停（与全局启停热键同源）",
+    response_model=NavigationActionOut,
+    status_code=200,
+)
+async def toggle_start_stop() -> NavigationActionOut:
+    try:
+        data = await TaskManager.toggle_start_stop()
+        return NavigationActionOut(data=data)
+    except Exception as e:
+        logger.opt(exception=True).warning(f"toggle_start_stop失败: {e}")
+        return NavigationActionOut(
+            code=500, status="error", message=f"{type(e).__name__}: {e}"
+        )
+
+
+@router.post(
+    "/navigation/previous",
+    tags=["Action"],
+    summary="切换到上一个任务（与全局上一任务热键同源）",
+    response_model=NavigationActionOut,
+    status_code=200,
+)
+async def navigate_previous_task() -> NavigationActionOut:
+    try:
+        data = await TaskManager.navigate_task(-1)
+        return NavigationActionOut(data=data)
+    except Exception as e:
+        logger.opt(exception=True).warning(f"navigate_previous_task失败: {e}")
+        return NavigationActionOut(
+            code=500, status="error", message=f"{type(e).__name__}: {e}"
+        )
+
+
+@router.post(
+    "/navigation/next",
+    tags=["Action"],
+    summary="切换到下一个任务（与全局下一任务热键同源）",
+    response_model=NavigationActionOut,
+    status_code=200,
+)
+async def navigate_next_task() -> NavigationActionOut:
+    try:
+        data = await TaskManager.navigate_task(1)
+        return NavigationActionOut(data=data)
+    except Exception as e:
+        logger.opt(exception=True).warning(f"navigate_next_task失败: {e}")
+        return NavigationActionOut(
+            code=500, status="error", message=f"{type(e).__name__}: {e}"
+        )
+
+
+@router.post(
+    "/hotkey/reload",
+    tags=["Action"],
+    summary="重新加载全局热键绑定",
+    response_model=NavigationActionOut,
+    status_code=200,
+)
+async def reload_hotkeys() -> NavigationActionOut:
+    try:
+        await HotkeyManager.reload()
+        return NavigationActionOut(data={"bindings": HotkeyManager.registered_bindings})
+    except Exception as e:
+        return NavigationActionOut(
+            code=500, status="error", message=f"{type(e).__name__}: {e}"
+        )
+
+
+@router.post(
     "/get/power",
     tags=["Get"],
     summary="获取电源标志",
@@ -220,7 +214,6 @@ async def stop_task(task: DispatchIn = Body(...)) -> OutBase:
 async def get_power() -> PowerOut:
 
     try:
-        # 电源任务启动后标志已清空, 等待期间要回报任务实际待执行的操作
         signal = System.current_power_operation or Config.power_sign
     except Exception as e:
         logger.opt(exception=True).warning(f"get_power失败: {type(e).__name__}: {e}")
@@ -244,10 +237,7 @@ async def set_power(task: PowerIn = Body(...)) -> OutBase:
 
     try:
         Config.power_sign = task.signal
-        # 手动选择的电源操作不带延时, 同时清掉队列可能残留的延时
         Config.power_delay = 0
-        # 已在等待的电源任务持有旧操作, 延时期间又没有倒计时窗口提示,
-        # 因此手动改选一律撤销它, 新选择留给下一次任务结束时生效
         await System.cancel_pending_power_task()
     except Exception as e:
         logger.opt(exception=True).warning(f"set_power失败: {type(e).__name__}: {e}")

@@ -4,60 +4,60 @@
 /* eslint-disable */
 export type MaaUserConfig_Info = {
     /**
-     * base 来源（shared=共享/independent=独立/native=原生）
-     */
-    Base?: ('shared' | 'independent' | 'native' | null);
-    /**
-     * 用户 ID
-     */
-    Id?: (string | null);
-    /**
-     * 是否启用快速配置（与配置来源独立，按用户保存）
-     */
-    IfQuickConfig?: (boolean | null);
-    /**
-     * 任务后执行脚本
-     */
-    IfScriptAfterTask?: (boolean | null);
-    /**
-     * 任务前执行脚本
-     */
-    IfScriptBeforeTask?: (boolean | null);
-    /**
-     * 用户名称
+     * 用户名
      */
     Name?: (string | null);
     /**
-     * 备注
+     * 用户ID
      */
-    Notes?: (string | null);
+    Id?: (string | null);
     /**
-     * 密码
+     * base 来源（shared=共享、independent=独立、native=使用脚本原生配置）
      */
-    Password?: (string | null);
+    Base?: ('shared' | 'independent' | 'native' | null);
+    /**
+     * 是否启用快速配置（与配置来源独立）
+     */
+    IfQuickConfig?: (boolean | null);
+    /**
+     * 服务器
+     */
+    Server?: ('Official' | 'Bilibili' | 'YoStarEN' | 'YoStarJP' | 'YoStarKR' | 'txwy' | null);
+    /**
+     * 用户状态
+     */
+    Status?: (boolean | null);
     /**
      * 剩余天数
      */
     RemainedDay?: (number | null);
     /**
-     * 任务后脚本路径
+     * 密码
      */
-    ScriptAfterTask?: (string | null);
+    Password?: (string | null);
+    /**
+     * 是否在任务前执行脚本
+     */
+    IfScriptBeforeTask?: (boolean | null);
     /**
      * 任务前脚本路径
      */
     ScriptBeforeTask?: (string | null);
     /**
-     * 游戏服务器
+     * 是否在任务后执行脚本
      */
-    Server?: ('Official' | 'Bilibili' | 'YoStarEN' | 'YoStarJP' | 'YoStarKR' | 'txwy' | null);
+    IfScriptAfterTask?: (boolean | null);
     /**
-     * 是否启用
+     * 任务后脚本路径
      */
-    Status?: (boolean | null);
+    ScriptAfterTask?: (string | null);
     /**
-     * 用户标签信息（虚拟字段，供前端显示）
+     * 备注
      */
-    readonly Tag?: (string | null);
+    Notes?: (string | null);
+    /**
+     * 状态标签列表
+     */
+    Tag?: (string | null);
 };
 

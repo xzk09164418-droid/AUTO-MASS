@@ -48,7 +48,10 @@ from .transport import Sender
 def _webhook_name(uid: str, webhook: Any) -> str:
     """返回便于定位失败配置的 Webhook 名称。"""
 
-    return str(webhook.Info.Name or uid)
+    try:
+        return str(webhook.get("Info", "Name") or uid)
+    except (AttributeError, KeyError):
+        return uid
 
 
 def _webhook_capabilities(
@@ -89,22 +92,22 @@ def _webhook_capabilities(
 def _webhook_targets(config: ChannelConfig, *, scope: str) -> tuple[ChannelTarget, ...]:
     prefix = _prefix(scope)
     targets = []
-    # 使用配置集合 items() 的顺序，不按 uid 排序。
+    # 顺序按 MultipleConfig.order（items() 的产出顺序），不按 uid。
     for uid, webhook in config.Notify_CustomWebhooks.items():
         snapshot = WebhookTargetSnapshot(
             name=_webhook_name(uid, webhook),
-            enabled=bool(webhook.Info.Enabled),
-            url=str(webhook.Data.Url or ""),
-            template=str(webhook.Data.Template or ""),
-            headers=str(webhook.Data.Headers or "{ }"),
-            method=webhook.Data.Method,
+            enabled=bool(webhook.get("Info", "Enabled")),
+            url=str(webhook.get("Data", "Url") or ""),
+            template=str(webhook.get("Data", "Template") or ""),
+            headers=str(webhook.get("Data", "Headers") or "{ }"),
+            method=webhook.get("Data", "Method"),
         )
         if not snapshot.enabled:
             continue
         targets.append(
             ChannelTarget(
                 id=f"{prefix} Webhook {uid}",
-                label=f"{prefix} Webhook {snapshot.name}",
+                label=f"{prefix} Webhook {_webhook_name(uid, snapshot)}",
                 value=snapshot,
                 capabilities=_webhook_capabilities(snapshot),
                 compact_summary_policy="preferred",

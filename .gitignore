@@ -9,6 +9,11 @@ logs/
 
 # Virtual environments
 .venv
+/.venv-python314-backup/
+/.python/
+/.tmp-install/
+/AUTO-MAS.exe
+/res/ChildSessionHost/AutoMas.ChildSessionHost.exe
 list/
 
 # 本地开发环境标记（模板见 .env.example）
@@ -31,7 +36,6 @@ list/
 /environment/
 
 # Frontend dependencies & caches
-/node_modules/
 /frontend/node_modules/
 /frontend/.yarn/cache/
 /frontend/.yarn/unplugged/

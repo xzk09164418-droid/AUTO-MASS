@@ -44,7 +44,7 @@ export type ScriptType =
 export interface MAAScriptConfig {
   Info: {
     Name: string
-    Path: string | null
+    Path: string
   }
   Run: {
     HardTimeLimit: number
@@ -66,6 +66,11 @@ export interface MAAScriptConfig {
     TakeoverEnabled: boolean
     MirrorChyanCDK: string
   }
+  SubConfigsInfo: {
+    UserData: {
+      instances: unknown[]
+    }
+  }
 }
 
 // 通用脚本配置
@@ -74,7 +79,7 @@ export interface GeneralScriptConfig {
     Arguments: string
     Enabled: boolean
     IfForceClose: boolean
-    Path: string | null
+    Path: string
     Type: string
     WaitTime: number
     EmulatorId: string
@@ -84,7 +89,7 @@ export interface GeneralScriptConfig {
   }
   Info: {
     Name: string
-    RootPath: string | null
+    RootPath: string
   }
   Run: {
     HardTimeLimit: number
@@ -94,14 +99,14 @@ export interface GeneralScriptConfig {
   }
   Script: {
     Arguments: string
-    ConfigPath: string | null
+    ConfigPath: string
     ConfigPathMode: string
     ErrorLog: string
     IfTrackProcess: boolean
     TrackProcessName: string
     TrackProcessExe: string
     TrackProcessCmdline: string
-    LogPath: string | null
+    LogPath: string
     LogPathFormat: string
     LogTimeEnd: number
     LogTimeStart: number
@@ -110,11 +115,16 @@ export interface GeneralScriptConfig {
     LogHookRules: string
     PushLogEnabled: boolean
     PushLogPatterns: string
-    ScriptPath: string | null
+    ScriptPath: string
     SuccessLog: string
     SuccessLogMode: string
     ErrorLogMode: string
     UpdateConfigMode: string
+  }
+  SubConfigsInfo: {
+    UserData: {
+      instances: unknown[]
+    }
   }
 }
 
@@ -122,7 +132,7 @@ export interface GeneralScriptConfig {
 export interface SRCScriptConfig {
   Info: {
     Name: string
-    Path: string | null
+    Path: string
   }
   Run: {
     HardTimeLimit: number
@@ -165,7 +175,7 @@ export type MaaEndTaskConfig = MaaEndTaskSwitchConfig & {
 export interface MaaEndScriptConfig {
   Info: {
     Name: string
-    Path: string | null
+    Path: string
   }
   Run: {
     HardTimeLimit: number
@@ -178,8 +188,8 @@ export interface MaaEndScriptConfig {
   Game: {
     ControllerType: string | null
     LaunchMode: 'Client' | 'Launcher' | 'MAS' | 'MaaEnd'
-    Path: string | null
-    LauncherPath: string | null
+    Path: string
+    LauncherPath: string
     Arguments: string
     WaitTime: number
     EmulatorId: string
@@ -221,7 +231,7 @@ export interface MaaFWScriptConfig {
   Info: {
     Name: string
     ProjectLabel?: string
-    Path: string | null
+    Path: string
     Controller: string
     Resource: string
   }
@@ -230,7 +240,7 @@ export interface MaaFWScriptConfig {
     Index: string
   }
   Device: {
-    AdbPath: string | null
+    AdbPath: string
     AdbAddress: string
     AdbScreencapMethods: number
     AdbInputMethods: number
@@ -245,7 +255,7 @@ export interface MaaFWScriptConfig {
   Game: {
     /** DirectExe：MAS 启动并在结束后关闭（默认）；AttachOnly：其他方式启停，MAS 只接管。 */
     LaunchMode: MaaFWLaunchMode
-    LaunchPath: string | null
+    LaunchPath: string
     /** 安卓游戏包名，留空则从项目的 pipeline 中自动识别。 */
     PackageName: string
     Arguments: string
@@ -287,7 +297,7 @@ export interface MaaFWScriptConfig {
     /** 导入时来源的 interface 版本，仅展示。 */
     SourceVersion: string
     /** 导入时间，仅展示。 */
-    ImportedAt: string | null
+    ImportedAt: string
     /** 投影报告 JSON 文本；结构见 MaaFWEmbeddedProjection。 */
     Report: string
     /**
@@ -340,8 +350,6 @@ export interface MaaFWTaskSnapshot {
   taskOrder: string[]
   taskChecked: Record<string, boolean>
   taskOptions: Record<string, Record<string, MaaFWTaskOptionValue>>
-  /** 新队列显式保留跳过实例；旧快照没有此键时仍隐藏未勾选实例 */
-  keepUnchecked?: true
   /**
    * 全局选项（interface 的 global_option 及其子选项）的值：每个用户一份、所有任务共用，
    * taskOptions 里不再有它们。没设过任何全局选项时可以没有这个键（按默认值）。
@@ -386,9 +394,9 @@ export interface MaaFWUserConfig {
     Status: boolean
     RemainedDay: number
     IfScriptBeforeTask: boolean
-    ScriptBeforeTask: string | null
+    ScriptBeforeTask: string
     IfScriptAfterTask: boolean
-    ScriptAfterTask: string | null
+    ScriptAfterTask: string
     Notes: string
     Tag?: string | null
     Account: string

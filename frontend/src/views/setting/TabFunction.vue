@@ -340,6 +340,148 @@ const { settings, historyRetentionOptions, voiceTypeOptions, handleSettingChange
 
     <FailureReplaySettings :settings="settings" :handle-setting-change="handleSettingChange" />
 
+    <!-- 本地远程桌面 (BetterGI Child Session) 设置 -->
+    <div class="form-section">
+      <div class="section-header">
+        <h3>BetterGI 本地远程桌面分身 (Child Session)</h3>
+      </div>
+      <a-alert
+        type="info"
+        show-icon
+        class="vdd-alert"
+        message="基于 BetterGI 桌面分身重构：任务在独立本地远程桌面子会话中通过包装器运行，默认最小化在系统托盘静默运行，避免主桌面干扰；相邻子任务间隔自动检查并让渡给申请使用的外部程序。"
+      />
+      <a-row :gutter="24">
+        <a-col :span="6">
+          <div class="form-item-vertical">
+            <div class="form-label-wrapper">
+              <span class="form-label">启用本地远程桌面</span>
+            </div>
+            <a-select
+              :value="(settings as any).ChildSession?.Enabled !== false"
+              size="large"
+              style="width: 100%"
+              @change="(v: any) => handleSettingChange('ChildSession' as any, 'Enabled', v)"
+            >
+              <a-select-option :value="true">是（推荐）</a-select-option>
+              <a-select-option :value="false">否（主桌面运行）</a-select-option>
+            </a-select>
+          </div>
+        </a-col>
+        <a-col :span="6">
+          <div class="form-item-vertical">
+            <div class="form-label-wrapper">
+              <span class="form-label">默认托盘化静默运行</span>
+            </div>
+            <a-select
+              :value="(settings as any).ChildSession?.StartHidden !== false"
+              size="large"
+              style="width: 100%"
+              @change="(v: any) => handleSettingChange('ChildSession' as any, 'StartHidden', v)"
+            >
+              <a-select-option :value="true">是（默认托盘隐藏，不干扰主桌面）</a-select-option>
+              <a-select-option :value="false">否（启动时显示远程桌面窗口）</a-select-option>
+            </a-select>
+          </div>
+        </a-col>
+        <a-col :span="6">
+          <div class="form-item-vertical">
+            <div class="form-label-wrapper">
+              <span class="form-label">观看模式（屏蔽键鼠误触）</span>
+            </div>
+            <a-select
+              :value="(settings as any).ChildSession?.WatchMode !== false"
+              size="large"
+              style="width: 100%"
+              @change="(v: any) => handleSettingChange('ChildSession' as any, 'WatchMode', v)"
+            >
+              <a-select-option :value="true">开启观看模式</a-select-option>
+              <a-select-option :value="false">普通鼠标输入模式</a-select-option>
+            </a-select>
+          </div>
+        </a-col>
+        <a-col :span="6">
+          <div class="form-item-vertical">
+            <div class="form-label-wrapper">
+              <span class="form-label">远程桌面分辨率</span>
+            </div>
+            <a-select
+              :value="(settings as any).ChildSession?.Resolution || '1920x1080'"
+              size="large"
+              style="width: 100%"
+              @change="(v: any) => handleSettingChange('ChildSession' as any, 'Resolution', v)"
+            >
+              <a-select-option value="1920x1080">1920 × 1080 (1080P)</a-select-option>
+              <a-select-option value="1600x900">1600 × 900 (900P)</a-select-option>
+              <a-select-option value="1280x720">1280 × 720 (720P)</a-select-option>
+              <a-select-option value="2560x1440">2560 × 1440 (2K)</a-select-option>
+            </a-select>
+          </div>
+        </a-col>
+      </a-row>
+    </div>
+
+    <!-- 全局热键设置 -->
+    <div class="form-section">
+      <div class="section-header">
+        <h3>系统全局热键控制</h3>
+      </div>
+      <a-row :gutter="24">
+        <a-col :span="6">
+          <div class="form-item-vertical">
+            <div class="form-label-wrapper">
+              <span class="form-label">启用全局热键</span>
+            </div>
+            <a-select
+              :value="(settings as any).Hotkey?.Enabled !== false"
+              size="large"
+              style="width: 100%"
+              @change="(v: any) => handleSettingChange('Hotkey' as any, 'Enabled', v)"
+            >
+              <a-select-option :value="true">启用</a-select-option>
+              <a-select-option :value="false">禁用</a-select-option>
+            </a-select>
+          </div>
+        </a-col>
+        <a-col :span="6">
+          <div class="form-item-vertical">
+            <div class="form-label-wrapper">
+              <span class="form-label">程序启停切换热键</span>
+            </div>
+            <a-input
+              :value="(settings as any).Hotkey?.ToggleStartStop || 'Ctrl+Alt+S'"
+              size="large"
+              @blur="(e: any) => handleSettingChange('Hotkey' as any, 'ToggleStartStop', e.target.value)"
+            />
+          </div>
+        </a-col>
+        <a-col :span="6">
+          <div class="form-item-vertical">
+            <div class="form-label-wrapper">
+              <span class="form-label">切换到上一个任务</span>
+            </div>
+            <a-input
+              :value="(settings as any).Hotkey?.PreviousTask || 'Ctrl+Alt+Left'"
+              size="large"
+              @blur="(e: any) => handleSettingChange('Hotkey' as any, 'PreviousTask', e.target.value)"
+            />
+          </div>
+        </a-col>
+        <a-col :span="6">
+          <div class="form-item-vertical">
+            <div class="form-label-wrapper">
+              <span class="form-label">切换到下一个任务</span>
+            </div>
+            <a-input
+              :value="(settings as any).Hotkey?.NextTask || 'Ctrl+Alt+Right'"
+              size="large"
+              @blur="(e: any) => handleSettingChange('Hotkey' as any, 'NextTask', e.target.value)"
+            />
+          </div>
+        </a-col>
+      </a-row>
+    </div>
+
     <div class="form-section">
       <div class="section-header">
         <h3>{{ t('setting.display.section') }}</h3>

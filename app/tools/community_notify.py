@@ -34,7 +34,6 @@ from app.core import Config
 from app.core.notify import DispatchResult, NotifyTarget, dispatch, global_target
 from app.models.notification import NotificationImage, NotifyPayload
 from app.utils.logger import get_logger
-from app.utils.notification_template import get_notification_template
 
 logger = get_logger("游戏社区通知")
 
@@ -458,7 +457,7 @@ def append_task_community_summary(
 ) -> str:
     """将尚未发送的社区签到汇总附加到任务报告。"""
 
-    if not Config.ToolsConfig.GameSign.NotifyEnabled:
+    if not Config.ToolsConfig.get("GameSign", "NotifyEnabled"):
         return result
 
     summary = get_task_community_summary(task_info, output_format=output_format)
@@ -528,7 +527,7 @@ def _render_community_html(
 ) -> str:
     """按 MAS 通知模板渲染社区签到邮件正文。"""
 
-    return get_notification_template("community_result.html").render(
+    return Config.notify_env.get_template("community_result.html").render(
         title=title,
         content=_community_html_fragment(
             results, include_signature=False, include_title=False

@@ -195,7 +195,7 @@ def personal_mss_enabled() -> bool:
     from app.core.config import Config
 
     try:
-        return bool(Config.setting.Function.IfPersonalMss)
+        return bool(Config.get("Function", "IfPersonalMss"))
     except AttributeError:
         ## 配置对象里还没有这一项（旧配置遇上热更新）：当作没开，不动队列
         return False
@@ -244,23 +244,6 @@ class MSSFlavor:
 
         ids = list(task_ids)
         options = dict(task_options)
-        # 自动编排也要尊重队列里这一份实例的红灯，尤其不能给未执行的防线记账。
-        raw_snapshot = _get(user_config, "Task", "TaskSnapshot")
-        if isinstance(raw_snapshot, str):
-            try:
-                raw_snapshot = json.loads(raw_snapshot)
-            except (ValueError, TypeError):
-                raw_snapshot = {}
-        skipped_ids: set[str] = set()
-        if isinstance(raw_snapshot, dict) and raw_snapshot.get("keepUnchecked") is True:
-            checked = raw_snapshot.get("taskChecked")
-            order = raw_snapshot.get("taskOrder")
-            if isinstance(checked, dict) and isinstance(order, list):
-                skipped_ids = {
-                    task_id
-                    for task_id in order
-                    if isinstance(task_id, str) and checked.get(task_id) is False
-                }
 
         activity = task_name_for_entry(interface_model, ACTIVITY_ENTRY)
         tribulation = task_name_for_entry(interface_model, TRIBULATION_ENTRY)
@@ -282,10 +265,7 @@ class MSSFlavor:
         if not ids and plan_key is None and defense is None:
             return list(ids), dict(options)
 
-        if plan_key is not None and (
-            tribulation not in skipped_ids
-            or any(name_of(task_id) == tribulation for task_id in ids)
-        ):
+        if plan_key is not None:
             ids, options = _apply_plan(
                 interface_model, ids, options, tribulation, plan_key, name_of, log
             )
@@ -296,7 +276,6 @@ class MSSFlavor:
         added = False
         if (
             activity is not None
-            and activity not in skipped_ids
             and not any(name_of(i) == activity for i in ids)
             and _get(user_config, "Info", "IfActivityFirst") is not False
             and self._activity_probe() is True
@@ -351,8 +330,6 @@ class MSSFlavor:
                 self._defense_period_probe,
                 name_of,
                 log,
-                skip_task=defense in skipped_ids
-                and not any(name_of(task_id) == defense for task_id in ids),
             )
 
         if climb is not None and any(name_of(i) == climb for i in ids):
@@ -468,8 +445,6 @@ def _arrange_defense(
     period_probe: Callable[[], str | None],
     name_of: Callable[[str], str],
     log: Callable[[str], None],
-    *,
-    skip_task: bool = False,
 ) -> list[str]:
     """按「这一期打没打过」决定个人版灾变防线的去留。
 
@@ -500,16 +475,12 @@ def _arrange_defense(
     整轮陪葬；宁可漏打一轮。
     """
 
-    record = _load_defense_record(user_config)
-    was_armed = bool(record.get("armed"))
-    # 红灯只结算已存的上轮欠账，不依赖本轮官网排期，也不编排新一轮。
-    if skip_task and not was_armed:
-        return ids
-    period = record["period"] if skip_task else period_probe()
+    period = period_probe()
     if period is None:
         log(f"[MSS] 取不到「{defense}」这一期的开始时间，本轮按队列原样执行")
         return ids
 
+    record = _load_defense_record(user_config)
     if str(record.get("period") or "") != period:
         ## 换期了：上一期那份整个丢掉
         record = {"period": period, "done": False, "armed": False, "failed_days": []}
@@ -544,14 +515,6 @@ def _arrange_defense(
                         failed_days.append(today)
                     record["failed_days"] = failed_days
             ## now == seen：这一轮没进过 run()，什么都不算，下一轮照常再编排
-
-    if skip_task:
-        # 先结清上轮；即使上轮只建过计划、还没进 run，也清掉 armed，避免本轮
-        # 其它绿灯的成功在下次被误当成防线完成。
-        record["armed"] = False
-        if settled or was_armed:
-            _commit_defense_record(user_config, record, defense, log)
-        return ids
 
     present = any(name_of(task_id) == defense for task_id in ids)
 
@@ -630,25 +593,26 @@ def _load_defense_record(user_config: Any) -> dict[str, Any]:
 
 def _as_text(value: Any) -> str:
     """配置项可能给 None 或数字，比较两轮状态前统一成字符串。"""
-    if isinstance(value, datetime):
-        # 周期记录只比较游戏日期；保留旧 seen_date 的语义和历史记录。
-        return value.strftime("%Y-%m-%d")
 
     return "" if value is None else str(value)
 
 
 def _save_defense_record(user_config: Any, record: dict[str, Any]) -> Exception | None:
-    """从建计划的工作线程提交周期记录，沿用任务持有的 X 锁上下文。"""
-    from app.core import Config
+    """写回 ``Data.PersonalMssDefense``；成功返回 None，失败返回那个异常。
 
-    async def save() -> None:
-        user_config.Data.PersonalMssDefense = json.dumps(record, ensure_ascii=False)
-        await user_config.commit()
+    这里在工作线程里跑（``check()`` 经 ``asyncio.to_thread`` 建计划），没有事件循环可 await，
+    自己起一个跑完就收。配置写盘失败只影响这一轮，不能让整份运行计划建不出来。
+    """
 
     try:
-        loop = Config.loop
-        asyncio.run_coroutine_threadsafe(save(), loop).result()
-    except Exception as exc:  # noqa: BLE001 - 保存失败时仍沿用原队列
+        asyncio.run(
+            user_config.set(
+                "Data",
+                "PersonalMssDefense",
+                json.dumps(record, ensure_ascii=False),
+            )
+        )
+    except Exception as exc:  # noqa: BLE001 - 配置锁了 / 写盘失败都退回「按队列原样」
         return exc
     return None
 
@@ -688,7 +652,7 @@ def _insert_before_climb(
 
 def _get(config: Any, group: str, name: str) -> Any:
     try:
-        return getattr(getattr(config, group), name)
+        return config.get(group, name)
     except Exception:  # noqa: BLE001 - 假配置对象缺项时按空处理
         return None
 

@@ -649,7 +649,6 @@ import type { MaaEndScriptConfig, ScriptType } from '@/types/script'
 import { useEmulatorDeviceOptions } from '@/composables/useEmulatorDeviceOptions'
 import { useScriptApi } from '@/composables/useScriptApi'
 import { useSaveQueue } from '@/composables/useSaveQueue'
-import { useEmulatorOptions } from '@/composables/useEmulatorOptions'
 import { useWebSocket } from '@/composables/useWebSocket'
 import {
   WS_TASK_COMPLETED,
@@ -707,7 +706,7 @@ const formData = reactive({
   get path() {
     return maaEndConfig.Info.Path
   },
-  set path(value: string | null) {
+  set path(value: string) {
     maaEndConfig.Info.Path = value
   },
 })
@@ -816,7 +815,8 @@ const accountSwitchMethodOptions = [
   { label: t('edit.accountSwitchMethodMaaend'), value: 'MAAEND' },
 ]
 
-const { emulatorLoading, emulatorOptions, loadEmulatorOptions } = useEmulatorOptions()
+const emulatorLoading = ref(false)
+const emulatorOptions = ref<ComboBoxItem[]>([])
 
 const controllerProtocol = computed(
   () => controllerProtocols.value[maaEndConfig.Game.ControllerType ?? '']
@@ -973,6 +973,18 @@ const refreshScript = async () => {
   if (!scriptDetail) return
   applyMaaEndConfig(scriptDetail.config as MaaEndScriptConfig)
   formData.name = scriptDetail.name
+}
+
+const loadEmulatorOptions = async () => {
+  emulatorLoading.value = true
+  try {
+    const response = await Service.getEmulatorComboxApiInfoComboxEmulatorPost()
+    if (response.code === 200) {
+      emulatorOptions.value = response.data || []
+    }
+  } finally {
+    emulatorLoading.value = false
+  }
 }
 
 const loadMaaEndOptions = async () => {

@@ -4,16 +4,16 @@
 /* eslint-disable */
 export type MaaPlanConfig_Info = {
     /**
-     * 多天轮换天数
+     * 计划表名称
      */
-    RotateDays?: (number | null);
+    Name?: (string | null);
     /**
      * 计划表模式
      */
     Mode?: ('ALL' | 'Weekly' | 'Rotate' | null);
     /**
-     * 计划表名称
+     * 多天轮换的天数，仅 Rotate 模式使用
      */
-    Name?: (string | null);
+    RotateDays?: (number | null);
 };
 

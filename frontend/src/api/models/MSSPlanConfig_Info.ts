@@ -4,16 +4,26 @@
 /* eslint-disable */
 export type MSSPlanConfig_Info = {
     /**
-     * 多天轮换天数
+     * 计划表名称
      */
-    RotateDays?: (number | null);
+    Name?: string;
     /**
      * 计划表模式
      */
-    Mode?: ('ALL' | 'Weekly' | 'Rotate' | null);
+    Mode?: MSSPlanConfig_Info.Mode;
     /**
-     * 计划表名称
+     * 多天轮换的天数，仅 Rotate 模式使用
      */
-    Name?: (string | null);
+    RotateDays?: number;
 };
+export namespace MSSPlanConfig_Info {
+    /**
+     * 计划表模式
+     */
+    export enum Mode {
+        ALL = 'ALL',
+        WEEKLY = 'Weekly',
+        ROTATE = 'Rotate',
+    }
+}
 

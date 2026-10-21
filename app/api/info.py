@@ -30,124 +30,19 @@ import tempfile
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import (
-    Any,
-    Dict,
-    Literal,
-)
 from urllib.parse import urlparse
 
 import httpx
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from fastapi.responses import FileResponse, Response
 from PIL import Image
-from pydantic import (
-    AwareDatetime,
-    BaseModel,
-    Field,
-    model_validator,
-)
 
 from app.core import Config
 from app.core.game_calendar import GameCalendar
-from app.models.schema import (
-    BlueArchiveActivityIn,
-    ComboBoxItem,
-    ComboBoxOut,
-    EmulatorDeleteIn,
-    OutBase,
-    PlanComboxConsumer,
-)
+from app.models.schema import *
 from app.tools.sra_activity import fetch_sra_activities
 from app.tools.stella_official import classify_activity_name, fetch_official_activities
 from app.utils import get_logger
-
-
-class GameCalendarActivityInfo(BaseModel):
-    name: str = Field(..., min_length=1, max_length=500, description="活动名称")
-    startTime: AwareDatetime = Field(..., description="活动开始时间，包含时区")
-    endTime: AwareDatetime = Field(..., description="活动结束时间，包含时区")
-
-    @model_validator(mode="after")
-    def validate_period(self):
-        if not self.name.strip() or self.endTime <= self.startTime:
-            raise ValueError("活动名称不能为空，结束时间必须晚于开始时间")
-        return self
-
-
-class GameCalendarActivityUpdateIn(GameCalendarActivityInfo):
-    completed: bool = Field(..., description="是否由用户标记为已完成")
-
-
-class GameCalendarActivityScopeIn(BaseModel):
-    game: Literal[
-        "endfield",
-        "starrail",
-        "genshin",
-        "zenless",
-        "wutheringwaves",
-        "nte",
-        "reverse1999",
-        "bluearchive",
-        "arknights",
-        "stellasora",
-        "infinitynikki",
-    ] = Field(..., description="首页游戏标识")
-    server: Literal["cn", "jp", "global"] = Field(
-        default="cn", description="碧蓝档案服务器，其它游戏忽略此字段"
-    )
-
-
-class GameCalendarActivityCompletionIn(
-    GameCalendarActivityScopeIn, GameCalendarActivityUpdateIn
-):
-    pass
-
-
-class GameCalendarActivitiesOut(OutBase):
-    data: list[GameCalendarActivityInfo] = Field(
-        default_factory=list, description="用户已完成且未过期的活动"
-    )
-
-
-class InfoOut(OutBase):
-    data: Dict[str, Any] = Field(..., description="收到的服务器数据")
-
-
-class VersionOut(OutBase):
-    if_need_update: bool = Field(..., description="后端代码是否需要更新")
-    current_time: str = Field(..., description="后端代码当前时间戳")
-    current_hash: str = Field(..., description="后端代码当前哈希值")
-
-
-class NoticeOut(OutBase):
-    if_need_show: bool = Field(..., description="是否需要显示公告")
-    data: Dict[str, str] = Field(
-        ..., description="公告信息, key为公告标题, value为公告内容"
-    )
-
-
-class GetStageIn(BaseModel):
-    type: Literal[
-        "User",
-        "Today",
-        "ALL",
-        "Monday",
-        "Tuesday",
-        "Wednesday",
-        "Thursday",
-        "Friday",
-        "Saturday",
-        "Sunday",
-    ] = Field(
-        ...,
-        description="选择的日期类型, Today为当天, ALL为包含当天未开放关卡在内的所有项",
-    )
-
-
-class PlanComboxIn(BaseModel):
-    consumer: PlanComboxConsumer = Field(..., description="计划表消费方")
-
 
 router = APIRouter(prefix="/api/info", tags=["信息获取"])
 logger = get_logger("信息获取 API")
@@ -304,10 +199,8 @@ async def get_stage_combox(
     stage: GetStageIn = Body(..., description="关卡号类型"),
 ) -> ComboBoxOut:
 
-    from app.task.MAA.tools.stage_service import maa_stage_service
-
     try:
-        raw_data = await maa_stage_service.get_stage_info(stage.type)
+        raw_data = await Config.get_stage_info(stage.type)
         data = (
             [ComboBoxItem(**item) for item in raw_data if isinstance(item, dict)]
             if raw_data
@@ -469,10 +362,7 @@ async def get_notice_info() -> NoticeOut:
 async def confirm_notice() -> OutBase:
 
     try:
-        await Config.setting.update(
-            type(Config.setting).model_validate({"Data": {"IfShowNotice": False}}),
-            check_visibility=False,
-        )
+        await Config.set("Data", "IfShowNotice", False)
     except Exception as e:
         logger.opt(exception=True).warning(
             f"confirm_notice失败: {type(e).__name__}: {e}"
@@ -507,13 +397,11 @@ async def confirm_notice() -> OutBase:
 async def get_overview(
     refresh: bool = False,
 ) -> InfoOut:
-    from app.task.MAA.tools.stage_service import maa_stage_service
-
     try:
         if refresh:
-            await maa_stage_service.get_stage(refresh=True)
+            await Config.get_stage(refresh=True)
         stage_by_server = {
-            server: await maa_stage_service.get_stage_info("Info", server=server)
+            server: await Config.get_stage_info("Info", server=server)
             for server in (
                 "Official",
                 "Bilibili",

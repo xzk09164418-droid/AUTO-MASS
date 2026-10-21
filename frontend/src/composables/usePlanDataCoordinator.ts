@@ -9,12 +9,11 @@
  */
 
 import { ref, computed } from 'vue'
-import type { MaaPlanConfig, ComboBoxItem } from '@/api'
-import { Service, GetStageIn } from '@/api'
+import type { MaaPlanConfig_Item, ComboBoxItem } from '@/api'
+import { Service } from '@/api'
+import { GetStageIn } from '@/api'
 import { PLAN_CONFIG_TYPES } from '@/utils/planTypeRegistry'
-import { planColumnGroup, planColumnKeys, readPlanColumn, type PlanMode } from '@/utils/planDays'
-
-type MaaPlanConfig_Item = NonNullable<MaaPlanConfig['ALL']>
+import { planColumnKeys, readPlanColumn, type PlanMode } from '@/utils/planDays'
 const logger = window.electronAPI.getLogger('计划数据协调器')
 
 // 时间维度常量。这里只列一周七天：多天轮换的天键是 "1"~"N"，由计划表数据决定，不在常量里。
@@ -334,7 +333,8 @@ export function usePlanDataCoordinator() {
     }
   }
 
-  // 直接按配置分组构建请求，未显示的槽位由调用方保留后端完整数据。
+  // 转换为API数据格式。形态与后端 PlanDaysConfig 一致：ALL 仍在顶层，其余天收进 Days，
+  // 调用方用 readPlanColumn 取具体某一天（生成的 API 模型还没跟上，这里先按结构拼）。
   const toApiData = (): Record<string, any> => {
     const result: Record<string, any> = {
       Info: {
@@ -358,7 +358,12 @@ export function usePlanDataCoordinator() {
         Stage_3: config.stages.backup3,
       }
 
-      result[planColumnGroup(timeKey)] = day
+      if (timeKey === 'ALL') {
+        result.ALL = day
+      } else {
+        result.Days = result.Days ?? {}
+        result.Days[timeKey] = day
+      }
     })
 
     // 不保存自定义关卡定义到后端，它们会在加载时重新推断

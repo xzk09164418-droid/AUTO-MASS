@@ -21,6 +21,7 @@
 #   Contact: DLmaster_361@163.com
 
 
+from .child_session import router as child_session_router
 from .core import router as core_router
 from .dispatch import router as dispatch_router
 from .emulator import router as emulator_router
@@ -40,6 +41,7 @@ from .tools import router as tools_router
 from .update import router as update_router
 
 __all__ = [
+    "child_session_router",
     "core_router",
     "info_router",
     "scripts_router",

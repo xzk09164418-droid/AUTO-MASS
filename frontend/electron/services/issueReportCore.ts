@@ -1,4 +1,3 @@
-import { readBackendDocument } from './backendConfig'
 import * as fs from 'fs'
 import * as os from 'os'
 import * as path from 'path'
@@ -206,8 +205,7 @@ export interface Installation {
 }
 
 interface ScriptConfigRecord {
-  order?: Array<{ uid?: string; type?: string }>
-  data?: Record<string, unknown>
+  instances?: Array<{ uid?: string; type?: string }>
   [key: string]: unknown
 }
 
@@ -219,18 +217,18 @@ export function discoverInstallations(
   const seenPaths = new Set<string>()
 
   for (const dataRoot of dataRoots) {
-    const config = readBackendDocument(dataRoot, 'scripts.yaml', 'ScriptConfig.json')
+    const config = readJson(path.join(dataRoot, 'config', 'ScriptConfig.json'))
     if (!isRecord(config)) {
       continue
     }
 
     const records = config as ScriptConfigRecord
-    for (const instance of records.order || []) {
+    for (const instance of records.instances || []) {
       if (instance?.type !== options.configType || !instance.uid) {
         continue
       }
 
-      const scriptConfig = records.data?.[instance.uid]
+      const scriptConfig = records[instance.uid]
       const info =
         isRecord(scriptConfig) && isRecord(scriptConfig.Info) ? scriptConfig.Info : undefined
       const rootPath =

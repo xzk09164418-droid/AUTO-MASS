@@ -1,7 +1,6 @@
 import '@/utils/browserDevElectronAPI'
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
-import { VueQueryPlugin } from '@tanstack/vue-query'
 import App from './App.vue'
 import router from './router/index.ts'
 import { OpenAPI } from '@/api'
@@ -12,7 +11,6 @@ import { getDefaultHttpEndpoint } from '@/utils/backendEndpoint'
 import { i18n } from '@/i18n'
 import { useLocale } from '@/composables/useLocale'
 import { useTheme } from '@/composables/useTheme'
-import { queryClient } from '@/services/queryClient'
 
 import Antd, { message } from 'ant-design-vue'
 import 'ant-design-vue/dist/reset.css'
@@ -86,7 +84,6 @@ const app = createApp(App)
 
 // 注册插件
 app.use(createPinia())
-app.use(VueQueryPlugin, { queryClient })
 app.use(Antd)
 app.use(router)
 app.use(i18n)

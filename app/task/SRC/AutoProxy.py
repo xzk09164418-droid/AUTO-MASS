@@ -1,18 +1,25 @@
 #   AUTO-MAS: A Multi-Script, Multi-Config Management and Automation Software
 #   Copyright © 2024-2025 DLmaster361
 #   Copyright © 2025-2026 AUTO-MAS Team
+
 #   This file is part of AUTO-MAS.
+
 #   AUTO-MAS is free software: you can redistribute it and/or modify
 #   it under the terms of the GNU Affero General Public License as
 #   published by the Free Software Foundation, either version 3 of
 #   the License, or (at your option) any later version.
+
 #   AUTO-MAS is distributed in the hope that it will be useful,
 #   but WITHOUT ANY WARRANTY; without even the implied warranty
 #   of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See
 #   the GNU Affero General Public License for more details.
+
 #   You should have received a copy of the GNU Affero General Public License
 #   along with AUTO-MAS. If not, see <https://www.gnu.org/licenses/>.
+
 #   Contact: DLmaster_361@163.com
+
+
 import asyncio
 import re
 import time
@@ -21,10 +28,10 @@ from contextlib import suppress
 from datetime import datetime
 from pathlib import Path
 
-from app.config import ConfigCollection
 from app.core import Config
 from app.core.ws import Publisher, protocol
 from app.models.config import SrcConfig, SrcUserConfig
+from app.models.ConfigBase import MultipleConfig
 from app.models.emulator import DeviceBase, DeviceInfo
 from app.models.schema import WSTaskNoticeData
 from app.models.task import LogRecord, ScriptItem
@@ -72,7 +79,7 @@ def _has_structured_src_log(log_content: list[str], message: str) -> bool:
     )
 
 
-class AutoProxyTask(ScriptAutoProxyBase[SrcConfig, SrcUserConfig]):
+class AutoProxyTask(ScriptAutoProxyBase):
     """自动代理模式"""
 
     wait_for_finalizer_on_cancel = True
@@ -81,7 +88,7 @@ class AutoProxyTask(ScriptAutoProxyBase[SrcConfig, SrcUserConfig]):
         self,
         script_info: ScriptItem,
         script_config: SrcConfig,
-        user_config: ConfigCollection[SrcUserConfig],
+        user_config: MultipleConfig[SrcUserConfig],
         emulator_manager: DeviceBase,
         *,
         src_installation_id: str,
@@ -118,16 +125,14 @@ class AutoProxyTask(ScriptAutoProxyBase[SrcConfig, SrcUserConfig]):
         # 单独运行脚本是用户主动指定的一次性运行，不受单日代理次数上限约束
         if (
             self.task_info.is_queue_task
-            and self.script_config.Run.ProxyTimesLimit != 0
-            and (
-                self.cur_user_config.Data.ProxyTimes
-                >= self.script_config.Run.ProxyTimesLimit
-            )
+            and self.script_config.get("Run", "ProxyTimesLimit") != 0
+            and self.cur_user_config.get("Data", "ProxyTimes")
+            >= self.script_config.get("Run", "ProxyTimesLimit")
         ):
             self.cur_user_item.status = "跳过"
             return "今日代理次数已达上限, 跳过该用户"
 
-        if self.cur_user_config.Info.Base == CONFIG_BASE_INDEPENDENT:
+        if self.cur_user_config.get("Info", "Base") == CONFIG_BASE_INDEPENDENT:
             config_path = (
                 Path.cwd()
                 / f"data/{self.script_info.script_id}/{self.cur_user_uid}/ConfigFile"
@@ -150,10 +155,7 @@ class AutoProxyTask(ScriptAutoProxyBase[SrcConfig, SrcUserConfig]):
         self.user_start_time = datetime.now()
         self.log_start_time = datetime.now()
 
-        src_root_path = self.script_config.Info.Path
-        if src_root_path is None:
-            raise ValueError("Path未配置，请检查路径设置")
-        self.src_root_path = src_root_path
+        self.src_root_path = Path(self.script_config.get("Info", "Path"))
         self.src_exe_path = self.src_root_path / "src.exe"
         self.src_set_path = self.src_root_path / "config"
         self.src_log_path = self.src_root_path / "log/2000-01-01_src.txt"
@@ -172,11 +174,9 @@ class AutoProxyTask(ScriptAutoProxyBase[SrcConfig, SrcUserConfig]):
 
         # 初始化每日代理状态
         self.curdate = datetime.now(tz=UTC4).strftime("%Y-%m-%d")
-        if self.cur_user_config.Data.LastProxyDate.strftime("%Y-%m-%d") != self.curdate:
-            self.cur_user_config.Data.LastProxyDate = datetime.now(tz=UTC4)
-            await self.cur_user_config.commit()
-            self.cur_user_config.Data.ProxyTimes = 0
-            await self.cur_user_config.commit()
+        if self.cur_user_config.get("Data", "LastProxyDate") != self.curdate:
+            await self.cur_user_config.set("Data", "LastProxyDate", self.curdate)
+            await self.cur_user_config.set("Data", "ProxyTimes", 0)
 
         self.check_result = await self.check()
         if self.check_result != "Pass":
@@ -198,11 +198,11 @@ class AutoProxyTask(ScriptAutoProxyBase[SrcConfig, SrcUserConfig]):
         logger.info(f"开始代理用户: {self.cur_user_uid}")
         self.cur_user_item.status = "运行"
 
-        for i in range(self.script_config.Run.RunTimesLimit):
+        for i in range(self.script_config.get("Run", "RunTimesLimit")):
             if self.run_book:
                 break
             logger.info(
-                f"用户 {self.cur_user_item.name} - 尝试次数: {i + 1}/{self.script_config.Run.RunTimesLimit}"
+                f"用户 {self.cur_user_item.name} - 尝试次数: {i + 1}/{self.script_config.get('Run', 'RunTimesLimit')}"
             )
             self.log_start_time = datetime.now()
             self.cur_user_item.log_record[self.log_start_time] = self.cur_user_log = (
@@ -212,10 +212,12 @@ class AutoProxyTask(ScriptAutoProxyBase[SrcConfig, SrcUserConfig]):
             self.script_info.log = "正在启动模拟器..."
             # 启动模拟器
             try:
-                logger.info(f"启动模拟器: {self.script_config.Emulator.Index}")
+                logger.info(
+                    f"启动模拟器: {self.script_config.get('Emulator', 'Index')}"
+                )
                 emulator_info = await self.emulator_manager.open(
-                    self.script_config.Emulator.Index,
-                    STARRAIL_PACKAGE_NAME[self.cur_user_config.Info.Server],
+                    self.script_config.get("Emulator", "Index"),
+                    STARRAIL_PACKAGE_NAME[self.cur_user_config.get("Info", "Server")],
                 )
             except Exception as e:
                 if not await self.handle_pre_src_error("模拟器启动失败", e):
@@ -227,16 +229,16 @@ class AutoProxyTask(ScriptAutoProxyBase[SrcConfig, SrcUserConfig]):
             )
 
             # 需要用户手动更新游戏时重试无意义，直接结束本模式的重试
-            if self.script_config.Run.IfCheckGameUpdate and (
-                not await self.handle_game_update(emulator_info)
-            ):
+            if self.script_config.get(
+                "Run", "IfCheckGameUpdate"
+            ) and not await self.handle_game_update(emulator_info):
                 break
 
             if await login(
                 emulator_info,
-                STARRAIL_PACKAGE_NAME[self.cur_user_config.Info.Server],
-                self.cur_user_config.Info.Id,
-                self.cur_user_config.Info.Password,
+                STARRAIL_PACKAGE_NAME[self.cur_user_config.get("Info", "Server")],
+                self.cur_user_config.get("Info", "Id"),
+                self.cur_user_config.get("Info", "Password"),
             ):
                 logger.info(f"用户 {self.cur_user_item.user_id} 登录成功")
             else:
@@ -269,7 +271,7 @@ class AutoProxyTask(ScriptAutoProxyBase[SrcConfig, SrcUserConfig]):
             )
 
             # 静默模式隐藏 SRC 窗口
-            if Config.setting.Function.IfSilence:
+            if Config.get("Function", "IfSilence"):
                 deadline = time.monotonic() + 60
                 while time.monotonic() < deadline:
                     if await self.src_process_manager.is_visible():
@@ -353,7 +355,7 @@ class AutoProxyTask(ScriptAutoProxyBase[SrcConfig, SrcUserConfig]):
 
             await asyncio.sleep(10)
             # 更新脚本配置文件
-            if self.cur_user_config.Info.Base == CONFIG_BASE_INDEPENDENT:
+            if self.cur_user_config.get("Info", "Base") == CONFIG_BASE_INDEPENDENT:
                 save_src_user_config(
                     self.src_set_path,
                     Path.cwd()
@@ -426,11 +428,13 @@ class AutoProxyTask(ScriptAutoProxyBase[SrcConfig, SrcUserConfig]):
             result = await ensure_game_updated(
                 adb_path=self.emulator_manager.get_adb_path(),
                 adb_address=emulator_info.adb_address,
-                server=self.cur_user_config.Info.Server,
-                package_name=STARRAIL_PACKAGE_NAME[self.cur_user_config.Info.Server],
+                server=self.cur_user_config.get("Info", "Server"),
+                package_name=STARRAIL_PACKAGE_NAME[
+                    self.cur_user_config.get("Info", "Server")
+                ],
                 apk_dir=Path.cwd() / "data/GameApk",
-                if_auto_install=self.script_config.Run.IfAutoInstallGameApk,
-                time_limit=self.script_config.Run.GameUpdateTimeLimit,
+                if_auto_install=self.script_config.get("Run", "IfAutoInstallGameApk"),
+                time_limit=self.script_config.get("Run", "GameUpdateTimeLimit"),
                 progress=report,
             )
         except Exception as e:
@@ -554,7 +558,9 @@ class AutoProxyTask(ScriptAutoProxyBase[SrcConfig, SrcUserConfig]):
         if emulator_info.adb_address != "Unknown":
             src_set["Alas"]["Emulator"]["Serial"] = emulator_info.adb_address
         src_set["Alas"]["Emulator"]["GameClient"] = "android"
-        src_set["Alas"]["Emulator"]["PackageName"] = self.cur_user_config.Info.Server
+        src_set["Alas"]["Emulator"]["PackageName"] = self.cur_user_config.get(
+            "Info", "Server"
+        )
         src_set["Alas"]["Emulator"]["GameLanguage"] = "cn"
         src_set["Alas"]["Emulator"]["AdbRestart"] = True
 
@@ -564,7 +570,7 @@ class AutoProxyTask(ScriptAutoProxyBase[SrcConfig, SrcUserConfig]):
         # 任务间切换方式
         src_set["Alas"]["Optimization"]["WhenTaskQueueEmpty"] = "close_game"
 
-        if self.cur_user_config.Info.IfQuickConfig:
+        if self.cur_user_config.get("Info", "IfQuickConfig"):
             self._apply_src_quick_config(src_set)
 
         write_file(staging_path / "src.json", src_set)
@@ -583,7 +589,7 @@ class AutoProxyTask(ScriptAutoProxyBase[SrcConfig, SrcUserConfig]):
             expected_installation_id=self.src_installation_id,
         )
         self._src_injected_config = (
-            src_set if self.cur_user_config.Info.IfQuickConfig else None
+            src_set if self.cur_user_config.get("Info", "IfQuickConfig") else None
         )
         logger.info("脚本运行参数配置完成: 自动代理")
 
@@ -595,29 +601,33 @@ class AutoProxyTask(ScriptAutoProxyBase[SrcConfig, SrcUserConfig]):
 
         # 后备开拓力与燃料
         trailblaze_power = {
-            "ExtractReservedTrailblazePower": self.cur_user_config.Stage.ExtractReservedTrailblazePower,
-            "UseFuel": self.cur_user_config.Stage.UseFuel,
+            "ExtractReservedTrailblazePower": self.cur_user_config.get(
+                "Stage", "ExtractReservedTrailblazePower"
+            ),
+            "UseFuel": self.cur_user_config.get("Stage", "UseFuel"),
             "FuelOnlyPlanner": False,
-            "FuelReserve": self.cur_user_config.Stage.FuelReserve,
+            "FuelReserve": self.cur_user_config.get("Stage", "FuelReserve"),
         }
         src_set["Dungeon"]["TrailblazePower"] = trailblaze_power
         src_set["Ornament"]["TrailblazePower"] = trailblaze_power
 
         # 每日副本关卡配置
         src_set["Dungeon"]["Scheduler"]["Enable"] = True
-        main_stage = getattr(
-            self.cur_user_config.Stage, self.cur_user_config.Stage.Channel
+        main_stage = self.cur_user_config.get(
+            "Stage", self.cur_user_config.get("Stage", "Channel")
         )
-        relic_stage = self.cur_user_config.Stage.Relic
-        materials_stage = self.cur_user_config.Stage.Materials
-        ornament_stage = self.cur_user_config.Stage.Ornament
+        relic_stage = self.cur_user_config.get("Stage", "Relic")
+        materials_stage = self.cur_user_config.get("Stage", "Materials")
+        ornament_stage = self.cur_user_config.get("Stage", "Ornament")
         if (
-            self.cur_user_config.Stage.Channel in ("Relic", "Materials")
+            self.cur_user_config.get("Stage", "Channel") in ("Relic", "Materials")
             and main_stage != "-"
         ):
             src_set["Dungeon"]["Dungeon"]["Name"] = main_stage
         if (
-            not str(self.cur_user_config.Stage.Materials).startswith("Stagnant_Shadow")
+            not str(self.cur_user_config.get("Stage", "Materials")).startswith(
+                "Stagnant_Shadow"
+            )
             and materials_stage != "-"
         ):
             src_set["Dungeon"]["Dungeon"]["NameAtDoubleCalyx"] = materials_stage
@@ -625,7 +635,7 @@ class AutoProxyTask(ScriptAutoProxyBase[SrcConfig, SrcUserConfig]):
             src_set["Dungeon"]["Dungeon"]["NameAtDoubleRelic"] = relic_stage
 
         # 饰品提取关卡配置
-        if self.cur_user_config.Stage.Channel == "Ornament":
+        if self.cur_user_config.get("Stage", "Channel") == "Ornament":
             src_set["Ornament"]["Scheduler"]["Enable"] = True
             src_set["Ornament"]["Ornament"]["UseStamina"] = True
         else:
@@ -634,19 +644,21 @@ class AutoProxyTask(ScriptAutoProxyBase[SrcConfig, SrcUserConfig]):
             src_set["Ornament"]["Ornament"]["Dungeon"] = ornament_stage
 
         # 历战余响关卡配置
-        if self.cur_user_config.Stage.EchoOfWar == "-":
+        if self.cur_user_config.get("Stage", "EchoOfWar") == "-":
             src_set["Weekly"]["Scheduler"]["Enable"] = False
         else:
             src_set["Weekly"]["Scheduler"]["Enable"] = True
-            src_set["Weekly"]["Weekly"]["Name"] = self.cur_user_config.Stage.EchoOfWar
+            src_set["Weekly"]["Weekly"]["Name"] = self.cur_user_config.get(
+                "Stage", "EchoOfWar"
+            )
 
         # 模拟宇宙关卡配置
-        if self.cur_user_config.Stage.SimulatedUniverseWorld == "-":
+        if self.cur_user_config.get("Stage", "SimulatedUniverseWorld") == "-":
             src_set["Rogue"]["Scheduler"]["Enable"] = False
         else:
             src_set["Rogue"]["Scheduler"]["Enable"] = True
-            src_set["Rogue"]["RogueWorld"]["World"] = (
-                self.cur_user_config.Stage.SimulatedUniverseWorld
+            src_set["Rogue"]["RogueWorld"]["World"] = self.cur_user_config.get(
+                "Stage", "SimulatedUniverseWorld"
             )
 
     async def check_log(self, log_content: list[str], latest_time: datetime) -> None:
@@ -672,7 +684,7 @@ class AutoProxyTask(ScriptAutoProxyBase[SrcConfig, SrcUserConfig]):
         elif _has_structured_src_log(log_content, "CRITICAL"):
             self.cur_user_log.status = "SRC 发生严重错误"
         elif self.is_log_stalled(
-            latest_time, minutes=self.script_config.Run.RunTimeLimit
+            latest_time, minutes=self.script_config.get("Run", "RunTimeLimit")
         ):
             self.cur_user_log.status = "SRC 进程超时"
         else:
@@ -708,7 +720,7 @@ class AutoProxyTask(ScriptAutoProxyBase[SrcConfig, SrcUserConfig]):
         self.process_cleanup_success = cleanup_success
         if not cleanup_success:
             await self._handle_process_cleanup_failure()
-        if self.script_config.Run.TaskTransitionMethod == "ExitEmulator":
+        if self.script_config.get("Run", "TaskTransitionMethod") == "ExitEmulator":
             logger.info("用户任务结束, 关闭模拟器")
             await close_emulator(self, timeout=_FINAL_CLEANUP_TIMEOUT_SECONDS)
 
@@ -775,17 +787,19 @@ class AutoProxyTask(ScriptAutoProxyBase[SrcConfig, SrcUserConfig]):
 
         if self.run_book:
             if (
-                self.cur_user_config.Data.ProxyTimes == 0
-                and self.cur_user_config.Info.RemainedDay != -1
+                self.cur_user_config.get("Data", "ProxyTimes") == 0
+                and self.cur_user_config.get("Info", "RemainedDay") != -1
             ):
-                self.cur_user_config.Info.RemainedDay = (
-                    self.cur_user_config.Info.RemainedDay - 1
+                await self.cur_user_config.set(
+                    "Info",
+                    "RemainedDay",
+                    self.cur_user_config.get("Info", "RemainedDay") - 1,
                 )
-                await self.cur_user_config.commit()
-            self.cur_user_config.Data.ProxyTimes = (
-                self.cur_user_config.Data.ProxyTimes + 1
+            await self.cur_user_config.set(
+                "Data",
+                "ProxyTimes",
+                self.cur_user_config.get("Data", "ProxyTimes") + 1,
             )
-            await self.cur_user_config.commit()
             self.cur_user_item.status = "完成"
             logger.success(f"用户 {self.cur_user_uid} 的自动代理任务已完成")
             try:

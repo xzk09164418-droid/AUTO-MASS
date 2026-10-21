@@ -4,36 +4,36 @@
 /* eslint-disable */
 export type ToolsConfig_GameSign = {
     /**
-     * GameSign - 启用日常便笺
-     */
-    ActivityEnabled?: (boolean | null);
-    /**
-     * GameSign - 是否立即开始
-     */
-    AutoStart?: (boolean | null);
-    /**
-     * GameSign - 启用签到
+     * 是否启用游戏社区
      */
     Enabled?: (boolean | null);
     /**
-     * GameSign - 上次签到日期 (防止重复触发)
-     */
-    LastSignDate?: (string | null);
-    /**
-     * GameSign - 签到后发送通知
+     * 签到后是否发送通知
      */
     NotifyEnabled?: (boolean | null);
     /**
-     * GameSign - 签到结果详情 (虚拟字段)
+     * 是否启用日常便笺
      */
-    readonly Result?: (string | null);
+    ActivityEnabled?: (boolean | null);
     /**
-     * GameSign - 启动时运行
+     * 启动时运行
      */
     RunOnStartup?: (boolean | null);
     /**
-     * GameSign - 签到状态标签 (虚拟字段)
+     * 是否立即开始
      */
-    readonly Status?: (string | null);
+    AutoStart?: (boolean | null);
+    /**
+     * 上次签到日期
+     */
+    LastSignDate?: (string | null);
+    /**
+     * 签到状态标签
+     */
+    Status?: (string | null);
+    /**
+     * 签到结果 JSON
+     */
+    Result?: (string | null);
 };
 

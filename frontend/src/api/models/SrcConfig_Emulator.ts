@@ -4,7 +4,7 @@
 /* eslint-disable */
 export type SrcConfig_Emulator = {
     /**
-     * 模拟器 ID
+     * 模拟器ID
      */
     Id?: (string | null);
     /**

@@ -1326,6 +1326,7 @@ import {
 } from '@ant-design/icons-vue'
 import {
   BetterGiService,
+  Service,
   type BetterGIDomainCatalogItem,
   type BetterGIPathingNode,
   type ComboBoxItem,
@@ -1355,7 +1356,6 @@ import BettergiDragonGroupSettings from './BettergiDragonGroupSettings.vue'
 import BettergiGroupProjectEditor from './BettergiGroupProjectEditor.vue'
 import BettergiTeamSettings from './BettergiTeamSettings.vue'
 import { useBetterGIUpdate } from './useBetterGIUpdate'
-import { useConfigBackupApi } from '@/composables/useConfigBackupApi'
 
 const { t } = useI18n()
 const logger = window.electronAPI.getLogger('BetterGI用户编辑')
@@ -1639,7 +1639,7 @@ const syncGamePathInput = () => {
  */
 const syncResourceWithChannel = async () => {
   const channel = gameClientInfo.value?.channel
-  if (channel !== '官服' && channel !== 'B服' && channel !== '国际服') {
+  if (!channel) {
     message.warning(t('edit.bettergiGameClientUnknownWarning'))
     return
   }
@@ -4753,11 +4753,32 @@ const restoreTargets: Array<{ key: string; kind: 'user' | 'script' }> = [
 ]
 
 // 组件调用后端：通用 /backup/* 端点（脚本/用户上下文在此闭包捕获）
-const { restoreApi, ensureBackup } = useConfigBackupApi({
-  scriptId,
-  userId: () => userId.value,
-  logger,
-})
+const restoreApi = {
+  list: async (target: string) =>
+    Service.listConfigBackupsApiApiScriptsBackupListGet(scriptId, userId.value, target),
+  preview: async (target: string, time: string) =>
+    Service.getConfigBackupPreviewApiApiScriptsBackupPreviewGet(
+      scriptId,
+      userId.value,
+      time,
+      target
+    ),
+  restore: async (target: string, time: string) =>
+    Service.restoreConfigBackupApiApiScriptsBackupRestorePost({
+      scriptId,
+      userId: userId.value,
+      time,
+      target,
+    }),
+  readFile: async (target: string, time: string, path: string) =>
+    Service.getConfigBackupFileApiApiScriptsBackupFileGet(
+      scriptId,
+      userId.value,
+      time,
+      target,
+      path
+    ),
+}
 
 interface BettergiPreviewRow {
   key: string
@@ -4806,7 +4827,12 @@ const handleRestoreView = (target: string, item: { time: string }) => {
         }
 
         try {
-          const resp = await restoreApi.restore(target, item.time)
+          const resp = await Service.restoreConfigBackupApiApiScriptsBackupRestorePost({
+            scriptId,
+            userId: userId.value,
+            time: item.time,
+            target,
+          })
           // 后端失败走 HTTP 200 + body code=400，须显式检查返回体：备份不存在/
           // 路径未设置等抛错若被吞掉，会照常关弹窗并打开查看会话
           if (resp.code !== 200) {
@@ -4835,7 +4861,20 @@ const handleRestoreView = (target: string, item: { time: string }) => {
 // 编辑会话归档（进入/退出时机，指纹去重）：与运行物化前的双池归档
 // （AutoProxy）配合——进入归档 BGI 全局配置当前状态（MAS 触碰前原始态），
 // 退出归档 MAS 用户配置终态（per-user 副本 + 页面字段，编辑会话包络）
-const ensureBettergiBackup = ensureBackup
+const ensureBettergiBackup = async (target: 'mas' | 'native') => {
+  if (!userId.value) return
+  try {
+    const resp = await Service.ensureConfigBackupApiApiScriptsBackupEnsurePost({
+      scriptId,
+      userId: userId.value,
+      target,
+    })
+    if (resp.code !== 200) throw new Error(resp.message || t('edit.configRestoreEnsureFailed'))
+  } catch (e) {
+    logger.error(e instanceof Error ? e.message : String(e))
+    message.warning(t('edit.configRestoreEnsureFailed'))
+  }
+}
 
 const loadScriptInfo = async (): Promise<boolean> => {
   const detail = await getScript(scriptId)

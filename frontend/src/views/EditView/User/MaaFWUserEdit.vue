@@ -102,7 +102,6 @@
             @rename-queue-template="renameQueueTemplate"
             @delete-queue-template="deleteQueueTemplate"
             @select-task="selectTask"
-            @toggle-task-checked="toggleTaskChecked"
             @move-task="moveTask"
             @task-drag-end="handleTaskDragEnd"
             @task-option-update="handleTaskOptionUpdate"
@@ -232,7 +231,6 @@ const {
   selectedTask,
   applyQueuedTaskIds,
   selectTask,
-  toggleTaskChecked,
   applyPresetTemplate,
   deleteSelectedTask,
   deleteTask,

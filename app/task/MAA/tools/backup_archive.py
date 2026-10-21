@@ -58,9 +58,7 @@ from app.utils.config_archive import (
     restore_dir,
     write_backup_base,
 )
-from app.utils.constants import BASE_SOURCE_LABELS
-
-from ..constants import MAA_TASKS, MAA_TASKS_ZH
+from app.utils.constants import BASE_SOURCE_LABELS, MAA_TASKS, MAA_TASKS_ZH
 
 logger = get_logger("MAA 配置备份")
 
@@ -288,7 +286,7 @@ def read_overlay_values(config) -> dict:
     values: dict = {}
     for group, keys in _OVERLAY_KEY_GROUPS.items():
         for key in keys:
-            if (value := getattr(getattr(config, group), key)) is not None:
+            if (value := config.get(group, key)) is not None:
                 values[key] = value
     return values
 

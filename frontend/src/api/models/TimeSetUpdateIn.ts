@@ -2,7 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-import type { TimeSetInput } from './TimeSetInput';
+import type { TimeSet } from './TimeSet';
 export type TimeSetUpdateIn = {
     /**
      * 所属队列ID
@@ -15,6 +15,6 @@ export type TimeSetUpdateIn = {
     /**
      * 时间设置更新数据
      */
-    data: TimeSetInput;
+    data: TimeSet;
 };
 

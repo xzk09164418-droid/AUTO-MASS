@@ -8,10 +8,25 @@ import type { MaaUserConfig_Notify } from './MaaUserConfig_Notify';
 import type { MaaUserConfig_Stage } from './MaaUserConfig_Stage';
 import type { MaaUserConfig_Task } from './MaaUserConfig_Task';
 export type MaaUserConfig = {
-    Data?: (MaaUserConfig_Data | null);
+    /**
+     * 基础信息
+     */
     Info?: (MaaUserConfig_Info | null);
-    Notify?: (MaaUserConfig_Notify | null);
+    /**
+     * 关卡配置
+     */
     Stage?: (MaaUserConfig_Stage | null);
+    /**
+     * 用户数据
+     */
+    Data?: (MaaUserConfig_Data | null);
+    /**
+     * 任务列表
+     */
     Task?: (MaaUserConfig_Task | null);
+    /**
+     * 单独通知
+     */
+    Notify?: (MaaUserConfig_Notify | null);
 };
 

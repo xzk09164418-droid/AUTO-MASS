@@ -1,18 +1,25 @@
 #   AUTO-MAS: A Multi-Script, Multi-Config Management and Automation Software
 #   Copyright © 2025 MoeSnowyFox
 #   Copyright © 2025-2026 AUTO-MAS Team
+
 #   This file is part of AUTO-MAS.
+
 #   AUTO-MAS is free software: you can redistribute it and/or modify
 #   it under the terms of the GNU Affero General Public License as
 #   published by the Free Software Foundation, either version 3 of
 #   the License, or (at your option) any later version.
+
 #   AUTO-MAS is distributed in the hope that it will be useful,
 #   but WITHOUT ANY WARRANTY; without even the implied warranty
 #   of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See
 #   the GNU Affero General Public License for more details.
+
 #   You should have received a copy of the GNU Affero General Public License
 #   along with AUTO-MAS. If not, see <https://www.gnu.org/licenses/>.
+
 #   Contact: DLmaster_361@163.com
+
+
 import asyncio
 import time
 from pathlib import Path
@@ -59,16 +66,17 @@ class LDManager(DeviceBase):
     """
 
     def __init__(self, config: EmulatorConfig) -> None:
-        emulator_path = config.Info.Path
-        if emulator_path is None or not emulator_path.exists():
-            raise FileNotFoundError(f"LDPlayerManager.exe文件不存在: {emulator_path}")
+        if not Path(config.get("Info", "Path")).exists():
+            raise FileNotFoundError(
+                f"LDPlayerManager.exe文件不存在: {config.get('Info', 'Path')}"
+            )
 
-        if config.Info.Type != "ldplayer":
+        if config.get("Info", "Type") != "ldplayer":
             raise ValueError("配置的模拟器类型不是ldplayer")
 
         self.config = config
 
-        self.emulator_path = emulator_path
+        self.emulator_path = Path(config.get("Info", "Path"))
 
         # {实例索引: 静音记录}，启动时跟随静音、关闭前还原
         self._audio_mute_states: dict[str, AudioMuteRecord] = {}
@@ -95,7 +103,7 @@ class LDManager(DeviceBase):
         try:
             from app.core import Config
 
-            return bool(Config.setting.Function.IfBlockAd)
+            return bool(Config.get("Function", "IfBlockAd"))
         except Exception as e:
             logger.warning(f"读取雷电模拟器配置保护开关失败: {e}")
             return False
@@ -187,7 +195,7 @@ class LDManager(DeviceBase):
             result = await ProcessRunner.run_process(
                 self.emulator_path,
                 *ldplayer_clean_mode_args(enabled),
-                timeout=self.config.Info.MaxWaitTime,
+                timeout=self.config.get("Info", "MaxWaitTime"),
                 if_merge_std=True,
                 breakaway=True,
             )
@@ -201,7 +209,7 @@ class LDManager(DeviceBase):
         logger.info(f"开始启动模拟器 {idx}  - {package_name}")
 
         status = DeviceStatus.UNKNOWN  # 初始化status变量
-        deadline = time.monotonic() + self.config.Info.MaxWaitTime
+        deadline = time.monotonic() + self.config.get("Info", "MaxWaitTime")
         while time.monotonic() < deadline:
             status = await self.getStatus(idx)
             if status == DeviceStatus.ONLINE:
@@ -222,7 +230,7 @@ class LDManager(DeviceBase):
             "--index",
             idx,
             *(["--packagename", f'"{package_name}"'] if package_name else []),
-            timeout=self.config.Info.MaxWaitTime,
+            timeout=self.config.get("Info", "MaxWaitTime"),
             if_merge_std=True,
             breakaway=True,
         )
@@ -231,18 +239,19 @@ class LDManager(DeviceBase):
         if result.returncode != 0:
             raise RuntimeError(f"命令执行失败: {result.failure_detail()}")
 
-        deadline = time.monotonic() + self.config.Info.MaxWaitTime
+        deadline = time.monotonic() + self.config.get("Info", "MaxWaitTime")
         while time.monotonic() < deadline:
             status = await self.getStatus(idx)
             if status == DeviceStatus.ONLINE:
                 await asyncio.sleep(
                     30
-                    if package_name != "" and self.config.Info.MaxWaitTime > 60
+                    if package_name != ""
+                    and self.config.get("Info", "MaxWaitTime") > 60
                     else 3
                 )  # 等待模拟器的 ADB 等服务完全启动, 低性能设备额外等待应用启动
                 from app.core import Config
 
-                if Config.setting.Function.IfBlockAd:
+                if Config.get("Function", "IfBlockAd"):
                     await self._block_ads_via_adb(idx)
                 await apply_launch_audio_mute(
                     states_store=self._audio_mute_states,
@@ -280,7 +289,7 @@ class LDManager(DeviceBase):
             "quit",
             "--index",
             idx,
-            timeout=self.config.Info.MaxWaitTime,
+            timeout=self.config.get("Info", "MaxWaitTime"),
             if_merge_std=True,
             breakaway=True,
         )
@@ -288,7 +297,7 @@ class LDManager(DeviceBase):
 
         if result.returncode != 0:
             raise RuntimeError(f"命令执行失败: {result.failure_detail()}")
-        deadline = time.monotonic() + self.config.Info.MaxWaitTime
+        deadline = time.monotonic() + self.config.get("Info", "MaxWaitTime")
         while time.monotonic() < deadline:
             status = await self.getStatus(idx)
             if status == DeviceStatus.OFFLINE:
@@ -359,7 +368,7 @@ class LDManager(DeviceBase):
 
         hwnd = await resolve_main_window(idx, lambda: self._resolve_target_hwnd(idx))
         await apply_window_visibility(
-            hwnd, idx, is_visible, self.config.Info.MaxWaitTime
+            hwnd, idx, is_visible, self.config.get("Info", "MaxWaitTime")
         )
         return status
 
@@ -382,7 +391,7 @@ class LDManager(DeviceBase):
         result = await ProcessRunner.run_process(
             self.emulator_path,
             "list2",
-            timeout=self.config.Info.MaxWaitTime,
+            timeout=self.config.get("Info", "MaxWaitTime"),
             if_merge_std=True,
             breakaway=True,
         )

@@ -2,7 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-import type { GameSignAccountGroupConfigInput } from './GameSignAccountGroupConfigInput';
+import type { GameSignAccountGroupConfig } from './GameSignAccountGroupConfig';
 /**
  * 游戏社区账号组更新请求
  */
@@ -14,6 +14,6 @@ export type GameSignAccountUpdateIn = {
     /**
      * 账号组配置
      */
-    data: GameSignAccountGroupConfigInput;
+    data: GameSignAccountGroupConfig;
 };
 

@@ -1,24 +1,14 @@
-"""脚本单账号自动运行的总时限保护。"""
+"""脚本单账号自动运行的总时限保护（从任务开始到结束的上限时间，含全部重试）。"""
 
 import asyncio
+import time
 from collections.abc import Callable
 from contextlib import suppress
 from datetime import datetime
+from pathlib import Path
 
 from app.core.ws import Publisher, protocol
-from app.models.config import (
-    BAAHConfig,
-    BetterGIConfig,
-    GeneralConfig,
-    MaaConfig,
-    MaaEndConfig,
-    OkNteConfig,
-    OkwwConfig,
-    SrcConfig,
-    UserConfigType,
-    WhimboxConfig,
-    ZzzOdConfig,
-)
+from app.models.ConfigBase import ConfigBase
 from app.models.schema import WSTaskNoticeData
 from app.models.task import LogRecord, ScriptItem, TaskExecuteBase, UserItem
 from app.task.proxy_helpers import push_dispatch_log
@@ -26,11 +16,6 @@ from app.utils.logger import get_logger
 
 logger = get_logger("脚本运行")
 
-# 进程级在途维护检测句柄：``asyncio.to_thread`` 的底层调用无法被取消，句柄
-# 必须由跨 AutoProxy 实例（跨用户、跨重新运行）有效的 owner 持有——调度会
-# 逐用户新建 AutoProxy，实例级句柄随实例失效，卡住的截图/OCR 便会在同一个
-# 默认执行器里继续累积。按脚本条目（script_id）分槽：ok-nte 与 ok-ww 是不同的
-# 检测资源，互不阻塞。只有底层真正结束才释放。
 _INFLIGHT_DETECTIONS: dict[str, asyncio.Task] = {}
 
 
@@ -41,68 +26,54 @@ def _running_inflight_detection(script_id: str) -> asyncio.Task | None:
     if task is None:
         return None
     if task.get_loop() is not asyncio.get_running_loop():
-        # 旧事件循环遗留的句柄：不适用于当前循环
         _INFLIGHT_DETECTIONS.pop(script_id, None)
         return None
     if not task.done():
         return task
     _INFLIGHT_DETECTIONS.pop(script_id, None)
-    # 取回异常，避免「Task exception was never retrieved」告警
     with suppress(Exception):
         task.exception()
     return None
 
 
-type ProxyScriptConfigType = (
-    MaaConfig
-    | MaaEndConfig
-    | SrcConfig
-    | OkwwConfig
-    | OkNteConfig
-    | GeneralConfig
-    | BetterGIConfig
-    | ZzzOdConfig
-    | BAAHConfig
-    | WhimboxConfig
-)
-
-
-class ScriptAutoProxyBase[S: ProxyScriptConfigType, U: UserConfigType](TaskExecuteBase):
-    # 总时限涵盖等待和全部重试，不随日志推进重置；收尾必须完成后再切换账号。
+class ScriptAutoProxyBase(TaskExecuteBase):
+    # 总时限涵盖从任务开始到结束的全部时间（含等待和全部重试），不随日志推进重置；
+    # 超过上限时间视为失败并强制清理进程，收尾必须完成后再切换下一个任务，避免打扰下一个任务。
     wait_for_finalizer_on_cancel = True
 
     script_info: ScriptItem
-    script_config: S
+    script_config: ConfigBase
     cur_user_item: UserItem
-    cur_user_config: U
-    # 当前尝试的日志记录用于维护跳过等运行期记账。
+    cur_user_config: ConfigBase
     cur_user_log: LogRecord
-    # 用户级前/后脚本成对标记：前置跑过才收尾后置，且每用户只收尾一次。
     _user_scripts_started: bool = False
-    # 运行期维护弹窗监视的命中结论（含原文），未命中为 None；由
-    # watch_game_maintenance 写入、main_task 出等待循环后消费。
     _maintenance_reason: str | None = None
-    # 运行期监视参数：轮询间隔与确认次数（连续命中才算，防止游戏内
-    # 短暂出现的公告文本被误判为维护弹窗）。
+    _task_started_monotonic: float | None = None
     _MAINTENANCE_WATCH_INTERVAL_SECONDS = 30.0
     _MAINTENANCE_WATCH_CONFIRMATIONS = 2
-    # 单次维护检测的超时：窗口捕获/OCR 卡住时按未命中放行，不拖住主流程
     _MAINTENANCE_DETECT_TIMEOUT_SECONDS = 15.0
 
     @property
     def run_timeout_seconds(self) -> float:
-        return self.script_config.Run.HardTimeLimit * 60
+        return self.script_config.get("Run", "HardTimeLimit") * 60
+
+    def remaining_hard_timeout_seconds(self) -> float:
+        """返回距离整个任务上限时间（从任务开始到结束的总时间）的剩余秒数。"""
+        total = float(self.run_timeout_seconds)
+        if self._task_started_monotonic is None:
+            return total
+        elapsed = time.monotonic() - self._task_started_monotonic
+        return max(0.0, total - elapsed)
 
     async def run_user_scripts_before(self) -> None:
         """执行用户级任务前脚本；每用户一次，先于全部重试。"""
 
-        # 就地导入：专项包会反向导入本模块，模块级导入会成环。
         from app.task.general.tools import execute_script_task
 
         self._user_scripts_started = True
-        if getattr(self.cur_user_config.Info, "IfScriptBeforeTask", False):
+        if self.cur_user_config.get("Info", "IfScriptBeforeTask"):
             await execute_script_task(
-                getattr(self.cur_user_config.Info, "ScriptBeforeTask", None),
+                Path(self.cur_user_config.get("Info", "ScriptBeforeTask")),
                 "脚本前任务",
             )
 
@@ -114,22 +85,14 @@ class ScriptAutoProxyBase[S: ProxyScriptConfigType, U: UserConfigType](TaskExecu
         if not self._user_scripts_started:
             return
         self._user_scripts_started = False
-        if getattr(self.cur_user_config.Info, "IfScriptAfterTask", False):
+        if self.cur_user_config.get("Info", "IfScriptAfterTask"):
             await execute_script_task(
-                getattr(self.cur_user_config.Info, "ScriptAfterTask", None),
+                Path(self.cur_user_config.get("Info", "ScriptAfterTask")),
                 "脚本后任务",
             )
 
     async def skip_on_game_maintenance(self, detect: Callable[[], str | None]) -> bool:
-        """游戏画面维护检测：命中维护弹窗文本则把当前用户记为维护跳过。
-
-        公告通道（ScriptManagerBase.skip_maintenance_user）在启动前完成跳过；
-        这里兜底「公告未覆盖但弹窗已出现」的场景，只覆盖游戏窗口已存在的
-        情况（MAS 拉起、客户端已在运行）。检测失败或窗口不存在一律放行，
-        不阻断正常流程。``detect`` 由专项提供（自持窗口截图与 OCR，命中
-        维护弹窗文本返回原文、否则 None）；须在 main_task 尝试循环内、
-        cur_user_log 赋值之后调用。
-        """
+        """游戏画面维护检测：命中维护弹窗文本则把当前用户记为维护跳过。"""
 
         maintenance_text = await self._detect_game_maintenance(detect)
         if maintenance_text is None:
@@ -147,17 +110,8 @@ class ScriptAutoProxyBase[S: ProxyScriptConfigType, U: UserConfigType](TaskExecu
     async def _detect_game_maintenance(
         self, detect: Callable[[], str | None]
     ) -> str | None:
-        """执行一次维护检测，返回命中原文；未命中、失败或超时返回 None。
-
-        ``asyncio.to_thread`` 已开始的调用无法被取消（Python 3.12 语义），
-        故超时只放弃异步等待、不取消实际检测任务。在途句柄由进程级 registry
-        按 script_id 持有，跨用户与重新运行都有效；其真正结束前不再投递新的
-        检测，避免卡住的截图/OCR 在执行器里叠加。
-        """
-
         script_id = self.script_info.script_id
         if _running_inflight_detection(script_id) is not None:
-            # 上一轮底层检测仍未结束：跳过本轮采样（按未命中处理）
             return None
         task = asyncio.ensure_future(asyncio.to_thread(detect))
         _INFLIGHT_DETECTIONS[script_id] = task
@@ -173,8 +127,6 @@ class ScriptAutoProxyBase[S: ProxyScriptConfigType, U: UserConfigType](TaskExecu
         return text
 
     async def notify_maintenance_skip(self, reason: str) -> None:
-        """推送维护跳过通知；失败仅记警告，不改变跳过结论。"""
-
         try:
             await push_dispatch_log(self.script_info, reason)
             await Publisher.send(
@@ -188,20 +140,6 @@ class ScriptAutoProxyBase[S: ProxyScriptConfigType, U: UserConfigType](TaskExecu
     async def watch_game_maintenance(
         self, detect: Callable[[], str | None], stop: asyncio.Event
     ) -> None:
-        """脚本运行期间的维护弹窗后台监视（与等待脚本结果并行）。
-
-        每 ``_MAINTENANCE_WATCH_INTERVAL_SECONDS`` 秒用专项的 detect 读一次
-        游戏画面，连续命中 ``_MAINTENANCE_WATCH_CONFIRMATIONS`` 次才判维护
-        （游戏内瞬时文本不算）；判定后只写 ``_maintenance_reason`` 与状态标记
-        并置 stop，由 main_task 出等待循环后统一落笔结论与通知——通知放在
-        最终判定处，避免与随后的成功结论互相矛盾。检测失败、窗口不存在或
-        上一次次检测仍未结束时均按未命中处理。
-
-        临时补位：上游 ok-nte / ok-ww 没有运行期维护退出信号入口（脚本把
-        维护当普通重试空转），MAS 在此按画面补位，待上游提供可消费的结果面
-        后改为复用。
-        """
-
         hits = 0
         while not stop.is_set():
             await asyncio.sleep(self._MAINTENANCE_WATCH_INTERVAL_SECONDS)
@@ -214,7 +152,6 @@ class ScriptAutoProxyBase[S: ProxyScriptConfigType, U: UserConfigType](TaskExecu
             hits += 1
             if hits < self._MAINTENANCE_WATCH_CONFIRMATIONS:
                 continue
-            # 成功结论先落时不再覆盖（成功与弹窗同时出现的竞态）
             if self.cur_user_log.status == "Success!":
                 return
             try:
@@ -227,7 +164,6 @@ class ScriptAutoProxyBase[S: ProxyScriptConfigType, U: UserConfigType](TaskExecu
                     f"用户 {self.cur_user_item.name} - {self._maintenance_reason}"
                 )
             finally:
-                # 通知由 main_task 在最终判定处推送；这里必须让等待循环退出
                 stop.set()
             return
 
@@ -243,12 +179,11 @@ class ScriptAutoProxyBase[S: ProxyScriptConfigType, U: UserConfigType](TaskExecu
             await super()._finalize_task()
         finally:
             await self.run_user_scripts_after()
-            # 收尾不等待卡住的检测：只留一条可查的说明。句柄由进程级 registry
-            # 持有并在底层结束后自动回收，既不堆积线程、也不拖住收尾。
             if _running_inflight_detection(self.script_info.script_id) is not None:
                 logger.warning("上一轮游戏画面维护检测仍未结束，本轮不再投递新检测")
 
     async def _run_main_task(self) -> None:
+        self._task_started_monotonic = time.monotonic()
         timeout = asyncio.timeout(self.run_timeout_seconds)
         try:
             async with timeout:
@@ -268,5 +203,10 @@ class ScriptAutoProxyBase[S: ProxyScriptConfigType, U: UserConfigType](TaskExecu
                 user.log_record[datetime.now()] = record
             record.status = message
             record.content.append(message)
-            self.script_info.log = f"{message}\n正在中止相关程序"
+            self.script_info.log = f"{message}\n正在强制清理相关程序 (taskkill /F /T x3)"
             logger.warning(f"{self.script_info.name} - {user.name}: {message}")
+            # 超过总上限时间时立即执行强制清理，确保绝不打扰下一个任务
+            kill_fn = getattr(self, "kill_managed_process", None)
+            if callable(kill_fn):
+                with suppress(Exception):
+                    await kill_fn()

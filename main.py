@@ -21,10 +21,12 @@
 #   Contact: DLmaster_361@163.com
 
 
+import argparse
 import ctypes
 import logging
 import os
 import sys
+import uuid
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
@@ -33,9 +35,6 @@ current_dir = Path(__file__).resolve().parent
 if str(current_dir) not in sys.path:
     sys.path.insert(0, str(current_dir))
 if __name__ == "__main__" and os.getenv("AUTO_MAS_SUPERVISED") != "1":
-    # 受监督时由监督器决定工作目录（app-root），源码在 repo/ 子目录，不能 chdir 进去；
-    # 判据与 app.utils.is_supervised() 相同，此处不能先导入 app.utils（见下方
-    # app.utils.logger 会在导入时以 Path.cwd() 建 debug/ 目录，导入必须留在 chdir 之后）
     os.chdir(current_dir)
 
 from app.utils import (  # noqa: E402
@@ -48,20 +47,12 @@ from app.utils.platform import IS_WINDOWS, is_admin  # noqa: E402
 
 logger = get_logger("主程序")
 
-# 清理启动链路（Runtime → uv run → 后端）注入的 Python/uv 环境变量。MAS 自身
-# 不消费它们，但进程环境会原样传给所有被 MAS 拉起的子进程（专项脚本启动器、
-# 提权 ShellExecute 等）：外部脚本自己的 uv/pip 会把环境解析到 MAS 的 runtime
-# venv 上、甚至尝试删除该目录（曾导致 ZzzOd 启动器报「运行环境同步失败」并
-# 损坏 venv）。uv run 实际注入 VIRTUAL_ENV、UV_PROJECT_ENVIRONMENT、UV、
-# UV_RUN_RECURSION_DEPTH 与 PATH 前置 <venv>/Scripts 五样，逐一摘除
+# 清理启动链路（Runtime → uv run → 后端）注入的 Python/uv 环境变量。
 _leaked_venv = os.environ.pop("VIRTUAL_ENV", None)
 for _leaked_env in ("UV", "UV_PROJECT_ENVIRONMENT", "UV_RUN_RECURSION_DEPTH"):
     os.environ.pop(_leaked_env, None)
 if _leaked_venv is not None:
     logger.info(f"已清理启动链路注入的环境变量: VIRTUAL_ENV={_leaked_venv}")
-    # <venv>/Scripts（内含 python.exe/pip.exe）插在 PATH 里不摘的话，任何经
-    # PATH 裸调 python/pip 的子进程都会命中 MAS 的 runtime venv；按该值精确
-    # 摘除对应段，PATH 其余内容不动
     _venv_scripts = os.path.normcase(
         os.path.join(_leaked_venv, "Scripts" if os.name == "nt" else "bin").rstrip(
             "\\/"
@@ -77,48 +68,76 @@ if _leaked_venv is not None:
         os.environ["PATH"] = os.pathsep.join(_kept_entries)
         logger.info(f"已从 PATH 摘除启动链路注入的段: {_venv_scripts}")
 
-# 正式版固定端口；开发环境错开一位，避免与用户已装正式版抢占同一端口
 DEFAULT_HTTP_PORT = 36163
 DEV_HTTP_PORT = 36164
-# 受 AUTO-MAS-Runtime 监督时由监督器注入的监听端口；受监督时只认它
 SUPERVISED_PORT_ENV = "AUTO_MAS_SUPERVISED_PORT"
 SUPERVISED_PORT_MIN = 1024
-# /api/core/health 里后台初始化失败项的长度上限：Runtime 拒收超过 64 KiB 的健康响应正文，
-# 单条异常信息与失败项条数都要封顶
 BACKGROUND_ERROR_MESSAGE_MAX = 300
 BACKGROUND_WARNINGS_MAX = 20
 
 
 class InterceptHandler(logging.Handler):
     def emit(self, record):
-        message = record.getMessage()
-        # 获取对应 loguru 的 level
         try:
             level = logger.level(record.levelname).name
         except ValueError:
             level = record.levelno
-        # 过滤 httpcore 正常阶段流水，失败事件提为 WARNING，保留到 app.log
-        if record.levelno == logging.DEBUG and (
-            record.name == "httpcore" or record.name.startswith("httpcore.")
-        ):
-            event = message.partition(" ")[0]
-            if event.endswith((".started", ".complete")):
-                return
-            if event.endswith(".failed"):
-                level = "WARNING"
-        # 访问日志降到 DEBUG: 不进 app.log (INFO), 开发时 stderr (DEBUG) 仍可见
         if record.name == "uvicorn.access":
             level = "DEBUG"
-        # 过滤敏感信息并转发日志
-        sanitized_message = sanitize_log_message(message)
+        sanitized_message = sanitize_log_message(record.getMessage())
         logger.opt(depth=6, exception=record.exc_info).log(level, sanitized_message)
 
 
-# 拦截标准 logging
 logging.basicConfig(handlers=[InterceptHandler()], level=0, force=True)
 for name in ("uvicorn", "uvicorn.error", "uvicorn.access", "fastapi"):
     logging.getLogger(name).handlers = [InterceptHandler()]
     logging.getLogger(name).propagate = False
+
+
+def parse_cli_args(argv: list[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="AUTO-MAS 后端服务（支持前后端分离模式，也支持通过启动参数无窗口直接运行任务）",
+        add_help=True,
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=0,
+        help="指定后端 HTTP/WS 监听端口（默认 36163）",
+    )
+    parser.add_argument(
+        "--headless",
+        "--no-window",
+        dest="headless",
+        action="store_true",
+        help="无窗口静默运行模式（不打开前端窗口，远程桌面在系统托盘静默运行）",
+    )
+    parser.add_argument(
+        "--run-queue",
+        dest="run_queue",
+        default="",
+        help="后端就绪后立即自动启动指定队列 ID（传入 first 表示启动第一个队列）",
+    )
+    parser.add_argument(
+        "--run-script",
+        dest="run_script",
+        default="",
+        help="后端就绪后立即自动启动指定脚本任务 ID",
+    )
+    parser.add_argument(
+        "--auto-run",
+        dest="auto_run",
+        action="store_true",
+        help="后端就绪后自动触发首个调度队列运行",
+    )
+    parser.add_argument(
+        "--no-admin-restart",
+        dest="no_admin_restart",
+        action="store_true",
+        help="禁用自动提权重启（由外层启动器或无头脚本托管时使用）",
+    )
+    args, _ = parser.parse_known_args(argv)
+    return args
 
 
 def restart_as_admin():
@@ -126,40 +145,27 @@ def restart_as_admin():
     if IS_WINDOWS:
         executable = sys.executable.removesuffix(".exe")
         executable += ".exe"
+        extra_args = " ".join(f'"{a}"' for a in sys.argv[1:])
+        cmd_line = f'"{os.path.realpath(sys.argv[0])}" {extra_args}'.strip()
         result = ctypes.windll.shell32.ShellExecuteW(
             None,
             "runas",
-            "wt.exe",
-            f'"{executable}" "{os.path.realpath(sys.argv[0])}"',
+            executable,
+            cmd_line,
             None,
-            1,
+            0 if "--headless" in sys.argv or "--no-window" in sys.argv else 1,
         )
-        if result > 32:
-            sys.exit(0)
-        else:
-            result = ctypes.windll.shell32.ShellExecuteW(
-                None, "runas", executable, os.path.realpath(sys.argv[0]), None, 1
-            )
-            sys.exit(result)
+        sys.exit(0 if result > 32 else result)
 
 
 def is_development_environment() -> bool:
-    """识别开发环境：前端传入的环境变量，或仓库根目录的 .env 标记文件。
-
-    .env 不纳入版本库，模板见 .env.example；更新器也不会把它复制到
-    用户安装目录，因此用户直接启动后端时仍按生产环境上报。
-    """
-
     raw = str(os.getenv("AUTO_MAS_ENV", "")).strip().lower()
     if raw in {"dev", "development"}:
         return True
-
     return (current_dir / ".env").is_file()
 
 
 def is_hosted_launch() -> bool:
-    """识别由前端拉起的后端进程，此时提权由前端负责，无需自行提权。"""
-
     raw = str(os.getenv("AUTO_MAS_DEV", "")).strip().lower()
     return raw in {"1", "true", "yes", "on"}
 
@@ -170,39 +176,16 @@ def should_restart_as_admin(
     admin: bool,
     hosted_launch: bool,
     development_environment: bool,
+    no_admin_restart: bool = False,
 ) -> bool:
-    """判断是否需要以管理员身份重启当前进程。
-
-    抽成纯函数便于单独测试：restart_as_admin() 会 ShellExecuteW("runas", ...)
-    拉起新进程再退出当前进程，若在受 AUTO-MAS-Runtime 监督（Windows Job Object
-    托管进程树）下这么做，新进程会脱离 Job Object，监督器看到旧进程退出即判定
-    后端已结束，因此受监督时优先级最高、永远不重启；其余情况维持既有判据。
-    """
-
-    if supervised:
+    if supervised or no_admin_restart:
         return False
     return not (admin or hosted_launch or development_environment)
 
 
-def resolve_http_port(development_environment: bool) -> int:
-    """解析 HTTP/WS 监听端口，让开发环境与用户安装的正式版可以同时运行。
-
-    正式版保持 36163 不变；开发环境默认改用 36164，因此源码调试不会再抢占
-    用户已装正式版的端口。前端拉起后端时会注入 AUTO_MAS_HTTP_PORT，保证两侧
-    始终对齐同一个端口。
-
-    受 AUTO-MAS-Runtime 监督时只认监督器注入的 AUTO_MAS_SUPERVISED_PORT：
-    监督器按实例类型自行选定端口（managed 缺省 36163、development 缺省 36164）
-    并据此做健康检查与关闭请求。后端若钉死 36163，受监督的开发版就会撞上同机
-    正在运行的正式版。该变量缺失或非法时回退 36163 并记 warning；.env、
-    AUTO_MAS_HTTP_PORT 与开发环境判据在受监督时一律忽略，优先级低于注入值。
-
-    Args:
-        development_environment: 当前是否为开发环境。
-
-    Returns:
-        实际用于监听的端口号。
-    """
+def resolve_http_port(development_environment: bool, cli_port: int = 0) -> int:
+    if 1 <= cli_port <= 65535:
+        return cli_port
 
     raw = str(os.getenv("AUTO_MAS_HTTP_PORT", "")).strip()
 
@@ -226,8 +209,6 @@ def resolve_http_port(development_environment: bool) -> int:
 
 
 def _resolve_supervised_port() -> int:
-    """读取 Runtime 注入的 AUTO_MAS_SUPERVISED_PORT；缺失或非法时回退 36163。"""
-
     raw = os.getenv(SUPERVISED_PORT_ENV)
     if raw is None:
         logger.warning(
@@ -247,7 +228,11 @@ def _resolve_supervised_port() -> int:
 
 
 @logger.catch
-def main():
+def main(argv: list[str] | None = None):
+    cli_args = parse_cli_args(argv)
+    if cli_args.headless:
+        os.environ["AUTO_MAS_HEADLESS"] = "1"
+
     development_environment = is_development_environment()
     if development_environment:
         os.environ["AUTO_MAS_ENV"] = "development"
@@ -259,6 +244,7 @@ def main():
         admin=admin,
         hosted_launch=is_hosted_launch(),
         development_environment=development_environment,
+        no_admin_restart=bool(cli_args.no_admin_restart or cli_args.headless),
     ):
         restart_as_admin()
     elif supervised and not admin:
@@ -276,11 +262,10 @@ def main():
 
     Config.set_restore_pool_resolver(resolve_restore_pools)
 
-    # 开发环境不上报遥测数据
     init_sentry(
         release=Config.VERSION,
         development=development_environment,
-        enabled=is_telemetry_enabled(Path.cwd() / "config" / "setting.yaml"),
+        enabled=is_telemetry_enabled(Path.cwd() / "config" / "Config.json"),
         dist=resolve_sentry_dist(current_dir),
     )
 
@@ -289,11 +274,11 @@ def main():
 
     import uvicorn
     from fastapi import FastAPI
+    from fastapi.responses import FileResponse
     from fastapi.staticfiles import StaticFiles
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        # 预热共享 SSL 上下文：truststore 全量加载证书库较慢，放线程执行避免首个请求卡死
         import ssl
 
         from app.core import Config, MainTimer, TaskManager
@@ -301,6 +286,11 @@ def main():
         asyncio.create_task(asyncio.to_thread(ssl.create_default_context))
 
         await Config.init_config()
+
+        # 默认强制开启远程桌面托盘隐藏模式，避免打扰主桌面
+        with suppress(Exception):
+            if Config.get("ChildSession", "StartHidden") is None:
+                await Config.set("ChildSession", "StartHidden", True)
 
         from app.api.ws_command import execute_ws_command
         from app.core.notify_channels import initialize_notification_channels
@@ -310,30 +300,17 @@ def main():
         background_task: asyncio.Task | None = None
 
         async def initialize_background_services() -> None:
-            """后台完成重活初始化：MCP 挂载、活动关卡、历史清理、诊断文件清理、主定时器。
-
-            lifespan 提前 yield 后 uvicorn 立即打印 "Uvicorn running"，
-            让前端等待就绪的耗时只包含核心配置初始化。
-            各步骤互不连带：主定时器失败时 background_status 为 failed 并写 background_error；
-            其余步骤失败时仍为 ready，失败步骤只写进 background_warnings。
-            """
-
-            # 各步骤各自容错：任一步抛异常只记日志，不连带跳过后面的步骤，
-            # 尤其不能跳过主定时器（队列定时按分钟精确匹配，没起来就整夜不触发）。
             warnings: list[str] = []
 
             async def run_step(
                 name: str, step: Callable[[], Awaitable[Any]]
             ) -> str | None:
-                """执行一个初始化步骤，失败时返回「步骤名（异常）」，成功返回 None。"""
-
                 try:
                     await step()
                 except asyncio.CancelledError:
                     raise
                 except Exception as error:
                     logger.exception(f"后台初始化步骤失败: {name}")
-                    # 完整堆栈已进日志；health 里只放截断后的摘要，正文有上限
                     message = str(error)
                     if len(message) > BACKGROUND_ERROR_MESSAGE_MAX:
                         message = message[:BACKGROUND_ERROR_MESSAGE_MAX] + "…"
@@ -357,11 +334,51 @@ def main():
 
                 await DesktopGuard.start()
 
-            async def init_stage_info() -> None:
-                from app.task.MAA.tools.stage_service import maa_stage_service
+            async def start_child_session() -> None:
+                from app.core.child_session import ChildSessionManager
 
-                # 启动不等待远端检查：缓存过期时后台拉取，页面打开时再等结果
-                await maa_stage_service.get_stage(wait_stale=False)
+                await ChildSessionManager.start()
+
+            async def start_hotkeys() -> None:
+                from app.core.hotkey_manager import HotkeyManager
+
+                await HotkeyManager.start()
+
+            async def init_stage_info() -> None:
+                await Config.get_stage(wait_stale=False)
+
+            async def run_cli_startup_tasks() -> None:
+                """当通过启动参数传入 --run-queue / --run-script / --auto-run 时，无窗口直接启动对应任务。"""
+                target_queue = str(cli_args.run_queue or "").strip()
+                target_script = str(cli_args.run_script or "").strip()
+                if cli_args.auto_run and not target_queue and not target_script:
+                    target_queue = "first"
+
+                if target_queue:
+                    target_id = None
+                    if target_queue.lower() == "first" and Config.QueueConfig:
+                        target_id = next(iter(Config.QueueConfig.keys()))
+                    elif target_queue.lower() != "first":
+                        try:
+                            target_id = uuid.UUID(target_queue)
+                        except ValueError:
+                            pass
+                    if target_id is not None and target_id in Config.QueueConfig:
+                        logger.info(f"启动参数触发队列直接运行 (无窗口模式): Queue={target_id}")
+                        await TaskManager.add_task("AutoProxy", str(target_id))
+                    else:
+                        logger.warning(f"启动参数指定的队列不存在: {target_queue}")
+
+                if target_script:
+                    try:
+                        script_id = uuid.UUID(target_script)
+                    except ValueError:
+                        script_id = None
+                    if script_id is not None and script_id in Config.ScriptConfig:
+                        logger.info(f"启动参数触发单脚本直接运行 (无窗口模式): Script={target_script}")
+                        await TaskManager.add_task("AutoProxy", target_script)
+                    else:
+                        logger.warning(f"启动参数指定的脚本不存在: {target_script}")
 
             app.state.background_status = "running"
             try:
@@ -369,16 +386,12 @@ def main():
                 await run_optional_step("活动关卡信息获取", init_stage_info)
 
                 async def _maafw_startup_maintenance() -> None:
-                    # 老副本一次性采纳成「载荷 + 视图」要几分钟：连同它后面依赖终态布局的
-                    # 各项回收一起放到后台，不挡主定时器（队列定时按分钟精确匹配，挡住就
-                    # 被静默跳过）。期间撞上的 MFW 运行在运行前检查里按「正在切换版本」跳过。
                     try:
                         await Config.migrate_maafw_embedded_copies_to_payloads()
                         await Config.clean_maafw_agent_venvs()
                         await Config.clean_maafw_embedded_copies()
                         await Config.clean_maafw_runtime_blobs()
                         await Config.clean_maafw_update_cache()
-                        # 副本清理之后：副本没了，它的 binding / runtime 才会变成无人引用
                         await Config.clean_maafw_runtime_pool()
                     except asyncio.CancelledError:
                         raise
@@ -389,15 +402,15 @@ def main():
                     _maafw_startup_maintenance()
                 )
 
-                # 显示输出守卫要早于主定时器：定时器可能立刻拉起一轮任务，而任务开跑前
-                # 会要求守卫强制巡检一次，守卫没起来那次巡检就是空转。守卫失败不拦定时器：
-                # 空转一次巡检远比定时任务整夜不触发轻。
                 await run_optional_step("桌面显示输出守卫", start_desktop_guard)
+                await run_optional_step("本地远程桌面分身", start_child_session)
+                await run_optional_step("全局热键服务", start_hotkeys)
                 timer_error = await run_step("主业务定时器", MainTimer.start)
 
                 from app.services.notification import Notify
 
                 await run_optional_step("通知渠道", Notify.start)
+                await run_optional_step("启动参数直接运行任务", run_cli_startup_tasks)
 
                 if (Path.cwd() / "AUTO-MAS-Setup.exe").exists():
                     try:
@@ -410,9 +423,6 @@ def main():
                     except Exception as e:
                         logger.error(f"删除AUTO_MAA.exe失败: {e}")
 
-                # AUTO-MAS-Runtime 把 backgroundError 非空或 failed 判为启动失败并收掉进程，
-                # 所以可选步骤的失败只进 background_warnings（前端据此提示），状态仍是 ready；
-                # 只有主定时器没起来才是 failed。
                 if len(warnings) > BACKGROUND_WARNINGS_MAX:
                     omitted = len(warnings) - (BACKGROUND_WARNINGS_MAX - 1)
                     warnings[BACKGROUND_WARNINGS_MAX - 1 :] = [
@@ -443,43 +453,38 @@ def main():
         background_task = asyncio.create_task(initialize_background_services())
 
         async def shutdown_services() -> None:
-            """完整的非 WS teardown，供 /close 与 lifespan 收尾共用（幂等）。"""
-
             from app.core.ws import Dispatcher, MainConnection
             from app.runtime_tasks import RuntimeTasks
             from app.services import Matomo, System, Updater
 
-            # 先停止仍在执行的后台初始化，避免它在 teardown 期间继续启动服务
             if background_task is not None and not background_task.done():
                 background_task.cancel()
                 with suppress(asyncio.CancelledError):
                     await background_task
-            # MFW 启动期维护（迁移 + 回收）也是后台跑的：同样先停下。迁移逐副本持视图预约、
-            # 被打断的切换有 journal，下次启动收尾。
             maintenance = getattr(app.state, "maafw_startup_maintenance", None)
             if maintenance is not None and not maintenance.done():
                 maintenance.cancel()
                 with suppress(asyncio.CancelledError):
                     await maintenance
 
-            # 停止 WS 分发与连接后台任务，避免清理期间仍处理入站消息
             await MainConnection.begin_shutdown()
             await Dispatcher.shutdown()
             await MainConnection.cancel_hook_tasks()
 
-            # 取消待执行的电源操作（无任务在跑属正常）
             with suppress(RuntimeError):
                 await System.cancel_power_task()
 
             await MainTimer.stop()
-
             await TaskManager.stop_task("ALL")
-            # 排在停任务之后：还有任务在收尾时把它脚下的屏拆掉没有意义。后端退出后没人
-            # 会再来收尾这块屏，所以这一步不能省。
-            from app.core.desktop_guard import DesktopGuard
 
+            from app.core.child_session import ChildSessionManager
+            from app.core.desktop_guard import DesktopGuard
+            from app.core.hotkey_manager import HotkeyManager
+
+            await HotkeyManager.stop()
+            await ChildSessionManager.stop()
             await DesktopGuard.stop()
-            # 任务 final_task 可能在收尾时重新安排电源操作，停止后再次兜底取消。
+
             with suppress(RuntimeError):
                 await System.cancel_power_task()
             await Updater.cancel_download(notify=False)
@@ -487,15 +492,12 @@ def main():
 
             await ObsReplay.stop()
             await RuntimeTasks.shutdown()
-            from app.core.task_report import shutdown_community_notifications
+            from app.core.notify import shutdown_community_notifications
 
             await shutdown_community_notifications()
             from app.services.notification import Notify
 
             await Notify.stop()
-            from app.config import config_manager
-
-            await config_manager.flush()
             await Matomo.close()
             logger.info("AUTO-MAS 后端服务清理完成")
 
@@ -505,13 +507,13 @@ def main():
         try:
             yield
         finally:
-            # 覆盖 taskkill 等未经 /close 的退出路径；已由 /close 执行过则跳过
             await ShutdownCoordinator.run_teardown()
             logger.info("AUTO-MAS 后端程序关闭")
 
     from fastapi.middleware.cors import CORSMiddleware
 
     from app.api import (
+        child_session_router,
         core_router,
         dispatch_router,
         emulator2_router,
@@ -540,13 +542,14 @@ def main():
 
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],  # 允许所有域名跨域访问
+        allow_origins=["*"],
         allow_credentials=True,
-        allow_methods=["*"],  # 允许所有请求方法, 如 GET、POST、PUT、DELETE
-        allow_headers=["*"],  # 允许所有请求头
+        allow_methods=["*"],
+        allow_headers=["*"],
     )
 
     app.include_router(core_router)
+    app.include_router(child_session_router)
     app.include_router(info_router)
     app.include_router(scripts_router)
     app.include_router(plan_router)
@@ -563,7 +566,6 @@ def main():
     app.include_router(openclaw_qq_router)
     app.include_router(qr_login_router)
 
-    # 可选补丁：森空岛扫码登录
     if skland_qr_router is not None:
         app.include_router(skland_qr_router)
 
@@ -578,10 +580,23 @@ def main():
         name="sounds",
     )
 
+    webui_dir = current_dir / "frontend" / "webui"
+    if webui_dir.is_dir():
+        @app.get("/", include_in_schema=False)
+        async def serve_root_webui():
+            return FileResponse(str(webui_dir / "index.html"))
+
+        app.mount(
+            "/webui",
+            StaticFiles(directory=str(webui_dir), html=True),
+            name="webui",
+        )
+
     async def run_server():
-        http_port = resolve_http_port(development_environment)
-        logger.info(f"后端监听端口: {http_port}")
-        # 主 WebSocket 心跳依赖协议层 ping/pong，显式配置底层参数
+        http_port = resolve_http_port(development_environment, cli_args.port)
+        logger.info(
+            f"后端监听端口: {http_port} (无窗口模式={bool(cli_args.headless)})"
+        )
         config = uvicorn.Config(
             app,
             host="0.0.0.0",

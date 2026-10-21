@@ -27,6 +27,7 @@ import time
 from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import psutil
 
@@ -50,6 +51,9 @@ _RESEEK_TIMEOUT_SECONDS = 5.0
 # 原进程退出最多晚一个日志空闲回调周期（60s）, 留足余量后仍能把运行期间早已
 # 存在的同 exe 无关实例（如用户手动打开的启动器 GUI）挡在改绑之外
 _RESEEK_MAX_SUCCESSOR_AGE_SECONDS = 180.0
+
+# 强制清理连续调用 taskkill /F /T 的次数
+FORCE_KILL_PASSES = 3
 
 
 @dataclass
@@ -138,7 +142,7 @@ def get_main_window_handle(
 
 
 class ProcessManager:
-    """进程监视器类, 用于跟踪主进程及其所有子进程的状态"""
+    """进程监视器类, 用于跟踪主进程及其所有子进程的状态（支持本地远程桌面 Child Session 包装器模式）"""
 
     def __init__(
         self,
@@ -148,7 +152,7 @@ class ProcessManager:
     ):
         super().__init__()
 
-        self.process: asyncio.subprocess.Process | None = None
+        self.process: asyncio.subprocess.Process | Any | None = None
         self.target_process: psutil.Process | None = None
         self.window_title = window_title
         self.window_class_name = window_class_name
@@ -158,6 +162,8 @@ class ProcessManager:
         self._target_info: ProcessInfo | None = None
         self._target_create_time: float | None = None
         self._drain_tasks: list[asyncio.Task[None]] = []
+        self.last_returncode: int | None = None
+        self._launched_program: Path | None = None
 
     @property
     def main_pid(self) -> int | None:
@@ -170,7 +176,21 @@ class ProcessManager:
         return None
 
     @property
-    def main_process(self) -> psutil.Process | asyncio.subprocess.Process | None:
+    def returncode(self) -> int | None:
+        """获取被管理进程的退出码（兼容本地进程与远程桌面 Wrapper 进程）。"""
+        if self.process is not None and self.process.returncode is not None:
+            self.last_returncode = int(self.process.returncode)
+            return self.last_returncode
+        if self.target_process is not None and not self.target_process.is_running():
+            with suppress(Exception):
+                rc = self.target_process.wait(timeout=0)
+                if rc is not None:
+                    self.last_returncode = int(rc)
+                    return self.last_returncode
+        return self.last_returncode
+
+    @property
+    def main_process(self) -> psutil.Process | asyncio.subprocess.Process | Any | None:
         """主进程对象"""
 
         if self.target_process is not None:
@@ -202,22 +222,11 @@ class ProcessManager:
         elevated: bool = False,
         breakaway: bool = False,
         env: dict[str, str] | None = None,
+        use_child_session: bool | None = None,
     ) -> None:
         """
-        启动子进程并跟踪目标进程
-
-        Args:
-            program (Path | str): 可执行文件路径
-            *args (str): 传递给可执行文件的参数
-            cwd (Path | None): 可选的工作目录, 默认为可执行文件所在目录
-            target_process (ProcessInfo | None): 期望目标进程信息, 用于跟踪主进程及其子进程, 默认为 None 表示跟踪直接启动的子进程
-            stdin (int): 标准输入重定向选项, 默认为 asyncio.subprocess.DEVNULL
-            stdout (int): 标准输出重定向选项, 默认为 asyncio.subprocess.DEVNULL
-            stderr (int): 标准错误重定向选项, 默认为 asyncio.subprocess.DEVNULL
-            null_stream_to_pipe (bool): 若为 True, 将设为 DEVNULL 的 stdout/stderr 替换为一条自动销毁输出的标准流管道。
-            elevated (bool): 若为 True 且在 Windows 上, 以管理员权限启动进程（触发 UAC），此时不直接持有子进程句柄，依赖 target_process 追踪。
-            breakaway (bool): 若为 True 且在 Windows 上, 让子进程脱离监督器的 Job Object（CREATE_BREAKAWAY_FROM_JOB）。只给游戏/模拟器这类不该随后端退出的进程用, 脚本本体、MAA、agent 等保持默认 False。
-            env (dict[str, str] | None): 子进程环境变量, 默认 None 表示继承当前进程; 传入时会整体替换, 需要保留现有环境的调用点自行并上 os.environ。elevated 走 ShellExecute, 该分支不支持指定环境。
+        启动子进程并跟踪目标进程。
+        当启用本地远程桌面（Child Session）时，自动通过包装器（Wrapper）在本地远程桌面中启动进程并跟踪状态与退出码。
         """
 
         if await self.is_running():
@@ -233,6 +242,34 @@ class ProcessManager:
             raise ValueError("目标进程信息不完整")
 
         await self.clear()
+        self.last_returncode = None
+        self._launched_program = Path(program) if program else None
+
+        # 判断是否需要在本地远程桌面（Child Session）中执行任务
+        if use_child_session is None and os.name == "nt":
+            try:
+                from app.core.child_session import ChildSessionManager
+
+                use_child_session = ChildSessionManager.enabled
+            except Exception:
+                use_child_session = False
+
+        if use_child_session and os.name == "nt":
+            from app.core.child_session import ChildSessionManager
+
+            self.process = await ChildSessionManager.launch_in_child_session(
+                program,
+                *args,
+                cwd=cwd,
+                env=env,
+            )
+            if target_process is not None:
+                await self.search_process(
+                    target_process,
+                    60.0,
+                    min_create_time=time.time(),
+                )
+            return
 
         if elevated and os.name == "nt":
             # 以管理员权限启动进程（触发 UAC），ShellExecute 不返回子进程句柄，
@@ -287,11 +324,7 @@ class ProcessManager:
     def _open_process_elevated(
         program: Path | str, args: tuple[str, ...], cwd: Path | None
     ) -> None:
-        """以管理员权限启动进程（触发 UAC），ShellExecute 成功时返回码大于 32。
-
-        win32 仅在 Windows 路径才使用，故延迟导入，保证本平台通用模块在
-        非 Windows 上也能安全导入。
-        """
+        """以管理员权限启动进程（触发 UAC），ShellExecute 成功时返回码大于 32。"""
         import win32api
         import win32con
 
@@ -312,30 +345,18 @@ class ProcessManager:
             )
 
     async def _drain(self, stream: asyncio.StreamReader) -> None:
-        """
-        消费子进程标准流, 丢弃写入, 防止管道背压阻塞子进程。
-
-        Args:
-            stream (asyncio.StreamReader): 子进程的标准流对象
-        """
+        """消费子进程标准流, 丢弃写入, 防止管道背压阻塞子进程。"""
 
         try:
             while _ := await stream.readline():
                 pass
         except (ValueError, OSError):
-            # 管道读端在子进程退出后被关闭, 属正常终止; 忽略无效句柄冲突
             pass
 
     async def open_protocol(
         self, protocol_url: str, target_process: ProcessInfo
     ) -> None:
-        """
-        使用自定义协议启动子进程, 需要目标进程信息进行跟踪
-
-        Args:
-            protocol_url (str): 自定义协议 URL
-            target_process (ProcessInfo): 期望目标进程信息
-        """
+        """使用自定义协议启动子进程, 需要目标进程信息进行跟踪"""
 
         try:
             await platform_process.open_protocol(protocol_url)
@@ -356,14 +377,7 @@ class ProcessManager:
         timeout_seconds: float = 60.0,
         min_create_time: float | None = None,
     ) -> None:
-        """查找目标进程
-
-        Args:
-            target_process: 期望目标进程信息
-            timeout_seconds: 搜索超时秒数，按单调时钟计量，不受系统时钟跳变影响
-            min_create_time: 进程创建时间下限（epoch 秒），早于该时刻创建的同名进程视为
-                启动前的残留实例并跳过，避免错误跟踪旧进程（留 2 秒容差吸收时间戳偏差）
-        """
+        """查找目标进程"""
 
         def _scan() -> tuple[psutil.Process, float | None] | None:
             for proc in psutil.process_iter(
@@ -379,16 +393,12 @@ class ProcessManager:
                 return proc, create_time
             return None
 
-        # 全量进程扫描放到线程里, 避免阻塞事件循环
         deadline = time.monotonic() + timeout_seconds
         while time.monotonic() < deadline:
             found = await asyncio.to_thread(_scan)
             if found is not None:
                 proc, create_time = found
                 self.target_process = proc
-                # 记录目标信息与创建时间, 供 reseek_target 改绑后继进程。
-                # 创建时间取扫描阶段已读到的值, 不重新查询: 进程可能在扫描后
-                # 退出而抛异常, 受保护进程的创建时间也可能读不到
                 self._target_info = target_process
                 self._target_create_time = create_time
                 return
@@ -397,12 +407,7 @@ class ProcessManager:
             raise RuntimeError("未能在限定时间内找到目标进程")
 
     async def is_running(self) -> bool:
-        """检查当前管理的进程是否仍在运行
-
-        ``reseek_target`` 为 True 时, 跟踪进程退出先按启动时的目标信息搜索
-        创建更晚的同名后继进程（引导式启动器自更新/接力换进程）, 命中则改绑
-        跟踪并视为仍在运行, 找不到才判定结束。
-        """
+        """检查当前管理的进程是否仍在运行"""
 
         if self.target_process is not None:
             if self.target_process.is_running():
@@ -411,19 +416,15 @@ class ProcessManager:
                 return True
             return False
         if self.process is not None:
-            return self.process.returncode is None
+            rc = self.process.returncode
+            if rc is not None:
+                self.last_returncode = int(rc)
+                return False
+            return True
         return False
 
     async def _reseek_target(self) -> bool:
-        """搜索跟踪目标的后继进程（同目标信息、创建更晚且足够新）, 命中则改绑。
-
-        后继进程由原进程接力派出, 创建时间必然晚于原进程, 以原进程创建时间为
-        下限可排除早于本次启动的残留实例; 再叠加「近期创建」下限, 把运行期间
-        早已存在的同 exe 无关实例（用户手动打开的启动器 GUI、指向同安装的并行
-        任务）挡在改绑之外。匹配毕竟只按目标信息（name/exe）进行, 同期新起的
-        同 exe 实例仍可能命中, 误改绑只会拉长等待——最终由调用方的运行超时
-        判定与按路径收尾兜底。搜索窗口覆盖接力换进程的间隙。
-        """
+        """搜索跟踪目标的后继进程（同目标信息、创建更晚且足够新）, 命中则改绑。"""
 
         if self._target_info is None or self._target_create_time is None:
             return False
@@ -447,39 +448,60 @@ class ProcessManager:
         logger.info(f"原跟踪进程已退出, 改绑后继进程 PID: {self.target_process.pid}")
         return True
 
-    async def kill(self) -> None:
-        """停止监视器并中止所有跟踪的进程"""
+    async def _force_taskkill_three_times(self, pid: int | None) -> None:
+        """在 Windows 下对指定 PID 调用 taskkill /F /T 强杀 3 遍。"""
+        if pid is None or pid <= 0:
+            return
+        if os.name == "nt":
+            with suppress(Exception):
+                await platform_process.kill_process(pid, kill_tree=True)
+                return
+        # 非 Windows 或平台降级兜底
+        for _ in range(FORCE_KILL_PASSES):
+            with suppress(Exception):
+                proc = psutil.Process(pid)
+                for child in proc.children(recursive=True):
+                    with suppress(Exception):
+                        child.kill()
+                proc.kill()
+            await asyncio.sleep(0.05)
 
-        if self.target_process is not None and self.target_process.is_running():
-            with suppress(psutil.NoSuchProcess, psutil.AccessDenied):
-                try:
-                    self.target_process.terminate()
-                    await asyncio.get_running_loop().run_in_executor(
-                        None, self.target_process.wait, 3
-                    )
-                except psutil.TimeoutExpired:
-                    self.target_process.kill()
-                    with suppress(psutil.TimeoutExpired):
+    async def kill(self) -> None:
+        """停止监视器并中止所有跟踪的进程（按需求执行 taskkill /F /T 强杀 3 遍）"""
+
+        if self.target_process is not None:
+            target_pid = self.target_process.pid
+            await self._force_taskkill_three_times(target_pid)
+            if self.target_process.is_running():
+                with suppress(psutil.NoSuchProcess, psutil.AccessDenied):
+                    try:
+                        self.target_process.terminate()
                         await asyncio.get_running_loop().run_in_executor(
                             None, self.target_process.wait, 3
                         )
+                    except psutil.TimeoutExpired:
+                        self.target_process.kill()
+                        with suppress(psutil.TimeoutExpired):
+                            await asyncio.get_running_loop().run_in_executor(
+                                None, self.target_process.wait, 3
+                            )
 
-        if self.process is not None and self.process.returncode is None:
-            with suppress(ProcessLookupError):
-                try:
+        if self.process is not None:
+            proc_pid = self.process.pid
+            if self.process.returncode is None:
+                with suppress(ProcessLookupError, Exception):
                     self.process.terminate()
+                await self._force_taskkill_three_times(proc_pid)
+                with suppress(ProcessLookupError, asyncio.TimeoutError, Exception):
                     await asyncio.wait_for(self.process.wait(), timeout=3)
-                except asyncio.TimeoutError:
-                    self.process.kill()
-                    with suppress(asyncio.TimeoutError):
-                        await asyncio.wait_for(self.process.wait(), timeout=3)
+            if self.process.returncode is not None:
+                self.last_returncode = int(self.process.returncode)
 
         await self.clear()
 
     async def clear(self) -> None:
         """清空跟踪的进程信息"""
 
-        # 清理残留的排水任务, 避免泄漏
         if self._drain_tasks:
             for task in self._drain_tasks:
                 if not task.done():
@@ -494,11 +516,7 @@ class ProcessManager:
         self._target_create_time = None
 
     async def is_visible(self) -> bool:
-        """检查主进程窗口是否可见
-
-        Returns:
-            bool: 窗口是否可见
-        """
+        """检查主进程窗口是否可见"""
 
         hwnd = self.main_hwnd
         if hwnd is None:
@@ -510,11 +528,7 @@ class ProcessManager:
             return False
 
     async def show_window(self) -> bool:
-        """显示主进程窗口
-
-        Returns:
-            bool: 操作是否成功
-        """
+        """显示主进程窗口"""
 
         hwnd = self.main_hwnd
         if hwnd is None:
@@ -526,11 +540,7 @@ class ProcessManager:
             return False
 
     async def hide_window(self) -> bool:
-        """隐藏主进程窗口
-
-        Returns:
-            bool: 操作是否成功
-        """
+        """隐藏主进程窗口"""
         hwnd = self.main_hwnd
         if hwnd is None:
             return False
@@ -541,11 +551,7 @@ class ProcessManager:
             return False
 
     async def minimize_window(self) -> bool:
-        """最小化主进程窗口
-
-        Returns:
-            bool: 操作是否成功
-        """
+        """最小化主进程窗口"""
 
         hwnd = self.main_hwnd
         if hwnd is None:
@@ -557,11 +563,7 @@ class ProcessManager:
             return False
 
     async def activate_window(self) -> bool:
-        """激活主进程窗口并将其置于前台
-
-        Returns:
-            bool: 操作是否成功
-        """
+        """激活主进程窗口并将其置于前台"""
 
         hwnd = self.main_hwnd
         if hwnd is None:
@@ -573,11 +575,7 @@ class ProcessManager:
             return False
 
     async def close(self) -> None:
-        """请被管理进程自行退出，等它走完退出时的配置保存
-
-        启动瞬间主窗口可能还是临时的启动画面, 关闭消息打不到真正的窗口上,
-        所以每轮按当前句柄再请求一次, 直到进程退出。
-        """
+        """请被管理进程自行退出，等它走完退出时的配置保存"""
 
         while await self.is_running():
             hwnd = self.main_hwnd

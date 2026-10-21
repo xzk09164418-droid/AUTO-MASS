@@ -4,41 +4,85 @@
 /* eslint-disable */
 export type MaaEndUserConfig_Task = {
     /**
-     * 自动采集通用资源路线
+     * 理智任务类型
      */
-    AutoCollectCommonRoutes?: null;
+    SanityTaskType?: ('OperatorProgression' | 'WeaponProgression' | 'CrisisDrills' | 'Essence' | null);
     /**
-     * 自动采集路线安排：分散或集中
+     * 干员养成任务
      */
-    AutoCollectMode?: ('Distributed' | 'Concentrated' | null);
+    OperatorProgression?: ('OperatorEXP' | 'Promotions' | 'T-Creds' | 'SkillUp' | null);
     /**
-     * 自动采集区域资源路线
+     * 武器养成任务
      */
-    AutoCollectRoutes?: null;
-    /**
-     * 基质刷取模式
-     */
-    AutoEssenceMenu?: ('Random' | 'Location' | 'Target' | null);
-    /**
-     * 基质刷取指定地点
-     */
-    AutoEssenceSpecifiedLocation?: (string | null);
-    /**
-     * 基质目标武器 ID 列表
-     */
-    AutoEssenceTargetWeapons?: (Array<string> | null);
+    WeaponProgression?: ('WeaponEXP' | 'WeaponTune' | null);
     /**
      * 危境预演任务
      */
     CrisisDrills?: ('AdvancedProgression1' | 'AdvancedProgression2' | 'AdvancedProgression3' | 'AdvancedProgression4' | 'AdvancedProgression5' | null);
     /**
-     * 每日正常完成一次后当天跳过的 MaaEnd 任务名列表（JSON 字符串）
+     * 奖励组选项
      */
-    DailyOnceTasks?: (string | null);
+    RewardsSetOption?: ('RewardsSetA' | 'RewardsSetB' | null);
     /**
-     * 自动采集
+     * 基质刷取指定地点
      */
-    IfAutoCollect?: (boolean | null);
+    AutoEssenceSpecifiedLocation?: (string | null);
+    /**
+     * 基质刷取模式
+     */
+    AutoEssenceMenu?: ('Random' | 'Location' | 'Target' | null);
+    /**
+     * 基质目标武器 ID 列表
+     */
+    AutoEssenceTargetWeapons?: (Array<string> | null);
+    /**
+     * 理智任务
+     */
+    IfSanity?: (boolean | null);
+    /**
+     * 应急理智加强剂
+     */
+    IfAutoUseSpMedication?: (boolean | null);
+    /**
+     * 基建任务
+     */
+    IfDijiangRewards?: (boolean | null);
+    /**
+     * 转交委托
+     */
+    IfDeliveryJobs?: (boolean | null);
+    /**
+     * 售卖产品
+     */
+    IfSellProduct?: (boolean | null);
+    /**
+     * 自动囤货
+     */
+    IfAutoStockpile?: (boolean | null);
+    /**
+     * 购买稳定物资
+     */
+    IfAutoStockStaple?: (boolean | null);
+    /**
+     * 拜访好友
+     */
+    IfVisitFriends?: (boolean | null);
+    /**
+     * 信用点购物
+     */
+    IfCreditShoppingN2?: (boolean | null);
+    /**
+     * 抢委托送货最低接取价格（万）
+     */
+    SeizeDeliveryJobsReward?: (number | null);
+    /**
+     * 抢委托送货委托接收点
+     */
+    SeizeDeliveryJobsCommissionSource?: ('Unlimited' | 'WulingCity' | 'TestArea' | null);
+    /**
+     * 抢委托送货
+     */
+    IfSeizeDeliveryJobs?: (boolean | null);
     /**
      * 生态农场
      */
@@ -48,88 +92,44 @@ export type MaaEndUserConfig_Task = {
      */
     IfAutoSell?: (boolean | null);
     /**
-     * 购买稳定物资
-     */
-    IfAutoStockStaple?: (boolean | null);
-    /**
-     * 自动囤货
-     */
-    IfAutoStockpile?: (boolean | null);
-    /**
-     * 应急理智加强剂
-     */
-    IfAutoUseSpMedication?: (boolean | null);
-    /**
-     * 信用点购物
-     */
-    IfCreditShoppingN2?: (boolean | null);
-    /**
-     * 日常奖励领取
-     */
-    IfDailyRewards?: (boolean | null);
-    /**
-     * 转交委托
-     */
-    IfDeliveryJobs?: (boolean | null);
-    /**
-     * 基建任务
-     */
-    IfDijiangRewards?: (boolean | null);
-    /**
      * 环境监测
      */
     IfEnvironmentMonitoring?: (boolean | null);
     /**
-     * 抽数计算
+     * 自动采集
      */
-    IfPullCountCalculator?: (boolean | null);
+    IfAutoCollect?: (boolean | null);
     /**
-     * 资源回收站
+     * 自动采集路线安排：分散或集中
      */
-    IfResourceRecycleStation?: (boolean | null);
+    AutoCollectMode?: ('Distributed' | 'Concentrated' | null);
     /**
-     * 理智任务
+     * 自动采集区域资源路线
      */
-    IfSanity?: (boolean | null);
+    AutoCollectRoutes?: (Array<string> | null);
     /**
-     * 抢委托送货
+     * 自动采集通用资源路线
      */
-    IfSeizeDeliveryJobs?: (boolean | null);
+    AutoCollectCommonRoutes?: (Array<string> | null);
     /**
-     * 售卖产品
+     * 每日正常完成一次后当天跳过的 MaaEnd 任务名列表（JSON 字符串）
      */
-    IfSellProduct?: (boolean | null);
+    DailyOnceTasks?: (string | null);
     /**
      * 选剑演武
      */
     IfTrialOfSwordmancy?: (boolean | null);
     /**
-     * 拜访好友
+     * 日常奖励领取
      */
-    IfVisitFriends?: (boolean | null);
+    IfDailyRewards?: (boolean | null);
     /**
-     * 干员养成任务
+     * 资源回收站
      */
-    OperatorProgression?: ('OperatorEXP' | 'Promotions' | 'T-Creds' | 'SkillUp' | null);
+    IfResourceRecycleStation?: (boolean | null);
     /**
-     * 奖励组选项
+     * 抽数计算
      */
-    RewardsSetOption?: ('RewardsSetA' | 'RewardsSetB' | null);
-    /**
-     * 理智任务类型
-     */
-    SanityTaskType?: ('OperatorProgression' | 'WeaponProgression' | 'CrisisDrills' | 'Essence' | null);
-    /**
-     * 抢委托送货委托接收点
-     */
-    SeizeDeliveryJobsCommissionSource?: ('Unlimited' | 'WulingCity' | 'TestArea' | null);
-    /**
-     * 抢委托送货最低接取价格（万）
-     */
-    SeizeDeliveryJobsReward?: (number | null);
-    /**
-     * 武器养成任务
-     */
-    WeaponProgression?: ('WeaponEXP' | 'WeaponTune' | null);
+    IfPullCountCalculator?: (boolean | null);
 };
 

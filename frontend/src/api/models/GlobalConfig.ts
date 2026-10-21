@@ -11,13 +11,37 @@ import type { GlobalConfig_UI } from './GlobalConfig_UI';
 import type { GlobalConfig_Update } from './GlobalConfig_Update';
 import type { GlobalConfig_Voice } from './GlobalConfig_Voice';
 export type GlobalConfig = {
-    Display?: (GlobalConfig_Display | null);
-    Function?: (GlobalConfig_Function | null);
-    Notify?: (GlobalConfig_Notify | null);
+    /**
+     * OBS 失败回放配置
+     */
     Replay?: (GlobalConfig_Replay | null);
-    Start?: (GlobalConfig_Start | null);
-    UI?: (GlobalConfig_UI | null);
-    Update?: (GlobalConfig_Update | null);
+    /**
+     * 功能相关配置
+     */
+    Function?: (GlobalConfig_Function | null);
+    /**
+     * 显示器相关配置
+     */
+    Display?: (GlobalConfig_Display | null);
+    /**
+     * 语音相关配置
+     */
     Voice?: (GlobalConfig_Voice | null);
+    /**
+     * 启动相关配置
+     */
+    Start?: (GlobalConfig_Start | null);
+    /**
+     * 界面相关配置
+     */
+    UI?: (GlobalConfig_UI | null);
+    /**
+     * 通知相关配置
+     */
+    Notify?: (GlobalConfig_Notify | null);
+    /**
+     * 更新相关配置
+     */
+    Update?: (GlobalConfig_Update | null);
 };
 

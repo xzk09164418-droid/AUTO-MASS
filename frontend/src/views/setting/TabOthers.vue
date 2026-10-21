@@ -13,7 +13,6 @@ import ChangelogView from '@/components/ChangelogView.vue'
 import type { ChangelogData } from '@/utils/changelog'
 import { MAS_QQ_GROUP_URL, handleExternalLink } from '@/utils/openExternal'
 import { formatPauseUntil, getPauseDisabledDate, isUpdatePaused } from '@/composables/updatePause'
-import { formatConfigDate, serializeConfigTime } from '@/utils/configDateTime'
 
 const logger = window.electronAPI.getLogger('设置-其他')
 
@@ -52,11 +51,7 @@ const pauseDisabledDate = getPauseDisabledDate()
 const pauseUntilDisplay = computed(() => formatPauseUntil(pauseUntil.value))
 
 const handlePauseUntilChange = (value: string | null) => {
-  void handleSettingChange(
-    'Update',
-    'PauseUntil',
-    value ? serializeConfigTime(`${value}T00:00:00`) : null
-  )
+  void handleSettingChange('Update', 'PauseUntil', value ?? '')
 }
 
 // 当前版本的更新日志在编译期从 res/version.json 注入（res/ 不进 Electron 产物）
@@ -138,7 +133,7 @@ const copyAllInfo = async () => {
               </a-tooltip>
             </div>
             <a-date-picker
-              :value="formatConfigDate(pauseUntil) || undefined"
+              :value="pauseUntil || undefined"
               format="YYYY-MM-DD"
               value-format="YYYY-MM-DD"
               :disabled-date="pauseDisabledDate"

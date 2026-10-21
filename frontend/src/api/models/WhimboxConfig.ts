@@ -2,10 +2,19 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-import type { WhimboxConfig_Info } from './WhimboxConfig_Info';
+import type { GeneralConfig_Info } from './GeneralConfig_Info';
 import type { WhimboxConfig_Run } from './WhimboxConfig_Run';
+/**
+ * 奇想盒脚本配置（无限暖暖，BetterGI 线）
+ */
 export type WhimboxConfig = {
-    Info?: (WhimboxConfig_Info | null);
+    /**
+     * 脚本基础信息
+     */
+    Info?: (GeneralConfig_Info | null);
+    /**
+     * 运行配置
+     */
     Run?: (WhimboxConfig_Run | null);
 };
 

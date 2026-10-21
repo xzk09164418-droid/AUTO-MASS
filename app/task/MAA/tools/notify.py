@@ -40,7 +40,6 @@ from app.models.notification import (
 )
 from app.task.notify_core import push_proxy_result
 from app.utils import get_logger
-from app.utils.notification_template import get_notification_template
 from app.utils.paths import resource_path
 
 logger = get_logger("MAA 通知工具")
@@ -108,12 +107,12 @@ def _six_star_targets(user_config: MaaUserConfig | None) -> list[NotifyTarget]:
     """公招六星喜报的推送目标, 全局与用户各有独立开关。"""
 
     targets = []
-    if Config.setting.Notify.IfSendSixStar:
+    if Config.get("Notify", "IfSendSixStar"):
         targets.append(global_target())
     if (
         user_config is not None
-        and user_config.Notify.Enabled
-        and user_config.Notify.IfSendSixStar
+        and user_config.get("Notify", "Enabled")
+        and user_config.get("Notify", "IfSendSixStar")
     ):
         targets.append(user_target(user_config))
     # 六星 Webhook 沿用纯文案；配图由能直接展示该图片的渠道处理。
@@ -174,7 +173,7 @@ async def push_notification(
         )
 
     if mode == "统计信息":
-        template = get_notification_template("MAA_statistics.html")
+        template = Config.notify_env.get_template("MAA_statistics.html")
 
         return await dispatch(
             NotifyPayload(
@@ -189,7 +188,7 @@ async def push_notification(
 
     if mode == "公招六星":
         # 喜报正文是固定文案, message 只用于渲染 HTML
-        template = get_notification_template("MAA_six_star.html")
+        template = Config.notify_env.get_template("MAA_six_star.html")
 
         image = _six_star_image()
 

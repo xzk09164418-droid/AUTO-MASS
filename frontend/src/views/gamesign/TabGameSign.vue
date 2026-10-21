@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { formatConfigDate } from '@/utils/configDateTime'
 import { useI18n } from 'vue-i18n'
 import { ref, computed, onMounted } from 'vue'
 import { EditOutlined, DeleteOutlined, PlusOutlined, SwapOutlined } from '@ant-design/icons-vue'
@@ -69,8 +68,8 @@ interface AccountListInstance {
 }
 
 interface AccountListData {
-  order?: AccountListInstance[]
-  data?: Record<string, unknown>
+  instances?: AccountListInstance[]
+  [key: string]: unknown
 }
 
 const asRecord = (value: unknown): Record<string, unknown> =>
@@ -90,11 +89,11 @@ const loadAccounts = async () => {
     if (response.code !== 200) return
     const data = response.data as unknown as AccountListData | undefined
     const instances: AccountInstance[] = []
-    const instanceList = Array.isArray(data?.order) ? data.order : []
+    const instanceList = Array.isArray(data?.instances) ? data.instances : []
     for (const inst of instanceList) {
       const uid = asString(inst.uid)
       if (!uid) continue
-      const accountData = asRecord(asRecord(data?.data?.[uid]).GameSignAccount)
+      const accountData = asRecord(asRecord(data?.[uid]).GameSignAccount)
       instances.push({
         uid,
         type: asString(inst.type) || 'GameSignAccountGroup',
@@ -463,8 +462,8 @@ onMounted(() => {
             <span class="setting-desc">{{ t('gamesign.section.lastSignDesc') }}</span>
           </div>
           <span class="setting-value">{{
-            config.LastSignDate && formatConfigDate(config.LastSignDate, 8 * 60) !== '2000-01-01'
-              ? formatConfigDate(config.LastSignDate, 8 * 60)
+            config.LastSignDate && config.LastSignDate !== '2000-01-01'
+              ? config.LastSignDate
               : t('gamesign.section.neverSigned')
           }}</span>
         </div>

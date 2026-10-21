@@ -22,7 +22,7 @@ const { t } = useI18n()
 const props = defineProps<{
   enabled: boolean
   patterns: string
-  logPath?: string | null
+  logPath?: string
 }>()
 
 const emit = defineEmits<{

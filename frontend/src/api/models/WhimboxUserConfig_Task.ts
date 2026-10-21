@@ -2,14 +2,17 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+/**
+ * 奇想盒任务覆盖集（键集来自任务目录，MAS 不建模字段定义）
+ */
 export type WhimboxUserConfig_Task = {
     /**
-     * 目标/参数覆盖集：JSON map {键: 值}，键集来自任务目录 （上游 OneDragon 节托管字段），只存用户显式选择的值
+     * 步骤开关覆盖集 JSON map {步骤键: bool}，键集来自任务目录
      */
-    Options?: (string | null);
+    Tasks?: (string | Record<string, any> | null);
     /**
-     * 步骤开关覆盖集：JSON map {步骤键: bool}，键集来自任务目录 （上游 OneDragonDefaultSteps 节），只存用户勾选结果
+     * 目标/参数覆盖集 JSON map {键: 值}，键集来自任务目录
      */
-    Tasks?: (string | null);
+    Options?: (string | Record<string, any> | null);
 };
 

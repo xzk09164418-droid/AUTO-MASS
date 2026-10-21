@@ -1,4 +1,3 @@
-import { readBackendDocument } from './backendConfig'
 import * as fs from 'fs'
 import * as path from 'path'
 import AdmZip = require('adm-zip')
@@ -169,15 +168,16 @@ function isInside(parent: string, target: string): boolean {
 }
 
 function userNamesOf(config: Record<string, unknown>): string[] {
-  const userData = config.UserData
-  if (!isRecord(userData) || !Array.isArray(userData.order)) {
+  const subConfigs = config.SubConfigsInfo
+  const userData = isRecord(subConfigs) ? subConfigs.UserData : undefined
+  if (!isRecord(userData) || !Array.isArray(userData.instances)) {
     return []
   }
 
   const names = new Set<string>()
-  for (const instance of userData.order) {
+  for (const instance of userData.instances) {
     const uid = isRecord(instance) && typeof instance.uid === 'string' ? instance.uid : ''
-    const user = uid && isRecord(userData.data) ? userData.data[uid] : undefined
+    const user = uid ? userData[uid] : undefined
     const name = isRecord(user) ? stringField(user.Info, 'Name') : ''
     if (name) {
       names.add(name)
@@ -194,19 +194,19 @@ function discoverMaaFWScripts(
   const seenUids = new Set<string>()
 
   for (const dataRoot of dataRoots) {
-    const scriptConfig = readBackendDocument(dataRoot, 'scripts.yaml', 'ScriptConfig.json')
-    if (!isRecord(scriptConfig) || !Array.isArray(scriptConfig.order)) {
+    const scriptConfig = readJson(path.join(dataRoot, 'config', 'ScriptConfig.json'))
+    if (!isRecord(scriptConfig) || !Array.isArray(scriptConfig.instances)) {
       continue
     }
 
-    for (const instance of scriptConfig.order) {
+    for (const instance of scriptConfig.instances) {
       if (!isRecord(instance)) {
         continue
       }
       const uid = typeof instance.uid === 'string' ? instance.uid : ''
       const type = typeof instance.type === 'string' ? instance.type : ''
       const viewDirName = viewDirNameOf(uid)
-      const config = isRecord(scriptConfig.data) ? scriptConfig.data[uid] : undefined
+      const config = scriptConfig[uid]
       if (!viewDirName || !isRecord(config) || seenUids.has(uid) || !accept(uid, type)) {
         continue
       }
@@ -352,17 +352,13 @@ function isSuccessResult(result: string | undefined): boolean {
 
 /** 同一数据根下所有脚本（不限类型）的导入来源，用来认没有视图路径的旧记录。 */
 function sourcePathKeysOf(dataRoot: string): Array<{ uid: string; key: string }> {
-  const scriptConfig = readBackendDocument(dataRoot, 'scripts.yaml', 'ScriptConfig.json')
-  if (!isRecord(scriptConfig) || !Array.isArray(scriptConfig.order)) {
+  const scriptConfig = readJson(path.join(dataRoot, 'config', 'ScriptConfig.json'))
+  if (!isRecord(scriptConfig) || !Array.isArray(scriptConfig.instances)) {
     return []
   }
-  return scriptConfig.order.flatMap(instance => {
+  return scriptConfig.instances.flatMap(instance => {
     const uid = isRecord(instance) && typeof instance.uid === 'string' ? instance.uid : ''
-    const config = uid
-      ? isRecord(scriptConfig.data)
-        ? scriptConfig.data[uid]
-        : undefined
-      : undefined
+    const config = uid ? scriptConfig[uid] : undefined
     const key = isRecord(config) ? pathKey(stringField(config.Info, 'Path')) : ''
     return key ? [{ uid, key }] : []
   })

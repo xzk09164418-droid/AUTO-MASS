@@ -7,9 +7,21 @@ import type { MaaEndUserConfig_Info } from './MaaEndUserConfig_Info';
 import type { MaaEndUserConfig_Notify } from './MaaEndUserConfig_Notify';
 import type { MaaEndUserConfig_Task } from './MaaEndUserConfig_Task';
 export type MaaEndUserConfig = {
-    Data?: (MaaEndUserConfig_Data | null);
+    /**
+     * 用户信息
+     */
     Info?: (MaaEndUserConfig_Info | null);
-    Notify?: (MaaEndUserConfig_Notify | null);
+    /**
+     * 任务配置
+     */
     Task?: (MaaEndUserConfig_Task | null);
+    /**
+     * 运行数据
+     */
+    Data?: (MaaEndUserConfig_Data | null);
+    /**
+     * 通知配置
+     */
+    Notify?: (MaaEndUserConfig_Notify | null);
 };
 

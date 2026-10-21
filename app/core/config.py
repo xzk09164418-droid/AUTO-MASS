@@ -2,18 +2,24 @@
 #   Copyright © 2024-2025 DLmaster361
 #   Copyright © 2025 MoeSnowyFox
 #   Copyright © 2025-2026 AUTO-MAS Team
+
 #   This file is part of AUTO-MAS.
+
 #   AUTO-MAS is free software: you can redistribute it and/or modify
 #   it under the terms of the GNU Affero General Public License as
 #   published by the Free Software Foundation, either version 3 of
 #   the License, or (at your option) any later version.
+
 #   AUTO-MAS is distributed in the hope that it will be useful,
 #   but WITHOUT ANY WARRANTY; without even the implied warranty
 #   of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See
 #   the GNU Affero General Public License for more details.
+
 #   You should have received a copy of the GNU Affero General Public License
 #   along with AUTO-MAS. If not, see <https://www.gnu.org/licenses/>.
+
 #   Contact: DLmaster_361@163.com
+
 import asyncio
 import json
 import os
@@ -24,7 +30,6 @@ import sys
 import time
 import uuid
 from collections.abc import Callable
-from contextlib import closing
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import (
@@ -34,7 +39,6 @@ from typing import (
     List,
     Literal,
     Optional,
-    cast,
 )
 
 import httpx
@@ -44,16 +48,10 @@ import truststore
 if TYPE_CHECKING:
     import uvicorn
 
-    from app.config import ConfigEntry
+    from app.models.ConfigBase import ConfigBase
     from app.utils.config_restore import ConfigRestorePool, ConfigRestoreService
+from jinja2 import Environment, FileSystemLoader
 
-from app.config import ConfigCollection, ConfigEntry, NodeState, config_manager
-from app.core.config_upgrade import (
-    CONFIG_FILES,
-    convert_legacy,
-    preserve_pre_upgrade,
-    upgrade_json_configs,
-)
 from app.models.config import (
     CLASS_BOOK,
     PLAN_BOOK,
@@ -103,15 +101,19 @@ from app.task.M9A.migration import (
     normalize_m9a_managed_entries,
     repair_m9a_migration_losses,
 )
-from app.utils import get_logger, is_supervised
+from app.utils import get_logger, is_supervised, resource_path
 from app.utils.community import next_community_account_name
 from app.utils.constants import (
     BASE_INDEPENDENT,
     BASE_NATIVE,
     BASE_SHARED,
+    RESOURCE_STAGE_DATE_TEXT,
+    RESOURCE_STAGE_DROP_INFO,
+    RESOURCE_STAGE_INFO,
     TYPE_BOOK,
     UTC4,
     UTC8,
+    game_now,
     normalize_base_source,
 )
 from app.utils.io import ConfigCorruptedError, force_rmtree, write_file
@@ -195,13 +197,14 @@ def normalize_proxy_address(raw: str | None) -> str | None:
     return text
 
 
-class AppConfig:
+class AppConfig(GlobalConfig):
     VERSION = "v5.7.0"
 
     def __init__(self) -> None:
+        super().__init__()
 
         self._restore_pool_resolver: (
-            Callable[["ConfigEntry"], list["ConfigRestorePool"]] | None
+            Callable[["ConfigBase"], list["ConfigRestorePool"]] | None
         ) = None
 
         logger.info("")
@@ -220,52 +223,6 @@ class AppConfig:
         self.database_path.parent.mkdir(parents=True, exist_ok=True)
         self.config_path.mkdir(parents=True, exist_ok=True)
         self.history_path.mkdir(parents=True, exist_ok=True)
-
-        # 所有集合先登记，随后按引用依赖激活；迁移完成前不登记持久化根。
-        self.setting = GlobalConfig.build()
-        self.EmulatorConfig = ConfigCollection.build(
-            [EmulatorConfig], name="EmulatorConfig"
-        )
-        self.PlanConfig = ConfigCollection.build(
-            [item["config_class"] for item in PLAN_BOOK.values()], name="PlanConfig"
-        )
-        self.ScriptConfig = ConfigCollection.build(
-            list(CLASS_BOOK.values()), name="ScriptConfig"
-        )
-        self.QueueConfig = ConfigCollection.build([QueueConfig], name="QueueConfig")
-        from app.models.config import ToolsConfig
-
-        self.ToolsConfig = ToolsConfig.build()
-        self.startup_notices = self.setting.startup_notices
-        self._config_nodes = {
-            "setting": self.setting,
-            "EmulatorConfig": self.EmulatorConfig,
-            "PlanConfig": self.PlanConfig,
-            "ScriptConfig": self.ScriptConfig,
-            "QueueConfig": self.QueueConfig,
-            "ToolsConfig": self.ToolsConfig,
-            "GameSignAccounts": self.ToolsConfig.GameSign_Accounts,
-        }
-        self._m9a_migration = None
-        self._m9a_repair = None
-        self._m9a_managed = None
-        for model in (
-            *CLASS_BOOK.values(),
-            MaaUserConfig,
-            MaaEndUserConfig,
-            BAAHUserConfig,
-            MSSUserConfig,
-            HSRUserConfig,
-            QueueItem,
-        ):
-            if hasattr(model, "related_config"):
-                model.related_config.update(
-                    {
-                        "EmulatorConfig": self.EmulatorConfig,
-                        "PlanConfig": self.PlanConfig,
-                        "ScriptConfig": self.ScriptConfig,
-                    }
-                )
 
         # Git 仓库延迟初始化，避免启动时导入 GitPython
         self._repo: Any = None
@@ -288,10 +245,17 @@ class AppConfig:
         self.temp_task: List[asyncio.Task] = []
         # 正在循环运行的队列，供配置改动前的安全检查使用
         self.running_cycle_queue_ids: set[uuid.UUID] = set()
+        self._stage_refresh_task: Optional[asyncio.Task] = None
+        # 上次活动关卡刷新失败的时间: 冷却期内不再重复请求远端
+        self._stage_refresh_failed_at: Optional[datetime] = None
         self._game_sign_result_date = ""
         self._community_account_add_lock = asyncio.Lock()
 
         self._inject_truststore()
+
+        self.notify_env = Environment(
+            loader=FileSystemLoader(str(resource_path("html")))
+        )
 
     @staticmethod
     def _inject_truststore() -> None:
@@ -361,18 +325,51 @@ class AppConfig:
         """初始化配置管理"""
 
         await self.check_data()
-        # 配置已按依赖激活；存量 MAA 的更新接管仅迁移一次。
+
+        await self.connect(self.config_path / "Config.json")
+        await self.EmulatorConfig.connect(self.config_path / "EmulatorConfig.json")
+        await self.PlanConfig.connect(self.config_path / "PlanConfig.json")
+        # 旧版 M9A 专项的配置形状 → MaaFW 形状，必须在 connect 之前改原始 JSON：
+        # ConfigBase.load 只认类里声明的条目，旧键在按新类加载那一刻就丢并写回盘。
+        m9a_migration = await asyncio.to_thread(
+            migrate_legacy_m9a_scripts,
+            self.config_path / "ScriptConfig.json",
+            global_mirror_cdk=str(self.get("Update", "MirrorChyanCDK") or ""),
+        )
+        # 按 v5.6.0-beta.1 迁过的配置，从迁移备份补回那版清空的输入值与丢掉的切号，只做一次
+        m9a_repair = await asyncio.to_thread(
+            repair_m9a_migration_losses,
+            self.config_path / "ScriptConfig.json",
+            skip_uids=set(m9a_migration.migrated_uids),
+        )
+        # 启动游戏 / 切换账号 / 关闭游戏由 MAS 控制，不留在用户队列里：每次启动整理一遍，幂等
+        m9a_managed = await asyncio.to_thread(
+            normalize_m9a_managed_entries, self.config_path / "ScriptConfig.json"
+        )
+        # HSR 旧直控快照（Direct.*）已删字段，同理必须在 connect 之前另存原始密文
+        await self._archive_legacy_hsr_direct_snapshots(
+            self.config_path / "ScriptConfig.json"
+        )
+        await self.ScriptConfig.connect(self.config_path / "ScriptConfig.json")
+        # 正式版没有接管字段，早期公测版默认关闭；有 CDK 的存量脚本只迁移一次。
         for script in self.ScriptConfig.values():
             if isinstance(script, MaaConfig) and await script.migrate_update_takeover(
-                global_cdk=str(self.setting.Update.MirrorChyanCDK or "")
+                global_cdk=str(self.get("Update", "MirrorChyanCDK") or "")
             ):
                 logger.info("MAA 更新接管迁移：已为配置 CDK 的旧脚本开启接管")
-        if self._m9a_migration is not None:
-            if self._m9a_migration.changed or self._m9a_migration.failure:
-                await self._settle_m9a_migration(self._m9a_migration)
-        for result in (self._m9a_repair, self._m9a_managed):
-            if result is not None and result.needs_notice:
-                self.startup_notices.append(result.notice())
+        if m9a_migration.changed or m9a_migration.failure:
+            await self._settle_m9a_migration(m9a_migration)
+        if m9a_repair.needs_notice:
+            self.startup_notices.append(m9a_repair.notice())
+        if m9a_managed.needs_notice:
+            self.startup_notices.append(m9a_managed.notice())
+        await self.QueueConfig.connect(self.config_path / "QueueConfig.json")
+        await self.ToolsConfig.connect(self.config_path / "ToolsConfig.json")
+
+        # 游戏社区：连接账号组 MultipleConfig
+        await self.ToolsConfig.GameSign_Accounts.connect(
+            self.config_path / "GameSignAccounts.json"
+        )
 
         # 游戏社区：恢复当天的结果快照，跨日结果不继续展示
         today = datetime.now(tz=UTC8).strftime("%Y-%m-%d")
@@ -385,32 +382,12 @@ class AppConfig:
         from app.services import System
         from app.services.telemetry import set_telemetry_enabled
 
-        async def on_self_start(sender, event):
-            await System.set_SelfStart(event.value)
-
-        async def on_allow_sleep(sender, event):
-            await System.set_Sleep(event.value)
-
-        def on_telemetry(sender, event):
-            set_telemetry_enabled(event.value)
-
-        # connect 默认弱引用，配置管理器持有回调直至应用退出。
-        self._config_receivers = (on_self_start, on_allow_sleep, on_telemetry)
-        self.setting.connect(
-            on_self_start, phase="runtime", group="Start", field="IfSelfStart"
-        )
-        self.setting.connect(
-            on_allow_sleep, phase="runtime", group="Function", field="IfAllowSleep"
-        )
-        self.setting.connect(
-            on_telemetry, phase="runtime", group="Function", field="IfEnableTelemetry"
-        )
-        from app.core.community_activity import connect_community_activity_cache
-
-        connect_community_activity_cache(self.ToolsConfig, setting=self.setting)
+        self.bind("Start", "IfSelfStart", System.set_SelfStart)
+        self.bind("Function", "IfAllowSleep", System.set_Sleep)
+        self.bind("Function", "IfEnableTelemetry", set_telemetry_enabled)
         # 注册自启动会读写注册表, 不阻塞初始化; 持有引用避免被 GC 且异常不被静默吞掉
         self_start_task = asyncio.create_task(
-            System.set_SelfStart(self.setting.Start.IfSelfStart)
+            System.set_SelfStart(self.get("Start", "IfSelfStart"))
         )
         self.temp_task.append(self_start_task)
 
@@ -421,95 +398,15 @@ class AppConfig:
                 logger.warning(f"设置开机自启动失败: {t.exception()}")
 
         self_start_task.add_done_callback(_self_start_done)
-        await System.set_Sleep(self.setting.Function.IfAllowSleep)
-        set_telemetry_enabled(self.setting.Function.IfEnableTelemetry)
+        await System.set_Sleep(self.get("Function", "IfAllowSleep"))
+        set_telemetry_enabled(self.get("Function", "IfEnableTelemetry"))
 
         self.loop = asyncio.get_running_loop()
 
         logger.info("程序初始化完成")
 
     async def check_data(self) -> None:
-        """历史升级按段提交；v1.11→v2.0 须全部配置激活并落盘后推进。
-
-        后续迁移失败不回退已完成的历史版本，下次从该检查点及逐文件记录继续。
-        """
-        if self.database_path.exists():
-            with closing(sqlite3.connect(self.database_path)) as database:
-                version = database.execute("SELECT v FROM version").fetchone()[0]
-        else:
-            version = "v1.11"
-        if version not in {"v1.7", "v1.8", "v1.9", "v1.10", "v1.11", "v2.0"}:
-            raise ValueError(f"不支持的数据版本：{version}，配置文件未迁移")
-        if version != "v2.0":
-            await asyncio.to_thread(preserve_pre_upgrade, self.config_path)
-            await self._upgrade_legacy_data()
-            if self.setting.activation_state == NodeState.INACTIVE:
-                source = self.config_path / "Config.json"
-                if source.exists():
-                    from app.utils.io import read_dict_file
-
-                    self.setting = GlobalConfig.build(
-                        payload=convert_legacy(read_dict_file(source), self.setting)
-                    )
-                    self._config_nodes["setting"] = self.setting
-                    self.startup_notices = self.setting.startup_notices
-                    await self.setting.activate()
-
-            script_path = self.config_path / "ScriptConfig.json"
-            if script_path.exists():
-                self._m9a_migration = await asyncio.to_thread(
-                    migrate_legacy_m9a_scripts,
-                    script_path,
-                    global_mirror_cdk=str(self.setting.Update.MirrorChyanCDK or ""),
-                )
-                self._m9a_repair = await asyncio.to_thread(
-                    repair_m9a_migration_losses,
-                    script_path,
-                    skip_uids=set(self._m9a_migration.migrated_uids),
-                )
-                self._m9a_managed = await asyncio.to_thread(
-                    normalize_m9a_managed_entries, script_path
-                )
-                await self._archive_legacy_hsr_direct_snapshots(script_path)
-            prepared = {
-                key: await node.to_dict()
-                for key, node in self._config_nodes.items()
-                if node.activation_state == NodeState.ACTIVE
-            }
-            await asyncio.to_thread(
-                upgrade_json_configs,
-                self.config_path,
-                self._config_nodes,
-                prepared_documents=prepared,
-            )
-        if self._m9a_managed is None:
-            self._m9a_managed = await asyncio.to_thread(
-                normalize_m9a_managed_entries, self.config_path / "scripts.yaml"
-            )
-        for _old, new, key in CONFIG_FILES:
-            config_manager.register_root(
-                self._config_nodes[key], self.config_path / new
-            )
-        for _old, _new, key in CONFIG_FILES:
-            node = self._config_nodes[key]
-            if node.activation_state == NodeState.INACTIVE:
-                await node.activate()
-        for script in self.ScriptConfig.values():
-            if (
-                isinstance(script, MaaEndConfig)
-                and script.Info.Path
-                and script._preload_task is None
-            ):
-                script._preload_task = asyncio.create_task(script.preload_resource())
-        await config_manager.flush()
-        if version != "v2.0":
-            # 本次迁移、全部配置激活及最终保存均成功后，才标记 v2.0。
-            with closing(sqlite3.connect(self.database_path)) as database:
-                database.execute("UPDATE version SET v = ?", ("v2.0",))
-                database.commit()
-
-    async def _upgrade_legacy_data(self) -> None:
-        """沿用历史分段升级策略，每段成功后提交对应版本检查点。"""
+        """检查用户数据文件并处理数据文件版本更新"""
 
         # 生成主数据库
         if not self.database_path.exists():
@@ -574,36 +471,20 @@ class AppConfig:
                 )
                 if_streaming = True
 
-                # 仅历史阶段临时使用旧基类。此时新配置尚无持久化根，不能用
-                # 新 commit 代替旧 load 的同步保存，再删除来源或推进检查点。
-                from app.models.legacy_config import LegacyCollection, LegacyConfig
-
-                legacy_emulators = LegacyCollection()
-                legacy_plans = LegacyCollection()
-                legacy_scripts = LegacyCollection()
-                legacy_queues = LegacyCollection()
-                for node, filename in (
-                    (legacy_emulators, "EmulatorConfig.json"),
-                    (legacy_plans, "PlanConfig.json"),
-                    (legacy_scripts, "ScriptConfig.json"),
-                    (legacy_queues, "QueueConfig.json"),
-                ):
-                    await node.connect(self.config_path / filename)
-
-                def legacy_uid(path: Path) -> uuid.UUID:
-                    # 旧目录没有 UUID；使用相对来源身份，阶段中断重试不会重复导入。
-                    return uuid.uuid5(
-                        uuid.NAMESPACE_URL,
-                        f"auto-mas:legacy-v1.8:{path.relative_to(self.config_path).as_posix()}",
-                    )
+                # MaaConfig.Emulator.Id 依赖 EmulatorConfig；迁移时必须先加载模拟器，
+                # 否则合法 UUID 会被 MultipleUIDValidator 当成失效值改成 "-"。
+                await self.EmulatorConfig.connect(
+                    self.config_path / "EmulatorConfig.json"
+                )
+                await self.ScriptConfig.connect(self.config_path / "ScriptConfig.json")
+                await self.PlanConfig.connect(self.config_path / "PlanConfig.json")
+                await self.QueueConfig.connect(self.config_path / "QueueConfig.json")
 
                 if (Path.cwd() / "config/config.json").exists():
                     (Path.cwd() / "config/config.json").rename(
                         Path.cwd() / "config/Config.json"
                     )
-                # 保留尚待后续阶段转换的旧键；不提前按新字段表加载和裁剪。
-                legacy_setting = LegacyConfig()
-                await legacy_setting.connect(self.config_path / "Config.json")
+                await self.connect(self.config_path / "Config.json")
 
                 plan_dict = {"固定": "Fixed"}
 
@@ -620,16 +501,12 @@ class AppConfig:
                                     encoding="utf-8"
                                 )
                             )
-                            uid = legacy_uid(MaaPlanConfig)
-                            await legacy_plans.put(
-                                uid=uid,
-                                type_name="MaaPlanConfig",
-                                payload=maa_plan_config,
-                            )
+                            uid, pc = await self.add_plan("MaaPlan")
                             plan_dict[MaaPlanConfig.name] = str(uid)
 
-                # 旧引用校验器会把“禁用”纠正为 '-'；中间文档直接使用该标记。
-                script_dict: dict[str, str] = {"禁用": "-"}
+                            await pc.load(maa_plan_config)
+
+                script_dict: Dict[str, Optional[str]] = {"禁用": None}
 
                 if (Path.cwd() / "config/MaaConfig").exists():
                     for MaaConfig in (Path.cwd() / "config/MaaConfig").iterdir():
@@ -640,11 +517,9 @@ class AppConfig:
                             maa_config["Info"] = maa_config["MaaSet"]
                             maa_config["Run"] = maa_config["RunSet"]
 
-                            uid = legacy_uid(MaaConfig)
-                            sc = await legacy_scripts.put(
-                                uid=uid, type_name="MaaConfig", payload=maa_config
-                            )
+                            uid, sc = await self.add_script("MAA")
                             script_dict[MaaConfig.name] = str(uid)
+                            await sc.load(maa_config)
 
                             if (MaaConfig / "Default/gui.json").exists():
                                 (Path.cwd() / f"data/{uid}/Default/ConfigFile").mkdir(
@@ -665,31 +540,13 @@ class AppConfig:
                                     )
 
                                     stage_cfg = user_config.setdefault("Stage", {})
-                                    plan_name = user_config["Info"]["StageMode"]
-                                    if (
-                                        isinstance(plan_name, str)
-                                        and plan_name not in plan_dict
-                                    ):
-                                        # 清理旧目录中断时，计划目录可能已删，但聚合文件已保存。
-                                        plan_uid = legacy_uid(
-                                            self.config_path
-                                            / "MaaPlanConfig"
-                                            / plan_name
-                                        )
-                                        if plan_uid in legacy_plans:
-                                            plan_dict[plan_name] = str(plan_uid)
                                     stage_cfg["StageMode"] = plan_dict.get(
-                                        plan_name, "Fixed"
+                                        user_config["Info"]["StageMode"], "Fixed"
                                     )
                                     user_config["Info"]["Password"] = ""
 
-                                    user_uid = legacy_uid(user)
-                                    users = await sc.get_collection("UserData")
-                                    await users.put(
-                                        uid=user_uid,
-                                        type_name="MaaUserConfig",
-                                        payload=user_config,
-                                    )
+                                    user_uid, uc = await self.add_user(str(uid))
+                                    await uc.load(user_config)
 
                                     if (user / "Routine/gui.json").exists():
                                         (
@@ -736,13 +593,9 @@ class AppConfig:
                                 else "Folder"
                             )
 
-                            uid = legacy_uid(GeneralConfig)
-                            sc = await legacy_scripts.put(
-                                uid=uid,
-                                type_name="GeneralConfig",
-                                payload=general_config,
-                            )
+                            uid, sc = await self.add_script("General")
                             script_dict[GeneralConfig.name] = str(uid)
+                            await sc.load(general_config)
 
                             for user in (GeneralConfig / "SubData").iterdir():
                                 if user.is_dir() and (user / "config.json").exists():
@@ -752,13 +605,8 @@ class AppConfig:
                                         )
                                     )
 
-                                    user_uid = legacy_uid(user)
-                                    users = await sc.get_collection("UserData")
-                                    await users.put(
-                                        uid=user_uid,
-                                        type_name="GeneralUserConfig",
-                                        payload=user_config,
-                                    )
+                                    user_uid, uc = await self.add_user(str(uid))
+                                    await uc.load(user_config)
 
                                     if (user / "ConfigFiles").exists():
                                         (Path.cwd() / f"data/{uid}/{user_uid}").mkdir(
@@ -778,56 +626,32 @@ class AppConfig:
                             QueueConfig.read_text(encoding="utf-8")
                         )
 
-                        queue_config["Info"] = queue_config["QueueSet"]
-                        uid = legacy_uid(QueueConfig)
-                        qc = await legacy_queues.put(
-                            uid=uid, type_name="QueueConfig", payload=queue_config
-                        )
+                        uid, qc = await self.add_queue()
 
-                        times = await qc.get_collection("TimeSet")
-                        items = await qc.get_collection("QueueItem")
+                        queue_config["Info"] = queue_config["QueueSet"]
+                        await qc.load(queue_config)
+
                         for i in range(10):
-                            script_name = queue_config["Queue"][f"Script_{i}"]
-                            if (
-                                isinstance(script_name, str)
-                                and script_name not in script_dict
-                            ):
-                                for folder in ("GeneralConfig", "MaaConfig"):
-                                    script_uid = legacy_uid(
-                                        self.config_path / folder / script_name
-                                    )
-                                    if script_uid in legacy_scripts:
-                                        script_dict[script_name] = str(script_uid)
-                                        break
-                            await times.put(
-                                uid=legacy_uid(QueueConfig / f"TimeSet/{i}"),
-                                type_name="TimeSet",
-                                payload={
+                            item_uid, item = await self.add_queue_item(str(uid))
+                            time_uid, time = await self.add_time_set(str(uid))
+
+                            await time.load(
+                                {
                                     "Info": {
                                         "Enabled": queue_config["Time"][f"Enabled_{i}"],
                                         "Time": queue_config["Time"][f"Set_{i}"],
                                     }
-                                },
+                                }
                             )
-                            await items.put(
-                                uid=legacy_uid(QueueConfig / f"QueueItem/{i}"),
-                                type_name="QueueItem",
-                                payload={
+                            await item.load(
+                                {
                                     "Info": {
-                                        "ScriptId": script_dict.get(script_name, "-")
+                                        "ScriptId": script_dict.get(
+                                            queue_config["Queue"][f"Script_{i}"], "-"
+                                        )
                                     }
-                                },
+                                }
                             )
-
-                # 旧保存链已逐笔写入聚合 JSON；最终再次等待全部文件落盘，
-                # 才允许清理来源并推进版本。后续 YAML 失败可从这些 JSON 继续。
-                for node in (
-                    legacy_emulators,
-                    legacy_plans,
-                    legacy_scripts,
-                    legacy_queues,
-                ):
-                    await node.save()
 
                 if (Path.cwd() / "config/QueueConfig").exists():
                     shutil.rmtree(Path.cwd() / "config/QueueConfig")
@@ -856,13 +680,10 @@ class AppConfig:
                     data = json.loads(
                         (Path.cwd() / "config/Config.json").read_text(encoding="utf-8")
                     )
-                    data.setdefault("Data", {})["LastStageUpdated"] = (
-                        "2000-01-01 00:00:00"
-                    )
+                    data["Data"]["LastStageUpdated"] = ""
                     data["Data"]["Stage"] = "{ }"
-                    function = data.setdefault("Function", {})
-                    function["IfBlockAd"] = function.get(
-                        "IfBlockAd", function.get("IfSkipMumuSplashAds", False)
+                    data["Function"]["IfBlockAd"] = data["Function"].get(
+                        "IfSkipMumuSplashAds", False
                     )
                     (Path.cwd() / "config/Config.json").write_text(
                         json.dumps(data, ensure_ascii=False, indent=4), encoding="utf-8"
@@ -882,10 +703,9 @@ class AppConfig:
                 cur.execute("INSERT INTO version VALUES(?)", ("v1.11",))
                 db.commit()
 
+            cur.close()
+            db.close()
             logger.success("数据文件版本更新完成")
-
-        cur.close()
-        db.close()
 
     async def get_git_version(self) -> tuple[bool, str, str]:
         """获取Git版本信息，如果Git不可用则返回默认值。
@@ -955,8 +775,6 @@ class AppConfig:
             "MSS",
         ],
         script_id: str | None = None,
-        *,
-        payload: dict[str, Any] | None = None,
     ) -> tuple[
         uuid.UUID,
         MaaConfig
@@ -979,41 +797,24 @@ class AppConfig:
         logger.info(f"添加脚本配置: {script}, 从 {script_id} 复制")
 
         if script_id is None:
-            _config_uid = self.ScriptConfig.add(CLASS_BOOK[script], payload=payload)
-            await self.ScriptConfig.commit()
-            _config_entry = self.ScriptConfig[_config_uid]
-            return _config_uid, _config_entry
+            return await self.ScriptConfig.add(CLASS_BOOK[script])
         else:
             script_uid = uuid.UUID(script_id)
 
             if not isinstance(self.ScriptConfig[script_uid], CLASS_BOOK[script]):
                 raise TypeError(f"脚本配置类型不匹配: {script_id} {script}")
 
-            document = self.ScriptConfig[script_uid].model_dump(
-                context={"audience": "persist"}
+            new_uid, new_config = await self.ScriptConfig.add(CLASS_BOOK[script])
+
+            await new_config.load(
+                await self.ScriptConfig[script_uid].toDict(regenerate_uuids=True)
             )
-            new_uid = self.ScriptConfig.add(
-                CLASS_BOOK[script], payload=document, regenerate_uuids=True
-            )
-            await self.ScriptConfig.commit()
-            new_config = self.ScriptConfig[new_uid]
-            user_ids = {
-                item["uid"]: uid
-                for item, uid in zip(
-                    document["UserData"]["order"], new_config.UserData.keys()
-                )
-            }
 
             # 复制内嵌副本：来源目录允许被删，只复制配置的话新脚本可能无处可跑。
             if isinstance(new_config, MaaFWConfig):
                 # 开发者模式（跟随来源目录）不随复制带过去：复制出来的是普通脚本，挂源脚本原
                 # 渠道组的版本（见 _clone_embedded_copy_for_script）。
-                await new_config.update(
-                    type(new_config).model_validate(
-                        {"Embedded": {"FollowSource": False}}
-                    ),
-                    check_visibility=False,
-                )
+                await new_config.set("Embedded", "FollowSource", False)
                 await self._clone_embedded_copy_for_script(
                     str(script_id),
                     str(new_uid),
@@ -1027,7 +828,10 @@ class AppConfig:
                     Path.cwd() / f"data/{new_uid}",
                     dirs_exist_ok=True,
                 )
-                for old_user, new_user in user_ids.items():
+                for old_user, new_user in zip(
+                    self.ScriptConfig[script_uid].UserData.keys(),
+                    new_config.UserData.keys(),
+                ):
                     if (Path.cwd() / f"data/{new_uid}/{old_user}").exists():
                         (Path.cwd() / f"data/{new_uid}/{old_user}").rename(
                             Path.cwd() / f"data/{new_uid}/{new_user}"
@@ -1057,7 +861,7 @@ class AppConfig:
             try_reserve_project_path,
         )
 
-        group_channel = str(source_config.Update.Channel or "stable")
+        group_channel = str(source_config.get("Update", "Channel") or "stable")
         source_form = is_source_form(source_config)
 
         target_key = await try_reserve_project_path(
@@ -1088,17 +892,13 @@ class AppConfig:
 
         if script_id is None:
             # 获取所有脚本配置
-            data = self.ScriptConfig.model_dump(context={"audience": "api"})
+            data = await self.ScriptConfig.toDict()
         else:
             # 获取指定脚本配置
-            entry = self.ScriptConfig[uuid.UUID(script_id)]
-            return (
-                [{"uid": str(entry.uid), "type": type(entry).__name__}],
-                {str(entry.uid): entry.model_dump(context={"audience": "api"})},
-            )
+            data = await self.ScriptConfig.get(uuid.UUID(script_id))
 
-        index = data["order"]
-        return list(index), data["data"]
+        index = data.pop("instances", [])
+        return list(index), data
 
     async def get_maaend_options(self, script_id: str) -> dict[str, Any]:
         """读取指定 MaaEnd 安装目录中的动态选项。"""
@@ -1106,12 +906,12 @@ class AppConfig:
         script_config = self.ScriptConfig[uuid.UUID(script_id)]
         if not isinstance(script_config, MaaEndConfig):
             raise TypeError("脚本配置类型错误, 不是 MaaEnd 类型")
-        root_path = str(script_config.Info.Path or "").strip()
+        root_path = str(script_config.get("Info", "Path")).strip()
         if not root_path:
             raise ValueError("MaaEnd 路径未配置")
 
         options = script_config.get_loaded_resource()
-        game_path = str(script_config.Game.Path or "").strip()
+        game_path = str(script_config.get("Game", "Path") or "").strip()
         if game_path:
             from app.task.MaaFW.tools.embedded.game_resolution import (
                 read_unity_display_type,
@@ -1138,9 +938,7 @@ class AppConfig:
 
         from app.task.BAAH.tools import CONFIG_DIR_NAME, list_config_names
 
-        baah_path = script_config.Script.BAAHPath
-        if baah_path is None:
-            return []
+        baah_path = Path(str(script_config.get("Script", "BAAHPath")))
         return list_config_names(baah_path.parent / CONFIG_DIR_NAME)
 
     async def update_script(
@@ -1164,9 +962,7 @@ class AppConfig:
                     "终末地启动器路径无效，请选择鹰角官方启动器 Launcher.exe 或 Games.exe"
                 )
 
-        await self.ScriptConfig[uid].update(
-            type(self.ScriptConfig[uid]).model_validate(data)
-        )
+        await self.ScriptConfig[uid].update(data)
 
     async def del_script(self, script_id: str) -> None:
         """删除脚本配置"""
@@ -1181,15 +977,17 @@ class AppConfig:
         # 删脚本会顺带删掉引用它的队列项；正在循环运行的队列靠下标回写状态，
         # 结构一变就会跑错脚本，两轮之间脚本没锁也要拦住。
         for queue_uid, queue in self.QueueConfig.items():
-            if any((item.Info.ScriptId == uid for item in queue.QueueItem.values())):
+            if any(
+                item.get("Info", "ScriptId") == str(uid)
+                for item in queue.QueueItem.values()
+            ):
                 self._ensure_cycle_safe(queue_uid, "删除它引用的脚本")
 
         # 删除脚本相关的队列项
         for queue in self.QueueConfig.values():
             for key, value in queue.QueueItem.items():
-                if value.Info.ScriptId == uid:
-                    queue.QueueItem.remove(key)
-                    await queue.QueueItem.commit()
+                if value.get("Info", "ScriptId") == str(uid):
+                    await queue.QueueItem.remove(key)
 
         # ZzzOd：删除脚本前回收该脚本全部用户的绑定槽（归档后删目录）——槽目录
         # 挂在一条龙安装目录里，不回收就永久残留；mas 备份池随 data/{script_id}
@@ -1209,8 +1007,7 @@ class AppConfig:
                     exclude_same_script=True,
                 )
 
-        self.ScriptConfig.remove(uid)
-        await self.ScriptConfig.commit()
+        await self.ScriptConfig.remove(uid)
         if was_maafw:
             # 它的共享 runtime 可能就此无人引用；后台对账一轮，不拖慢删除响应。
             from app.task.MaaFW.tools.embedded.pool_reconcile import (
@@ -1238,8 +1035,7 @@ class AppConfig:
 
         logger.info(f"重新排序脚本: {index_list}")
 
-        self.ScriptConfig.set_order([uuid.UUID(_) for _ in index_list])
-        await self.ScriptConfig.commit()
+        await self.ScriptConfig.setOrder([uuid.UUID(_) for _ in index_list])
 
     async def import_script_from_share(
         self, script_id: str, config_key: str, version_no: Optional[int]
@@ -1270,10 +1066,7 @@ class AppConfig:
             raise TypeError(f"脚本 {script_id} 不是通用脚本配置")
 
         data = await ConfigCenter.download_template(config_key, version_no)
-        await self.ScriptConfig[uid].update(
-            GeneralConfig.model_validate(GeneralConfig.normalize_payload(data)),
-            check_visibility=False,
-        )
+        await self.ScriptConfig[uid].load(data)
 
         logger.success(f"{script_id} 配置加载成功")
 
@@ -1306,10 +1099,8 @@ class AppConfig:
             logger.error(f"{script_id} 不是通用脚本配置")
             raise TypeError(f"脚本 {script_id} 不是通用脚本配置")
 
-        temp = self.ScriptConfig[uid].model_dump(context={"audience": "persist"})
-        temp.pop("UserData", None)
-        temp.pop("Notify_CustomWebhooks", None)
-        temp.pop("ui", None)
+        temp = await self.ScriptConfig[uid].toDict(if_decrypt=False)
+        temp.pop("SubConfigsInfo", None)
         temp = await self.remove_privacy_info(temp, config_name)
 
         return temp, self.scan_privacy_risks(temp)
@@ -1344,23 +1135,23 @@ class AppConfig:
         """移除配置中可能存在的隐私信息"""
 
         config["Info"]["Name"] = name
-        root_value = config["Info"]["RootPath"]
-        root_path = Path(root_value) if root_value else None
         for path in ["ScriptPath", "ConfigPath", "LogPath", "TrackProcessExe"]:
-            path_value = config["Script"][path]
-            if not path_value:
-                continue
-            script_path = Path(path_value)
-            if root_path is not None and script_path.is_relative_to(root_path):
+            if Path(config["Script"][path]).is_relative_to(
+                Path(config["Info"]["RootPath"])
+            ):
                 config["Script"][path] = str(
-                    Path(r"C:/脚本根目录") / script_path.relative_to(root_path)
+                    Path(r"C:/脚本根目录")
+                    / Path(config["Script"][path]).relative_to(
+                        Path(config["Info"]["RootPath"])
+                    )
                 )
-            elif IS_WINDOWS and script_path.is_relative_to(Path(os.environ["APPDATA"])):
+            if IS_WINDOWS and Path(config["Script"][path]).is_relative_to(
+                Path(os.environ["APPDATA"])
+            ):
                 config["Script"][path] = (
-                    f"%APPDATA%/{script_path.relative_to(Path(os.environ['APPDATA']))}"
+                    f"%APPDATA%/{Path(config['Script'][path]).relative_to(Path(os.environ['APPDATA']))}"
                 )
-        if root_path is not None:
-            config["Info"]["RootPath"] = str(Path(r"C:/脚本根目录"))
+        config["Info"]["RootPath"] = str(Path(r"C:/脚本根目录"))
 
         # 上面只覆盖脚本自身的路径项；游戏路径、命令行等自由文本同样会带出本机用户名，统一打码
         for items in config.values():
@@ -1464,22 +1255,16 @@ class AppConfig:
 
         if user_id is None:
             # 获取全部用户配置
-            data = self.ScriptConfig[uid].UserData.model_dump(
-                context={"audience": "api"}
-            )
+            data = await self.ScriptConfig[uid].UserData.toDict()
         else:
             # 获取指定用户配置
-            entry = self.ScriptConfig[uid].UserData[uuid.UUID(user_id)]
-            return (
-                [{"uid": str(entry.uid), "type": type(entry).__name__}],
-                {str(entry.uid): entry.model_dump(context={"audience": "api"})},
-            )
+            data = await self.ScriptConfig[uid].UserData.get(uuid.UUID(user_id))
 
-        index = data["order"]
-        return list(index), data["data"]
+        index = data.pop("instances", [])
+        return list(index), data
 
     async def add_user(
-        self, script_id: str, *, payload: dict[str, Any] | None = None
+        self, script_id: str
     ) -> tuple[
         uuid.UUID,
         MaaUserConfig
@@ -1505,49 +1290,34 @@ class AppConfig:
 
         # 根据脚本类型选择添加对应用户配置
         if isinstance(script_config, MaaConfig):
-            uid = script_config.UserData.add(MaaUserConfig, payload=payload)
-            await script_config.UserData.commit()
-            config = script_config.UserData[uid]
+            uid, config = await script_config.UserData.add(MaaUserConfig)
         elif isinstance(script_config, SrcConfig):
-            uid = script_config.UserData.add(SrcUserConfig, payload=payload)
-            await script_config.UserData.commit()
-            config = script_config.UserData[uid]
+            uid, config = await script_config.UserData.add(SrcUserConfig)
         elif isinstance(script_config, GeneralConfig):
-            uid = script_config.UserData.add(GeneralUserConfig, payload=payload)
-            await script_config.UserData.commit()
-            config = script_config.UserData[uid]
+            uid, config = await script_config.UserData.add(GeneralUserConfig)
         elif isinstance(script_config, OkwwConfig):
-            uid = script_config.UserData.add(OkwwUserConfig, payload=payload)
-            await script_config.UserData.commit()
-            config = script_config.UserData[uid]
+            uid, config = await script_config.UserData.add(OkwwUserConfig)
             try:
                 from app.task.Okww.tools.config_dir import ensure_user_config_dir
 
                 await ensure_user_config_dir(
                     script_id=script_id,
                     user_id=str(uid),
-                    base=str(config.Info.Base or BASE_SHARED),
+                    base=str(config.get("Info", "Base") or BASE_SHARED),
                 )
             except Exception:
                 # 配置初始化失败时回滚用户，避免留下无法运行的半成品用户。
-                script_config.UserData.remove(uid)
-                await script_config.UserData.commit()
+                await script_config.UserData.remove(uid)
                 raise
         elif isinstance(script_config, OkNteConfig):
-            uid = script_config.UserData.add(OkNteUserConfig, payload=payload)
-            await script_config.UserData.commit()
-            config = script_config.UserData[uid]
+            uid, config = await script_config.UserData.add(OkNteUserConfig)
         elif isinstance(script_config, MaaEndConfig):
-            uid = script_config.UserData.add(MaaEndUserConfig, payload=payload)
-            await script_config.UserData.commit()
-            config = script_config.UserData[uid]
+            uid, config = await script_config.UserData.add(MaaEndUserConfig)
         elif isinstance(script_config, MaaFWConfig):
             # 含特调子类（M9A / MSS）：用户类由脚本类的 USER_CONFIG_CLASS 决定。
-            uid = script_config.UserData.add(
-                script_config.USER_CONFIG_CLASS, payload=payload
+            uid, config = await script_config.UserData.add(
+                script_config.USER_CONFIG_CLASS
             )
-            await script_config.UserData.commit()
-            config = script_config.UserData[uid]
             # 空任务队列按项目默认写成实打实的队列；项目还没导入时留到读用户、运行前再补
             from app.task.MaaFW.tools.embedded.default_snapshot import (
                 fill_default_task_snapshots,
@@ -1555,25 +1325,15 @@ class AppConfig:
 
             await fill_default_task_snapshots(script_id, script_config, [str(uid)])
         elif isinstance(script_config, HSRConfig):
-            uid = script_config.UserData.add(HSRUserConfig, payload=payload)
-            await script_config.UserData.commit()
-            config = script_config.UserData[uid]
+            uid, config = await script_config.UserData.add(HSRUserConfig)
         elif isinstance(script_config, BetterGIConfig):
-            uid = script_config.UserData.add(BetterGIUserConfig, payload=payload)
-            await script_config.UserData.commit()
-            config = script_config.UserData[uid]
+            uid, config = await script_config.UserData.add(BetterGIUserConfig)
         elif isinstance(script_config, ZzzOdConfig):
-            uid = script_config.UserData.add(ZzzOdUserConfig, payload=payload)
-            await script_config.UserData.commit()
-            config = script_config.UserData[uid]
+            uid, config = await script_config.UserData.add(ZzzOdUserConfig)
         elif isinstance(script_config, BAAHConfig):
-            uid = script_config.UserData.add(BAAHUserConfig, payload=payload)
-            await script_config.UserData.commit()
-            config = script_config.UserData[uid]
+            uid, config = await script_config.UserData.add(BAAHUserConfig)
         elif isinstance(script_config, WhimboxConfig):
-            uid = script_config.UserData.add(WhimboxUserConfig, payload=payload)
-            await script_config.UserData.commit()
-            config = script_config.UserData[uid]
+            uid, config = await script_config.UserData.add(WhimboxUserConfig)
         else:
             raise TypeError(f"不支持的脚本配置类型: {type(script_config)}")
 
@@ -1590,8 +1350,8 @@ class AppConfig:
     def _zzzod_root(self, script_config: ZzzOdConfig) -> Path:
         """返回 zzz-od 安装根目录并按哨兵文件校验有效。
 
-        三层防线（与路径字段声明、自动发现/check() 同一组哨兵）：
-        1. 拒绝未配置路径——``Path("").is_dir()``
+        三层防线（与 FolderValidator 非空分支、自动发现/check() 同一组哨兵）：
+        1. 拒绝空串——``FolderValidator`` 对空串放行，``Path("").is_dir()``
            在 cwd 下为真，independent 来源保存会把 ``config/01/`` 建进 MAS 工作目录；
         2. 拒绝非绝对路径 / 不存在的目录 / ``Path.cwd()``；
         3. ``validate_install`` 安装哨兵（``src`` 目录）——任意随机目录
@@ -1601,7 +1361,7 @@ class AppConfig:
            （读写路径自身会按需初始化；完整初始化校验用 validate_root）。
         """
 
-        raw = str(script_config.Info.RootPath or "").strip()
+        raw = str(script_config.get("Info", "RootPath") or "").strip()
         if not raw:
             raise ValueError("请先在脚本设置中配置绝区零一条龙安装目录")
         root = Path(raw).expanduser()
@@ -1772,7 +1532,7 @@ class AppConfig:
         """任一指向同一安装的 ZzzOd 脚本正在运行时拒绝槽级写操作。
 
         槽目录跨脚本共享同一份安装目录：另一脚本运行中时，其用户的绑定号
-        可能尚未持久化（首次分配的 SlotIdx 还在等待异步落盘），
+        可能尚未持久化（首跑的 SlotIdx 只写在运行期副本，final_task 才回写），
         持久配置里的占用判定读不到——此时清理/恢复会误动在跑用户的槽。
 
         Raises:
@@ -1788,7 +1548,7 @@ class AppConfig:
                 or not script_config.is_locked
             ):
                 continue
-            script_root = str(script_config.Info.RootPath or "").strip()
+            script_root = str(script_config.get("Info", "RootPath") or "").strip()
             if script_root and config_root_key(script_root) == key:
                 raise RuntimeError("有正在运行的绝区零一条龙脚本, 请结束后再试")
 
@@ -1904,15 +1664,10 @@ class AppConfig:
                 # 与「添加用户」同一入口（含持久化）；锁定时它自己会拒绝
                 uid, user_cfg = await self.add_user(script_id)
                 created_uid = uid
-                if not isinstance(user_cfg, ZzzOdUserConfig):
-                    raise TypeError("用户配置类型错误")
-                await user_cfg.update(
-                    type(user_cfg).model_validate({"Info": {"Name": name}}),
-                    check_visibility=False,
-                )
+                await user_cfg.set("Info", "Name", name)
             else:
                 _, _, user_cfg, uid = self._zzzod_user(script_id, str(target_user))
-                name = str(user_cfg.Info.Name or "")
+                name = str(user_cfg.get("Info", "Name") or "")
 
             used = collect_used_slot_idxs(root, exclude_uids={uid})
             dest = await ensure_user_slot(
@@ -1927,8 +1682,7 @@ class AppConfig:
             # 它的槽随后因归属消失被自动回收（内容已在回收池存底，可再恢复）
             if created_uid is not None:
                 try:
-                    script_config.UserData.remove(created_uid)
-                    await script_config.UserData.commit()
+                    await script_config.UserData.remove(created_uid)
                 except Exception as e:
                     logger.opt(exception=True).warning(
                         f"恢复失败后撤回新建用户失败（请手动删除）: {e}"
@@ -1981,7 +1735,7 @@ class AppConfig:
             slot = int(instance_idx)
         else:
             _, root, user_cfg, _ = self._zzzod_user(script_id, user_id)
-            slot = int(user_cfg.Info.SlotIdx or -1)
+            slot = int(user_cfg.get("Info", "SlotIdx") or -1)
         current = read_app_config(root, slot, app_id) if slot > 0 else {}
         # 预备编队等选项随槽而异（team.yml 在实例目录），无槽时无动态选项
         config_dir = instance_dir(root, slot) if slot > 0 else None
@@ -2211,7 +1965,7 @@ class AppConfig:
             slot = int(instance_idx)
         else:
             _, root, user_cfg, _ = self._zzzod_user(script_id, user_id)
-            slot = int(user_cfg.Info.SlotIdx or -1)
+            slot = int(user_cfg.get("Info", "SlotIdx") or -1)
 
         teams = []
         if slot > 0:
@@ -2323,13 +2077,16 @@ class AppConfig:
                 if not isinstance(bound_script, ZzzOdConfig):
                     continue
                 for bound_uid, bound_cfg in bound_script.UserData.items():
-                    bound_slot = int(bound_cfg.Info.SlotIdx or -1)
+                    bound_slot = int(bound_cfg.get("Info", "SlotIdx") or -1)
                     if bound_slot not in backup_idxs:
                         continue
                     if bound_uid == uid:
                         who = "本用户"
                     else:
-                        who = f"脚本「{str(bound_script.Info.Name or '未知脚本')}」的用户「{str(bound_cfg.Info.Name or '未知用户')}」"
+                        who = (
+                            f"脚本「{str(bound_script.get('Info', 'Name') or '未知脚本')}」"
+                            f"的用户「{str(bound_cfg.get('Info', 'Name') or '未知用户')}」"
+                        )
                     raise ValueError(
                         f"备份含原生实例 {bound_slot:02d}，已被{who}绑定为配置槽，"
                         "恢复会覆盖其内容，已中止"
@@ -2338,7 +2095,7 @@ class AppConfig:
             logger.info(f"ZZZ-OD 用户 {uid} 已把备份 {ts} 恢复到一条龙原生配置")
             return -1
 
-        slot = int(user_cfg.Info.SlotIdx or -1)
+        slot = int(user_cfg.get("Info", "SlotIdx") or -1)
         if slot <= 0:
             raise ValueError("该用户还没有生成过配置备份")
         backup_dir = get_mas_backup_dir(script_id, slot, ts)
@@ -2407,53 +2164,22 @@ class AppConfig:
         account = backup_account
         # 任务编排整表回填（含未启用项原位保留顺序，运行侧只消费启用项）
         all_apps = backup_apps
-        await user_cfg.update(
-            type(user_cfg).model_validate(
-                {"Game": {"GameRegion": str(account.get("game_region") or "cn")}}
-            ),
-            check_visibility=False,
+        await user_cfg.set(
+            "Game", "GameRegion", str(account.get("game_region") or "cn")
         )
-        await user_cfg.update(
-            type(user_cfg).model_validate(
-                {"Game": {"GamePath": str(account.get("game_path") or "")}}
-            ),
-            check_visibility=False,
+        await user_cfg.set("Game", "GamePath", str(account.get("game_path") or ""))
+        await user_cfg.set(
+            "Game", "GameLanguage", str(account.get("game_language") or "cn")
         )
-        await user_cfg.update(
-            type(user_cfg).model_validate(
-                {"Game": {"GameLanguage": str(account.get("game_language") or "cn")}}
-            ),
-            check_visibility=False,
+        await user_cfg.set(
+            "Game",
+            "BilibiliAccountName",
+            str(account.get("bilibili_account_name") or ""),
         )
-        await user_cfg.update(
-            type(user_cfg).model_validate(
-                {
-                    "Game": {
-                        "BilibiliAccountName": str(
-                            account.get("bilibili_account_name") or ""
-                        )
-                    }
-                }
-            ),
-            check_visibility=False,
-        )
-        await user_cfg.update(
-            type(user_cfg).model_validate(
-                {"Game": {"Account": str(account.get("account") or "")}}
-            ),
-            check_visibility=False,
-        )
-        await user_cfg.update(
-            type(user_cfg).model_validate(
-                {"Game": {"Password": str(account.get("password") or "")}}
-            ),
-            check_visibility=False,
-        )
-        await user_cfg.update(
-            type(user_cfg).model_validate(
-                {"OneDragon": {"AppList": json.dumps(all_apps, ensure_ascii=False)}}
-            ),
-            check_visibility=False,
+        await user_cfg.set("Game", "Account", str(account.get("account") or ""))
+        await user_cfg.set("Game", "Password", str(account.get("password") or ""))
+        await user_cfg.set(
+            "OneDragon", "AppList", json.dumps(all_apps, ensure_ascii=False)
         )
         # 信息字段回填（用户名/启用/base 来源/启动器/剩余天数/备注/节点详情推送）：
         # 旧备份可能没有该快照，缺失字段跳过，保持向前兼容
@@ -2466,20 +2192,10 @@ class AppConfig:
             "Notes",
         ):
             if field in backup_info:
-                await user_cfg.update(
-                    type(user_cfg).model_validate(
-                        {"Info": {field: backup_info[field]}}
-                    ),
-                    check_visibility=False,
-                )
+                await user_cfg.set("Info", field, backup_info[field])
         if "PushLogMode" in backup_info:
-            await user_cfg.update(
-                type(user_cfg).model_validate(
-                    {"Notify": {"PushLogMode": backup_info["PushLogMode"]}}
-                ),
-                check_visibility=False,
-            )
-        await config_manager.flush()
+            await user_cfg.set("Notify", "PushLogMode", backup_info["PushLogMode"])
+        await self.ScriptConfig.save()
         logger.info(
             f"ZZZ-OD 用户 {uid} 已把备份 {ts} 恢复到 MAS 配置 "
             f"(槽 {slot:02d} + 字段回填, 任务 {len(all_apps)} 项)"
@@ -2517,7 +2233,7 @@ class AppConfig:
         )
 
         _, root, user_cfg, uid = self._zzzod_user(script_id, user_id)
-        slot = int(user_cfg.Info.SlotIdx or -1)
+        slot = int(user_cfg.get("Info", "SlotIdx") or -1)
         # 来源校验必须先于存底物化：自身槽不能既作母版又被页面字段覆盖。
         if slot > 0 and int(instance_idx) == slot:
             raise ValueError("不能从当前用户绑定的 MAS 槽导入配置")
@@ -2569,31 +2285,18 @@ class AppConfig:
             value = str(game_account.get(native_key) or "").strip()
             if not value:
                 continue
-            await user_cfg.update(
-                type(user_cfg).model_validate({"Game": {user_key: value}}),
-                check_visibility=False,
-            )
+            await user_cfg.set("Game", user_key, value)
             imported_accounts += 1
         if "use_custom_win_title" in game_account:
-            await user_cfg.update(
-                type(user_cfg).model_validate(
-                    {
-                        "Game": {
-                            "UseCustomWinTitle": bool(
-                                game_account.get("use_custom_win_title")
-                            )
-                        }
-                    }
-                ),
-                check_visibility=False,
+            await user_cfg.set(
+                "Game",
+                "UseCustomWinTitle",
+                bool(game_account.get("use_custom_win_title")),
             )
             imported_accounts += 1
 
-        await user_cfg.update(
-            type(user_cfg).model_validate(
-                {"OneDragon": {"AppList": json.dumps(all_apps, ensure_ascii=False)}}
-            ),
-            check_visibility=False,
+        await user_cfg.set(
+            "OneDragon", "AppList", json.dumps(all_apps, ensure_ascii=False)
         )
 
         # 实例级持久配置对齐来源实例：
@@ -2608,7 +2311,7 @@ class AppConfig:
         # 均不经 MAS 用户字段承载，直接对齐到绑定槽（注入运行的实例目录）；
         # 用户尚无绑定槽时按全局查重分配（语义与运行注入的 ensure_user_slot
         # 一致）。来源缺失的文件对齐为删除 = 沿用 zzz-od 默认
-        slot = int(user_cfg.Info.SlotIdx or -1)
+        slot = int(user_cfg.get("Info", "SlotIdx") or -1)
         if slot <= 0:
             slot = await ensure_user_slot(
                 root,
@@ -2653,7 +2356,7 @@ class AppConfig:
                         continue
                     shutil.copyfile(source_yml, target_one_dragon / source_yml.name)
 
-        await config_manager.flush()
+        await self.ScriptConfig.save()
         align_note = (
             f"来源与槽 {slot:02d} 为同一目录，已跳过实例级对齐"
             if same_dir
@@ -2707,15 +2410,15 @@ class AppConfig:
                 continue
             if exclude_same_script and str(script_uid) == script_id:
                 continue
-            script_root = str(script_config.Info.RootPath or "").strip()
+            script_root = str(script_config.get("Info", "RootPath") or "").strip()
             if not script_root or config_root_key(script_root) != key:
                 continue
-            script_name = str(script_config.Info.Name or "未知脚本")
+            script_name = str(script_config.get("Info", "Name") or "未知脚本")
             for other_uid, cfg in script_config.UserData.items():
                 if other_uid == user_uid:
                     continue
-                if int(cfg.Info.SlotIdx or -1) == slot:
-                    user_name = str(cfg.Info.Name or "未知用户")
+                if int(cfg.get("Info", "SlotIdx") or -1) == slot:
+                    user_name = str(cfg.get("Info", "Name") or "未知用户")
                     return f"脚本「{script_name}」的用户「{user_name}」"
 
         # 2) 一条龙原生实例（按原生注册表）
@@ -2741,10 +2444,10 @@ class AppConfig:
         if user_uid not in script_config.UserData:
             return
         user_cfg = script_config.UserData[user_uid]
-        slot = int(user_cfg.Info.SlotIdx or -1)
+        slot = int(user_cfg.get("Info", "SlotIdx") or -1)
         if slot <= 0:
             return
-        name = str(user_cfg.Info.Name or "")
+        name = str(user_cfg.get("Info", "Name") or "")
         await self._zzzod_recycle_bound_slot(
             script_id,
             script_config,
@@ -2957,7 +2660,7 @@ class AppConfig:
             }
 
         _, root, user_cfg, _ = self._zzzod_user(script_id, user_id)
-        slot = int(user_cfg.Info.SlotIdx or -1)
+        slot = int(user_cfg.get("Info", "SlotIdx") or -1)
         if slot <= 0:
             raise ValueError("该用户还没有生成过配置备份")
         backup = get_mas_backup_dir(script_id, slot, ts)
@@ -3202,7 +2905,7 @@ class AppConfig:
     # ════════════ 配置恢复（宿主注入池解析，门面绑定上下文） ════════════
 
     def set_restore_pool_resolver(
-        self, resolver: Callable[["ConfigEntry"], list["ConfigRestorePool"]]
+        self, resolver: Callable[["ConfigBase"], list["ConfigRestorePool"]]
     ) -> None:
         """由宿主装配恢复池解析函数，绑定仅作用于当前配置实例。"""
 
@@ -3343,15 +3046,15 @@ class AppConfig:
                 data.setdefault("Info", {})["IfQuickConfig"] = False
             if (
                 new_base == BASE_NATIVE
-                and normalize_base_source(user_config.Info.Base or BASE_INDEPENDENT)
+                and normalize_base_source(
+                    user_config.get("Info", "Base") or BASE_INDEPENDENT
+                )
                 != BASE_NATIVE
                 and any(
-                    (
-                        normalize_base_source(cfg.Info.Base or BASE_INDEPENDENT)
-                        == BASE_NATIVE
-                        for uid, cfg in script_config.UserData.items()
-                        if uid != user_uid
-                    )
+                    normalize_base_source(cfg.get("Info", "Base") or BASE_INDEPENDENT)
+                    == BASE_NATIVE
+                    for uid, cfg in script_config.UserData.items()
+                    if uid != user_uid
                 )
             ):
                 raise ValueError(
@@ -3393,15 +3096,17 @@ class AppConfig:
 
             task_patch = data["Task"]
             notice = takeover_notice_patch_value(
-                task_patch.get("IfCultivate", user_config.Task.IfCultivate),
-                task_patch.get("CultivateTargets", user_config.Task.CultivateTargets),
+                task_patch.get("IfCultivate", user_config.get("Task", "IfCultivate")),
+                task_patch.get(
+                    "CultivateTargets", user_config.get("Task", "CultivateTargets")
+                ),
             )
             if notice is not None:
                 data.setdefault("Data", {})["CultivateNotice"] = notice
 
         if precondition is not None and not precondition():
             return False
-        await user_config.update(type(user_config).model_validate(data))
+        await user_config.update(data)
         return True
 
     async def import_script_config_file(
@@ -3427,10 +3132,7 @@ class AppConfig:
         if not isinstance(script_config, MaaEndConfig):
             raise TypeError("当前脚本类型暂不支持导入配置文件")
 
-        script_root = script_config.Info.Path
-        if script_root is None:
-            raise ValueError("Path未配置，请检查路径设置")
-        source_config_dir = script_root / "config"
+        source_config_dir = Path(script_config.get("Info", "Path")) / "config"
         if not (source_config_dir / "mxu-MaaEnd.json").exists():
             raise FileNotFoundError(
                 "MaaEnd 配置文件不存在, 请检查 MaaEnd 路径设置或先启动 MaaEnd 完成配置文件生成"
@@ -3463,12 +3165,11 @@ class AppConfig:
             and user_uid in script_config.UserData
         ):
             user_cfg = script_config.UserData[user_uid]
-            slot = int(user_cfg.Info.SlotIdx or -1)
+            slot = int(user_cfg.get("Info", "SlotIdx") or -1)
             if slot > 0:
-                recycle_ctx = (slot, str(user_cfg.Info.Name or ""))
+                recycle_ctx = (slot, str(user_cfg.get("Info", "Name") or ""))
 
-        script_config.UserData.remove(user_uid)
-        await script_config.UserData.commit()
+        await script_config.UserData.remove(user_uid)
 
         if recycle_ctx is not None:
             await self._zzzod_recycle_bound_slot(
@@ -3501,16 +3202,12 @@ class AppConfig:
 
         script_uid = uuid.UUID(script_id)
 
-        self.ScriptConfig[script_uid].UserData.set_order(
+        await self.ScriptConfig[script_uid].UserData.setOrder(
             list(map(uuid.UUID, index_list))
         )
-        await self.ScriptConfig[script_uid].UserData.commit()
 
     async def add_plan(
-        self,
-        script: Literal["MaaPlan", "MaaEndPlan", "BAAHPlan", "MSSPlan"],
-        *,
-        payload: dict[str, Any] | None = None,
+        self, script: Literal["MaaPlan", "MaaEndPlan", "BAAHPlan", "MSSPlan"]
     ) -> tuple[
         uuid.UUID, MaaPlanConfig | MaaEndPlanConfig | BAAHPlanConfig | MSSPlanConfig
     ]:
@@ -3523,10 +3220,7 @@ class AppConfig:
             for item in PLAN_BOOK.values()
             if item["create_type"] == script
         )
-        _config_uid = self.PlanConfig.add(plan_class, payload=payload)
-        await self.PlanConfig.commit()
-        _config_entry = self.PlanConfig[_config_uid]
-        return _config_uid, _config_entry
+        return await self.PlanConfig.add(plan_class)
 
     async def get_plan(self, plan_id: Optional[str]) -> tuple[list, dict]:
         """获取计划表配置"""
@@ -3534,16 +3228,12 @@ class AppConfig:
         logger.info(f"获取计划表配置: {plan_id}")
 
         if plan_id is None:
-            data = self.PlanConfig.model_dump(context={"audience": "api"})
+            data = await self.PlanConfig.toDict()
         else:
-            entry = self.PlanConfig[uuid.UUID(plan_id)]
-            return (
-                [{"uid": str(entry.uid), "type": type(entry).__name__}],
-                {str(entry.uid): entry.model_dump(context={"audience": "api"})},
-            )
+            data = await self.PlanConfig.get(uuid.UUID(plan_id))
 
-        index = data["order"]
-        return list(index), data["data"]
+        index = data.pop("instances", [])
+        return list(index), data
 
     async def update_plan(self, plan_id: str, data: Dict[str, Dict[str, Any]]) -> None:
         """更新计划表配置"""
@@ -3552,9 +3242,7 @@ class AppConfig:
 
         plan_uid = uuid.UUID(plan_id)
 
-        await self.PlanConfig[plan_uid].update(
-            type(self.PlanConfig[plan_uid]).model_validate(data)
-        )
+        await self.PlanConfig[plan_uid].update(data)
 
     async def del_plan(self, plan_id: str) -> None:
         """删除计划表配置"""
@@ -3577,67 +3265,49 @@ class AppConfig:
             if not isinstance(script, consumer_config["script_class"]):
                 continue
             for user in script.UserData.values():
-                if (
-                    getattr(
-                        getattr(user, consumer_config["field_group"]),
-                        consumer_config["field_name"],
-                    )
-                    != plan_uid
-                ):
+                if user.get(
+                    consumer_config["field_group"], consumer_config["field_name"]
+                ) != str(plan_uid):
                     continue
                 if user.is_locked:
                     raise RuntimeError(
-                        f"用户 {user.Info.Name} 正在使用此计划表且被锁定, 无法完成删除"
+                        f"用户 {user.get('Info', 'Name')} 正在使用此计划表且被锁定, 无法完成删除"
                     )
                 user_list.append(user)
 
         for user in user_list:
-            entry = cast(ConfigEntry, user)
-            await entry.update(
-                type(entry).model_validate(
-                    {
-                        consumer_config["field_group"]: {
-                            consumer_config["field_name"]: "Fixed"
-                        }
-                    }
-                ),
-                check_visibility=False,
+            await user.set(
+                group=consumer_config["field_group"],
+                name=consumer_config["field_name"],
+                value="Fixed",
             )
 
-        self.PlanConfig.remove(plan_uid)
-        await self.PlanConfig.commit()
+        await self.PlanConfig.remove(plan_uid)
 
     async def reorder_plan(self, index_list: list[str]) -> None:
         """重新排序计划表"""
 
         logger.info(f"重新排序计划表: {index_list}")
 
-        self.PlanConfig.set_order(list(map(uuid.UUID, index_list)))
-        await self.PlanConfig.commit()
+        await self.PlanConfig.setOrder(list(map(uuid.UUID, index_list)))
 
     async def get_emulator(self, emulator_id: Optional[str]) -> tuple[list, dict]:
         """获取模拟器配置"""
         logger.info(f"获取全局模拟器设置: {emulator_id}")
 
         if emulator_id is None:
-            data = self.EmulatorConfig.model_dump(context={"audience": "api"})
+            data = await self.EmulatorConfig.toDict()
         else:
-            entry = self.EmulatorConfig[uuid.UUID(emulator_id)]
-            return (
-                [{"uid": str(entry.uid), "type": type(entry).__name__}],
-                {str(entry.uid): entry.model_dump(context={"audience": "api"})},
-            )
+            data = await self.EmulatorConfig.get(uuid.UUID(emulator_id))
 
-        index = data["order"]
-        return list(index), data["data"]
+        index = data.pop("instances", [])
+        return list(index), data
 
     async def add_emulator(self) -> tuple[uuid.UUID, EmulatorConfig]:
         """添加模拟器配置"""
         logger.info("添加全局模拟器配置")
 
-        uid = self.EmulatorConfig.add(EmulatorConfig)
-        await self.EmulatorConfig.commit()
-        config = self.EmulatorConfig[uid]
+        uid, config = await self.EmulatorConfig.add(EmulatorConfig)
         return uid, config
 
     async def update_emulator(
@@ -3649,9 +3319,7 @@ class AppConfig:
 
         logger.info(f"更新模拟器配置: {emulator_id}")
 
-        await self.EmulatorConfig[emulator_uid].update(
-            type(self.EmulatorConfig[emulator_uid]).model_validate(data)
-        )
+        await self.EmulatorConfig[emulator_uid].update(data)
 
     async def del_emulator(self, emulator_id: str) -> None:
         """删除模拟器配置"""
@@ -3664,49 +3332,36 @@ class AppConfig:
 
         for script in self.ScriptConfig.values():
             if isinstance(script, MaaConfig):
-                if script.Emulator.Id == emulator_uid:
+                if script.get("Emulator", "Id") == str(emulator_id):
                     if script.is_locked:
                         raise RuntimeError(
-                            f"脚本 {script.Info.Name} 正在使用此模拟器且被锁定, 无法完成删除"
+                            f"脚本 {script.get('Info', 'Name')} 正在使用此模拟器且被锁定, 无法完成删除"
                         )
                     script_list.append(script)
             elif isinstance(script, GeneralConfig):
-                if (
-                    script.Game.Type == "Emulator"
-                    and script.Game.EmulatorId == emulator_uid
-                ):
+                if script.get("Game", "Type") == "Emulator" and script.get(
+                    "Game", "EmulatorId"
+                ) == str(emulator_id):
                     if script.is_locked:
                         raise RuntimeError(
-                            f"脚本 {script.Info.Name} 正在使用此模拟器且被锁定, 无法完成删除"
+                            f"脚本 {script.get('Info', 'Name')} 正在使用此模拟器且被锁定, 无法完成删除"
                         )
                     script_list.append(script)
 
         for script in script_list:
             if isinstance(script, MaaConfig):
-                await script.update(
-                    type(script).model_validate({"Emulator": {"Id": "-"}}),
-                    check_visibility=False,
-                )
+                await script.set("Emulator", "Id", "-")
             elif isinstance(script, GeneralConfig):
-                await script.update(
-                    type(script).model_validate({"Game": {"EmulatorId": "-"}}),
-                    check_visibility=False,
-                )
+                await script.set("Game", "EmulatorId", "-")
 
-        self.EmulatorConfig.remove(emulator_uid)
-        await self.EmulatorConfig.commit()
+        await self.EmulatorConfig.remove(emulator_uid)
 
-    async def add_queue(
-        self, *, payload: dict[str, Any] | None = None
-    ) -> tuple[uuid.UUID, QueueConfig]:
+    async def add_queue(self) -> tuple[uuid.UUID, QueueConfig]:
         """添加调度队列"""
 
         logger.info("添加调度队列")
 
-        _config_uid = self.QueueConfig.add(QueueConfig, payload=payload)
-        await self.QueueConfig.commit()
-        _config_entry = self.QueueConfig[_config_uid]
-        return _config_uid, _config_entry
+        return await self.QueueConfig.add(QueueConfig)
 
     async def get_queue(self, queue_id: Optional[str]) -> tuple[list, dict]:
         """获取调度队列配置"""
@@ -3714,16 +3369,12 @@ class AppConfig:
         logger.info(f"获取调度队列配置: {queue_id}")
 
         if queue_id is None:
-            data = self.QueueConfig.model_dump(context={"audience": "api"})
+            data = await self.QueueConfig.toDict()
         else:
-            entry = self.QueueConfig[uuid.UUID(queue_id)]
-            return (
-                [{"uid": str(entry.uid), "type": type(entry).__name__}],
-                {str(entry.uid): entry.model_dump(context={"audience": "api"})},
-            )
+            data = await self.QueueConfig.get(uuid.UUID(queue_id))
 
-        index = data["order"]
-        return list(index), data["data"]
+        index = data.pop("instances", [])
+        return list(index), data
 
     async def update_queue(
         self, queue_id: str, data: Dict[str, Dict[str, Any]]
@@ -3738,9 +3389,7 @@ class AppConfig:
         if "CycleEnabled" in data.get("Info", {}):
             self._ensure_cycle_safe(queue_uid, "切换循环开关")
 
-        await self.QueueConfig[queue_uid].update(
-            type(self.QueueConfig[queue_uid]).model_validate(data)
-        )
+        await self.QueueConfig[queue_uid].update(data)
 
     async def del_queue(self, queue_id: str) -> None:
         """删除调度队列配置"""
@@ -3750,8 +3399,7 @@ class AppConfig:
         queue_uid = uuid.UUID(queue_id)
         self._ensure_cycle_safe(queue_uid, "删除")
 
-        self.QueueConfig.remove(queue_uid)
-        await self.QueueConfig.commit()
+        await self.QueueConfig.remove(queue_uid)
 
     async def get_time_set(
         self, queue_id: str, time_set_id: Optional[str]
@@ -3763,30 +3411,20 @@ class AppConfig:
         queue_uid = uuid.UUID(queue_id)
 
         if time_set_id is None:
-            data = self.QueueConfig[queue_uid].TimeSet.model_dump(
-                context={"audience": "api"}
-            )
+            data = await self.QueueConfig[queue_uid].TimeSet.toDict()
         else:
-            entry = self.QueueConfig[queue_uid].TimeSet[uuid.UUID(time_set_id)]
-            return (
-                [{"uid": str(entry.uid), "type": type(entry).__name__}],
-                {str(entry.uid): entry.model_dump(context={"audience": "api"})},
-            )
+            data = await self.QueueConfig[queue_uid].TimeSet.get(uuid.UUID(time_set_id))
 
-        index = data["order"]
-        return list(index), data["data"]
+        index = data.pop("instances", [])
+        return list(index), data
 
-    async def add_time_set(
-        self, queue_id: str, *, payload: dict[str, Any] | None = None
-    ) -> tuple[uuid.UUID, TimeSet]:
+    async def add_time_set(self, queue_id: str) -> tuple[uuid.UUID, TimeSet]:
         """添加时间设置配置"""
 
         logger.info(f"{queue_id} 添加时间设置配置")
 
         queue_uid = uuid.UUID(queue_id)
-        uid = self.QueueConfig[queue_uid].TimeSet.add(TimeSet, payload=payload)
-        await self.QueueConfig[queue_uid].TimeSet.commit()
-        config = self.QueueConfig[queue_uid].TimeSet[uid]
+        uid, config = await self.QueueConfig[queue_uid].TimeSet.add(TimeSet)
 
         return uid, config
 
@@ -3800,15 +3438,7 @@ class AppConfig:
         queue_uid = uuid.UUID(queue_id)
         time_set_uid = uuid.UUID(time_set_id)
 
-        await (
-            self.QueueConfig[queue_uid]
-            .TimeSet[time_set_uid]
-            .update(
-                type(self.QueueConfig[queue_uid].TimeSet[time_set_uid]).model_validate(
-                    data
-                )
-            )
-        )
+        await self.QueueConfig[queue_uid].TimeSet[time_set_uid].update(data)
 
     async def del_time_set(self, queue_id: str, time_set_id: str) -> None:
         """删除时间设置配置"""
@@ -3818,8 +3448,7 @@ class AppConfig:
         queue_uid = uuid.UUID(queue_id)
         time_set_uid = uuid.UUID(time_set_id)
 
-        self.QueueConfig[queue_uid].TimeSet.remove(time_set_uid)
-        await self.QueueConfig[queue_uid].TimeSet.commit()
+        await self.QueueConfig[queue_uid].TimeSet.remove(time_set_uid)
 
     async def reorder_time_set(self, queue_id: str, index_list: list[str]) -> None:
         """重新排序时间设置"""
@@ -3828,8 +3457,9 @@ class AppConfig:
 
         queue_uid = uuid.UUID(queue_id)
 
-        self.QueueConfig[queue_uid].TimeSet.set_order(list(map(uuid.UUID, index_list)))
-        await self.QueueConfig[queue_uid].TimeSet.commit()
+        await self.QueueConfig[queue_uid].TimeSet.setOrder(
+            list(map(uuid.UUID, index_list))
+        )
 
     async def get_queue_item(
         self, queue_id: str, queue_item_id: Optional[str]
@@ -3841,22 +3471,16 @@ class AppConfig:
         queue_uid = uuid.UUID(queue_id)
 
         if queue_item_id is None:
-            data = self.QueueConfig[queue_uid].QueueItem.model_dump(
-                context={"audience": "api"}
-            )
+            data = await self.QueueConfig[queue_uid].QueueItem.toDict()
         else:
-            entry = self.QueueConfig[queue_uid].QueueItem[uuid.UUID(queue_item_id)]
-            return (
-                [{"uid": str(entry.uid), "type": type(entry).__name__}],
-                {str(entry.uid): entry.model_dump(context={"audience": "api"})},
+            data = await self.QueueConfig[queue_uid].QueueItem.get(
+                uuid.UUID(queue_item_id)
             )
 
-        index = data["order"]
-        return list(index), data["data"]
+        index = data.pop("instances", [])
+        return list(index), data
 
-    async def add_queue_item(
-        self, queue_id: str, *, payload: dict[str, Any] | None = None
-    ) -> tuple[uuid.UUID, QueueItem]:
+    async def add_queue_item(self, queue_id: str) -> tuple[uuid.UUID, QueueItem]:
         """添加队列项配置"""
 
         logger.info(f"{queue_id} 添加队列项配置")
@@ -3864,9 +3488,7 @@ class AppConfig:
         queue_uid = uuid.UUID(queue_id)
         self._ensure_cycle_safe(queue_uid, "增删队列项")
 
-        uid = self.QueueConfig[queue_uid].QueueItem.add(QueueItem, payload=payload)
-        await self.QueueConfig[queue_uid].QueueItem.commit()
-        config = self.QueueConfig[queue_uid].QueueItem[uid]
+        uid, config = await self.QueueConfig[queue_uid].QueueItem.add(QueueItem)
 
         return uid, config
 
@@ -3884,15 +3506,7 @@ class AppConfig:
         if "Info" in data:
             self._ensure_cycle_safe(queue_uid, "更换队列项的脚本")
 
-        await (
-            self.QueueConfig[queue_uid]
-            .QueueItem[queue_item_uid]
-            .update(
-                type(
-                    self.QueueConfig[queue_uid].QueueItem[queue_item_uid]
-                ).model_validate(data)
-            )
-        )
+        await self.QueueConfig[queue_uid].QueueItem[queue_item_uid].update(data)
 
     async def del_queue_item(self, queue_id: str, queue_item_id: str) -> None:
         """删除队列项配置"""
@@ -3903,8 +3517,7 @@ class AppConfig:
         queue_item_uid = uuid.UUID(queue_item_id)
         self._ensure_cycle_safe(queue_uid, "增删队列项")
 
-        self.QueueConfig[queue_uid].QueueItem.remove(queue_item_uid)
-        await self.QueueConfig[queue_uid].QueueItem.commit()
+        await self.QueueConfig[queue_uid].QueueItem.remove(queue_item_uid)
 
     async def reorder_queue_item(self, queue_id: str, index_list: list[str]) -> None:
         """重新排序队列项"""
@@ -3914,10 +3527,9 @@ class AppConfig:
         queue_uid = uuid.UUID(queue_id)
         self._ensure_cycle_safe(queue_uid, "调整队列项顺序")
 
-        self.QueueConfig[queue_uid].QueueItem.set_order(
+        await self.QueueConfig[queue_uid].QueueItem.setOrder(
             list(map(uuid.UUID, index_list))
         )
-        await self.QueueConfig[queue_uid].QueueItem.commit()
 
     def _ensure_cycle_safe(self, queue_uid: uuid.UUID, action: str) -> None:
         """拦住会打乱正在运行的循环的改动。
@@ -3931,7 +3543,7 @@ class AppConfig:
             return
 
         queue_name = (
-            self.QueueConfig[queue_uid].Info.Name
+            self.QueueConfig[queue_uid].get("Info", "Name")
             if queue_uid in self.QueueConfig
             else str(queue_uid)
         )
@@ -3947,7 +3559,7 @@ class AppConfig:
             self.ToolsConfig._game_sign_result_data = {}
             self._game_sign_result_date = today
 
-        return self.ToolsConfig.model_dump(context={"audience": "api"})
+        return await self.ToolsConfig.toDict()
 
     async def update_community_results(
         self, formatted: dict[str, Any], *, replace: bool = False
@@ -3995,7 +3607,7 @@ class AppConfig:
 
         logger.info("更新工具设置")
 
-        await self.ToolsConfig.update(type(self.ToolsConfig).model_validate(data))
+        await self.ToolsConfig.update(data)
 
         logger.success("工具设置更新成功")
 
@@ -4008,9 +3620,7 @@ class AppConfig:
 
         logger.debug("获取所有游戏社区账号组")
 
-        return self.ToolsConfig.GameSign_Accounts.model_dump(
-            context={"audience": "api" if if_decrypt else "persist"}
-        )
+        return await self.ToolsConfig.GameSign_Accounts.toDict(if_decrypt=if_decrypt)
 
     async def add_game_sign_account(self) -> tuple[uuid.UUID, Any]:
         """添加游戏社区账号组"""
@@ -4021,19 +3631,14 @@ class AppConfig:
             existing_names = []
             for account in self.ToolsConfig.GameSign_Accounts.values():
                 try:
-                    existing_names.append(account.GameSignAccount.Name)
+                    existing_names.append(account.get("GameSignAccount", "Name"))
                 except (AttributeError, KeyError):
                     continue
             account_name = next_community_account_name(existing_names)
-            uid = self.ToolsConfig.GameSign_Accounts.add(GameSignAccountGroup)
-            await self.ToolsConfig.GameSign_Accounts.commit()
-            config = self.ToolsConfig.GameSign_Accounts[uid]
-            await config.update(
-                type(config).model_validate(
-                    {"GameSignAccount": {"Name": account_name}}
-                ),
-                check_visibility=False,
+            uid, config = await self.ToolsConfig.GameSign_Accounts.add(
+                GameSignAccountGroup
             )
+            await config.set("GameSignAccount", "Name", account_name)
             return uid, config
 
     def _clear_game_sign_account_results(self, account_id: str) -> None:
@@ -4054,7 +3659,7 @@ class AppConfig:
             if not result[platform]:
                 del result[platform]
 
-        tools_file = self.ToolsConfig.persist_path
+        tools_file = getattr(self.ToolsConfig, "file", None)
         snapshot_path = (
             tools_file.with_name(GAME_SIGN_RESULT_FILENAME)
             if isinstance(tools_file, Path)
@@ -4085,25 +3690,13 @@ class AppConfig:
                 if (
                     group == "GameSignAccount"
                     and name in credential_fields
-                    and getattr(getattr(account, group), name) != value
+                    and account.get(group, name) != value
                 ):
                     credential_changed = True
-                await account.update(
-                    type(account).model_validate({group: {name: value}}),
-                    check_visibility=False,
-                )
+                await account.set(group, name, value)
 
         if credential_changed:
-            await account.update(
-                type(account).model_validate(
-                    {
-                        "GameSignAccount": {
-                            "LastSignDate": datetime(2000, 1, 1, tzinfo=UTC8)
-                        }
-                    }
-                ),
-                check_visibility=False,
-            )
+            await account.set("GameSignAccount", "LastSignDate", "2000-01-01")
             self._clear_game_sign_account_results(account_id)
 
     async def delete_game_sign_account(self, account_id: str) -> None:
@@ -4112,8 +3705,7 @@ class AppConfig:
         logger.info(f"删除游戏社区账号组: {account_id}")
 
         account_uid = uuid.UUID(account_id)
-        self.ToolsConfig.GameSign_Accounts.remove(account_uid)
-        await self.ToolsConfig.GameSign_Accounts.commit()
+        await self.ToolsConfig.GameSign_Accounts.remove(account_uid)
         self._clear_game_sign_account_results(account_id)
 
     async def reorder_game_sign_accounts(self, order: list[str]) -> None:
@@ -4121,17 +3713,16 @@ class AppConfig:
 
         logger.info("调整游戏社区账号组顺序")
 
-        self.ToolsConfig.GameSign_Accounts.set_order([uuid.UUID(_) for _ in order])
-        await self.ToolsConfig.GameSign_Accounts.commit()
+        await self.ToolsConfig.GameSign_Accounts.setOrder([uuid.UUID(_) for _ in order])
 
     def obs_replay_options(self):
         """读取 OBS 连接与保留策略，服务层不依赖全局配置。"""
         from app.services.obs_replay import ObsReplayOptions
 
         return ObsReplayOptions(
-            port=self.setting.Replay.Port,
-            password=self.setting.Replay.Password,
-            max_replay_count=self.setting.Replay.MaxReplayCount,
+            port=self.get("Replay", "Port"),
+            password=self.get("Replay", "Password"),
+            max_replay_count=self.get("Replay", "MaxReplayCount"),
         )
 
     async def get_setting(self) -> Dict[str, Any]:
@@ -4139,7 +3730,9 @@ class AppConfig:
 
         logger.info("获取全局设置")
 
-        data = self.setting.model_dump(context={"audience": "api"})
+        data = await self.toDict()
+        replay = data.get("Replay", {})
+        replay["PasswordConfigured"] = bool(replay.pop("Password", ""))
         return data
 
     async def update_setting(self, data: Dict[str, Dict[str, Any]]) -> None:
@@ -4155,7 +3748,7 @@ class AppConfig:
                 if value is not None and key != "PasswordConfigured"
             }
             data = {**data, "Replay": replay}
-        await self.setting.update(type(self.setting).model_validate(data))
+        await self.update(data)
 
         logger.success("全局设置更新成功")
 
@@ -4171,15 +3764,9 @@ class AppConfig:
             logger.info(f"获取全局webhook设置: {webhook_id}")
 
             if webhook_id is None:
-                data = self.setting.Notify_CustomWebhooks.model_dump(
-                    context={"audience": "api"}
-                )
+                data = await self.Notify_CustomWebhooks.toDict()
             else:
-                entry = self.setting.Notify_CustomWebhooks[uuid.UUID(webhook_id)]
-                return (
-                    [{"uid": str(entry.uid), "type": type(entry).__name__}],
-                    {str(entry.uid): entry.model_dump(context={"audience": "api"})},
-                )
+                data = await self.Notify_CustomWebhooks.get(uuid.UUID(webhook_id))
 
         else:
             logger.info(f"获取webhook设置: {script_id} - {user_id} - {webhook_id}")
@@ -4189,23 +3776,19 @@ class AppConfig:
 
             if webhook_id is None:
                 data = (
-                    self.ScriptConfig[script_uid]
+                    await self.ScriptConfig[script_uid]
                     .UserData[user_uid]
-                    .Notify_CustomWebhooks.model_dump(context={"audience": "api"})
+                    .Notify_CustomWebhooks.toDict()
                 )
             else:
-                entry = (
-                    self.ScriptConfig[script_uid]
+                data = (
+                    await self.ScriptConfig[script_uid]
                     .UserData[user_uid]
-                    .Notify_CustomWebhooks[uuid.UUID(webhook_id)]
-                )
-                return (
-                    [{"uid": str(entry.uid), "type": type(entry).__name__}],
-                    {str(entry.uid): entry.model_dump(context={"audience": "api"})},
+                    .Notify_CustomWebhooks.get(uuid.UUID(webhook_id))
                 )
 
-        index = data["order"]
-        return list(index), data["data"]
+        index = data.pop("instances", [])
+        return list(index), data
 
     async def add_webhook(
         self, script_id: Optional[str], user_id: Optional[str]
@@ -4215,9 +3798,7 @@ class AppConfig:
         if script_id is None and user_id is None:
             logger.info("添加全局webhook配置")
 
-            uid = self.setting.Notify_CustomWebhooks.add(Webhook)
-            await self.setting.Notify_CustomWebhooks.commit()
-            config = self.setting.Notify_CustomWebhooks[uid]
+            uid, config = await self.Notify_CustomWebhooks.add(Webhook)
             return uid, config
 
         else:
@@ -4226,20 +3807,10 @@ class AppConfig:
             script_uid = uuid.UUID(script_id)
             user_uid = uuid.UUID(user_id)
 
-            uid = (
-                self.ScriptConfig[script_uid]
+            uid, config = (
+                await self.ScriptConfig[script_uid]
                 .UserData[user_uid]
                 .Notify_CustomWebhooks.add(Webhook)
-            )
-            await (
-                self.ScriptConfig[script_uid]
-                .UserData[user_uid]
-                .Notify_CustomWebhooks.commit()
-            )
-            config = (
-                self.ScriptConfig[script_uid]
-                .UserData[user_uid]
-                .Notify_CustomWebhooks[uid]
             )
             return uid, config
 
@@ -4259,11 +3830,8 @@ class AppConfig:
 
             for group, items in data.items():
                 for name, value in items.items():
-                    await self.setting.Notify_CustomWebhooks[webhook_uid].update(
-                        type(
-                            self.setting.Notify_CustomWebhooks[webhook_uid]
-                        ).model_validate({group: {name: value}}),
-                        check_visibility=False,
+                    await self.Notify_CustomWebhooks[webhook_uid].set(
+                        group, name, value
                     )
 
         else:
@@ -4278,14 +3846,7 @@ class AppConfig:
                         self.ScriptConfig[script_uid]
                         .UserData[user_uid]
                         .Notify_CustomWebhooks[webhook_uid]
-                        .update(
-                            type(
-                                self.ScriptConfig[script_uid]
-                                .UserData[user_uid]
-                                .Notify_CustomWebhooks[webhook_uid]
-                            ).model_validate({group: {name: value}}),
-                            check_visibility=False,
-                        )
+                        .set(group, name, value)
                     )
 
     async def del_webhook(
@@ -4298,8 +3859,7 @@ class AppConfig:
         if script_id is None and user_id is None:
             logger.info(f"删除全局 webhook 配置: {webhook_id}")
 
-            self.setting.Notify_CustomWebhooks.remove(webhook_uid)
-            await self.setting.Notify_CustomWebhooks.commit()
+            await self.Notify_CustomWebhooks.remove(webhook_uid)
 
         else:
             logger.info(f"删除 webhook 配置: {script_id} - {user_id} - {webhook_id}")
@@ -4307,19 +3867,16 @@ class AppConfig:
             script_uid = uuid.UUID(script_id)
             user_uid = uuid.UUID(user_id)
 
-            self.ScriptConfig[script_uid].UserData[
-                user_uid
-            ].Notify_CustomWebhooks.remove(webhook_uid)
             await (
                 self.ScriptConfig[script_uid]
                 .UserData[user_uid]
-                .Notify_CustomWebhooks.commit()
+                .Notify_CustomWebhooks.remove(webhook_uid)
             )
 
     @property
     def proxy(self) -> Optional[httpx.Proxy]:
         """获取代理设置，返回适用于 httpx 的代理对象"""
-        proxy_addr = normalize_proxy_address(self.setting.Update.ProxyAddress)
+        proxy_addr = normalize_proxy_address(self.get("Update", "ProxyAddress"))
         if not proxy_addr:
             return None
 
@@ -4339,7 +3896,76 @@ class AppConfig:
         这里不像 ``proxy`` 那样每次访问都记一行「使用代理」。
         """
 
-        return normalize_proxy_address(self.setting.Update.ProxyAddress)
+        return normalize_proxy_address(self.get("Update", "ProxyAddress"))
+
+    async def get_stage_info(
+        self,
+        type: Literal[
+            "User",
+            "Today",
+            "ALL",
+            "Monday",
+            "Tuesday",
+            "Wednesday",
+            "Thursday",
+            "Friday",
+            "Saturday",
+            "Sunday",
+            "Info",
+        ],
+        refresh: bool = False,
+        server: str = "Official",
+    ):
+        """获取关卡信息"""
+
+        stage_by_server = await self.get_stage(refresh=refresh)
+        # 开放日按区服的游戏日判断
+        game_today = game_now(server)
+        server = "Official" if server == "Bilibili" else server
+        stage_data = stage_by_server.get(server, {})
+
+        if type == "Info":
+            today = game_today.isoweekday()
+            res_stage_info = []
+            for stage in RESOURCE_STAGE_INFO:
+                if (
+                    today in stage["days"]
+                    and stage["value"] in RESOURCE_STAGE_DROP_INFO
+                ):
+                    res_stage_info.append(RESOURCE_STAGE_DROP_INFO[stage["value"]])
+            stage_options = [dict(item) for item in stage_data.get("ALL", [])]
+            for combox in stage_options:
+                combox["label"] = RESOURCE_STAGE_DATE_TEXT.get(
+                    combox["value"], combox["label"]
+                )
+            raw_stage_data = json.loads(self.get("Data", "StageData"))
+            has_cache = isinstance(raw_stage_data.get(server), dict) and (
+                "sideStoryStage" in raw_stage_data[server]
+            )
+            activity_stages = stage_data.get("Info", [])
+            activity_status = "ready" if activity_stages else "empty"
+            if not has_cache:
+                activity_status = "unavailable"
+            elif self._stage_refresh_failed_at is not None:
+                activity_status = "stale"
+            return {
+                "Activity": activity_stages,
+                "ActivityStatus": activity_status,
+                "ActivityUpdatedAt": self.get("Data", "LastStageUpdated"),
+                "Resource": res_stage_info,
+                "Options": stage_options,
+            }
+        elif type == "User":
+            data = stage_data.get("ALL", [])
+            for combox in data:
+                combox["label"] = RESOURCE_STAGE_DATE_TEXT.get(
+                    combox["value"], combox["label"]
+                )
+            return data
+        elif type == "Today":
+            return stage_data.get(game_today.strftime("%A"), [])
+        else:
+            return stage_data.get(type, [])
 
     async def get_proxy_overview(self) -> Dict[str, Any]:
         """获取代理情况概览信息"""
@@ -4378,6 +4004,122 @@ class AppConfig:
             }
         return overview
 
+    async def get_stage(
+        self, *, refresh: bool = False, wait_stale: bool = True
+    ) -> Dict[str, Any]:
+        """更新活动关卡信息。
+
+        refresh=True 强制远端检查；wait_stale=True 时缓存过期也等本次刷新完成，
+        调用方拿到的是本次请求触发的那次刷新的结果（刷新失败则仍是旧缓存）。
+        wait_stale=False 只把刷新丢到后台并立即返回缓存，供启动预热使用。
+        """
+
+        raw_stage_data = json.loads(self.get("Data", "StageData"))
+        has_server_data = isinstance(raw_stage_data.get("Official"), dict) and (
+            "sideStoryStage" in raw_stage_data["Official"]
+        )
+        # 缺官方缓存也必须抓一次, 但这不等于调用方要求等待本次刷新
+        if (
+            not refresh
+            and has_server_data
+            and self._stage_refresh_failed_at is None
+            and datetime.now() - timedelta(hours=1)
+            < datetime.strptime(
+                self.get("Data", "LastStageUpdated"), "%Y-%m-%d %H:%M:%S"
+            )
+        ):
+            logger.info("一小时内已进行过一次检查, 直接使用缓存的活动关卡信息")
+            return json.loads(self.get("Data", "Stage"))
+
+        if (
+            not refresh
+            and self._stage_refresh_failed_at is not None
+            and datetime.now() - self._stage_refresh_failed_at < timedelta(seconds=60)
+        ):
+            # 刚失败过就先不再抓: 断网时总览与注入流程会串行重复等超时
+            logger.info("活动关卡信息刷新刚失败过, 直接使用缓存")
+            return json.loads(self.get("Data", "Stage"))
+
+        if self._stage_refresh_task is None:
+            task = asyncio.create_task(self._refresh_stage())
+            self._stage_refresh_task = task
+            self.temp_task.append(task)
+
+            def _done(t: asyncio.Task) -> None:
+                if self._stage_refresh_task is t:
+                    self._stage_refresh_task = None
+                if t in self.temp_task:
+                    self.temp_task.remove(t)
+
+            task.add_done_callback(_done)
+        else:
+            logger.info("活动关卡信息更新任务已在进行中")
+
+        refresh_task = self._stage_refresh_task
+        if refresh_task is not None and (refresh or wait_stale):
+            await asyncio.shield(refresh_task)
+
+        return json.loads(self.get("Data", "Stage"))
+
+    async def _refresh_stage(self) -> None:
+        """从远端刷新活动关卡信息（仅后台调用）。"""
+
+        logger.info("开始获取活动关卡信息")
+        try:
+            raw_stage_data = json.loads(self.get("Data", "StageData"))
+            has_server_data = isinstance(raw_stage_data.get("Official"), dict) and (
+                "sideStoryStage" in raw_stage_data["Official"]
+            )
+            headers = (
+                {"If-None-Match": self.get("Data", "StageETag")}
+                if has_server_data
+                else {}
+            )
+            async with httpx.AsyncClient(
+                proxy=self.proxy, follow_redirects=True
+            ) as client:
+                response = await client.get(
+                    "https://api.maa.plus/MaaAssistantArknights/api/gui/StageActivityV2.json",
+                    headers=headers,
+                )
+
+                if response.status_code == 304:
+                    self._stage_refresh_failed_at = None
+                    logger.info("关卡信息未更新，使用本地缓存的活动关卡信息")
+                    await self.set(
+                        "Data",
+                        "LastStageUpdated",
+                        datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    )
+                elif response.status_code == 200:
+                    self._stage_refresh_failed_at = None
+                    logger.success("成功获取远端活动关卡信息")
+                    # 时间戳最后写: 并发调用按它判断缓存新鲜度, 先写会在
+                    # 两次写入之间把旧关卡当成刚更新过的缓存返回
+                    await self.set(
+                        "Data",
+                        "StageData",
+                        json.dumps(response.json(), ensure_ascii=False),
+                    )
+                    await self.set(
+                        "Data",
+                        "StageETag",
+                        response.headers.get("ETag")
+                        or response.headers.get("etag")
+                        or "",
+                    )
+                    await self.set(
+                        "Data",
+                        "LastStageUpdated",
+                        datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    )
+                else:
+                    logger.warning(f"无法从MAA服务器获取活动关卡信息:{response.text}")
+                    self._stage_refresh_failed_at = datetime.now()
+        except Exception as e:
+            self._stage_refresh_failed_at = datetime.now()
+            logger.warning(f"无法从MAA服务器获取活动关卡信息: {type(e).__name__}: {e}")
+
     async def get_script_combox(self):
         """获取脚本下拉框信息"""
 
@@ -4386,7 +4128,7 @@ class AppConfig:
         for uid, script in self.ScriptConfig.items():
             data.append(
                 {
-                    "label": f"{TYPE_BOOK[type(script).__name__]} - {script.Info.Name}",
+                    "label": f"{TYPE_BOOK[type(script).__name__]} - {script.get('Info', 'Name')}",
                     "value": str(uid),
                 }
             )
@@ -4400,12 +4142,17 @@ class AppConfig:
         logger.info("开始获取任务下拉框信息")
         data = [{"label": "未选择", "value": None}]
         for uid, queue in self.QueueConfig.items():
-            data.append({"label": f"队列 - {queue.Info.Name}", "value": str(uid)})
+            data.append(
+                {
+                    "label": f"队列 - {queue.get('Info', 'Name')}",
+                    "value": str(uid),
+                }
+            )
         for uid, script in self.ScriptConfig.items():
             if not script.is_locked:
                 data.append(
                     {
-                        "label": f"脚本 - {TYPE_BOOK[type(script).__name__]} - {script.Info.Name}",
+                        "label": f"脚本 - {TYPE_BOOK[type(script).__name__]} - {script.get('Info', 'Name')}",
                         "value": str(uid),
                     }
                 )
@@ -4427,7 +4174,7 @@ class AppConfig:
         data = [{"label": "固定", "value": "Fixed"}]
         for uid, plan in self.PlanConfig.items():
             if isinstance(plan, plan_class):
-                data.append({"label": plan.Info.Name, "value": str(uid)})
+                data.append({"label": plan.get("Info", "Name"), "value": str(uid)})
         logger.success(f"{consumer} 计划下拉框信息获取成功")
 
         return data
@@ -4438,7 +4185,7 @@ class AppConfig:
         logger.info("开始获取模拟器下拉框信息")
         data = [{"label": "未选择", "value": "-"}]
         for uid, emulator in self.EmulatorConfig.items():
-            data.append({"label": emulator.Info.Name, "value": str(uid)})
+            data.append({"label": emulator.get("Info", "Name"), "value": str(uid)})
         logger.success("模拟器下拉框信息获取成功")
         return data
 
@@ -4450,7 +4197,7 @@ class AppConfig:
         if emulator_id == "-":
             return []
 
-        if self.EmulatorConfig[uuid.UUID(emulator_id)].Info.Type == "general":
+        if self.EmulatorConfig[uuid.UUID(emulator_id)].get("Info", "Type") == "general":
             logger.info("通用模拟器不支持扫描多开实例, 返回空列表")
             return []
 
@@ -4471,12 +4218,11 @@ class AppConfig:
     async def get_notice(self) -> tuple[bool, Dict[str, str]]:
         """获取公告信息"""
 
-        if (
-            datetime.now().astimezone() - timedelta(hours=1)
-            < self.setting.Data.LastNoticeUpdated
+        if datetime.now() - timedelta(hours=1) < datetime.strptime(
+            self.get("Data", "LastNoticeUpdated"), "%Y-%m-%d %H:%M:%S"
         ):
             logger.info("一小时内已进行过一次检查, 直接使用缓存的公告信息")
-            return (False, json.loads(self.setting.Data.Notice).get("notice_dict", {}))
+            return False, json.loads(self.get("Data", "Notice")).get("notice_dict", {})
 
         logger.info("开始从 AUTO-MAS 服务器获取公告信息")
         try:
@@ -4485,53 +4231,34 @@ class AppConfig:
             ) as client:
                 response = await client.get(
                     "https://data.auto-mas.top/api/v1/files/auto-mas/Client/notice/download",
-                    headers={"If-None-Match": self.setting.Data.NoticeETag},
+                    headers={"If-None-Match": self.get("Data", "NoticeETag")},
                 )
                 if response.status_code == 304:
                     logger.info("公告未更新，使用本地缓存的公告信息")
-                    await self.setting.update(
-                        type(self.setting).model_validate(
-                            {"Data": {"LastNoticeUpdated": datetime.now().astimezone()}}
-                        ),
-                        check_visibility=False,
+                    await self.set(
+                        "Data",
+                        "LastNoticeUpdated",
+                        datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                     )
                 elif response.status_code == 200:
                     logger.info("公告已更新，要求展示公告信息")
-                    await self.setting.update(
-                        type(self.setting).model_validate(
-                            {"Data": {"LastNoticeUpdated": datetime.now().astimezone()}}
-                        ),
-                        check_visibility=False,
+                    await self.set(
+                        "Data",
+                        "LastNoticeUpdated",
+                        datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                     )
-                    await self.setting.update(
-                        type(self.setting).model_validate(
-                            {
-                                "Data": {
-                                    "NoticeETag": response.headers.get("ETag")
-                                    or response.headers.get("etag")
-                                    or ""
-                                }
-                            }
-                        ),
-                        check_visibility=False,
+                    await self.set(
+                        "Data",
+                        "NoticeETag",
+                        response.headers.get("ETag")
+                        or response.headers.get("etag")
+                        or "",
                     )
-                    await self.setting.update(
-                        type(self.setting).model_validate(
-                            {"Data": {"IfShowNotice": True}}
-                        ),
-                        check_visibility=False,
-                    )
-                    await self.setting.update(
-                        type(self.setting).model_validate(
-                            {
-                                "Data": {
-                                    "Notice": json.dumps(
-                                        response.json(), ensure_ascii=False
-                                    )
-                                }
-                            }
-                        ),
-                        check_visibility=False,
+                    await self.set("Data", "IfShowNotice", True)
+                    await self.set(
+                        "Data",
+                        "Notice",
+                        json.dumps(response.json(), ensure_ascii=False),
                     )
                 else:
                     logger.warning(
@@ -4540,10 +4267,9 @@ class AppConfig:
         except Exception as e:
             logger.warning(f"无法从 AUTO-MAS 服务器获取公告信息: {e}")
 
-        return (
-            self.setting.Data.IfShowNotice,
-            json.loads(self.setting.Data.Notice).get("notice_dict", {}),
-        )
+        return self.get("Data", "IfShowNotice"), json.loads(
+            self.get("Data", "Notice")
+        ).get("notice_dict", {})
 
     def build_history_log_path(
         self, *, script_name: str, user_name: str, log_time: datetime
@@ -5115,7 +4841,7 @@ class AppConfig:
                 script_config = self.ScriptConfig[uuid.UUID(uid_text)]
             except (KeyError, ValueError):
                 continue
-            source = str(script_config.Info.Path or "").strip()
+            source = str(script_config.get("Info", "Path") or "").strip()
             try:
                 if source and Path(source).is_dir():
                     await asyncio.to_thread(
@@ -5128,7 +4854,7 @@ class AppConfig:
                         str(user_uid),
                         read_overlay_values(user_config),
                     )
-                archived.append(str(script_config.Info.Name or uid_text[:8]))
+                archived.append(str(script_config.get("Info", "Name") or uid_text[:8]))
             except Exception as exc:  # noqa: BLE001 - 归档失败不该挡住启动
                 logger.warning(f"M9A 迁移后归档失败（{uid_text[:8]}）：{exc}")
         lines = list(report.summary_lines())
@@ -5336,7 +5062,7 @@ class AppConfig:
         )
 
         live_sources = [
-            imported_source_path(config) or str(config.Info.Path or "")
+            imported_source_path(config) or str(config.get("Info", "Path") or "")
             for uid, config in self.ScriptConfig.items()
             if isinstance(config, MaaFWConfig)
             and read_view_marker(embedded_project_dir(str(uid))) is None
@@ -5448,9 +5174,11 @@ class AppConfig:
             entries.append(
                 (
                     str(uid),
+                    # 所在的组：开发者模式下是它的私有渠道，统一到组版本时不被切到正式版
                     effective_channel(str(uid), config),
-                    imported_source_path(config) or str(config.Info.Path or ""),
-                    str(config.Info.Name or str(uid)[:8]),
+                    imported_source_path(config)
+                    or str(config.get("Info", "Path") or ""),
+                    str(config.get("Info", "Name") or str(uid)[:8]),
                     resolve_update_proxy_url(config) or None,
                 )
             )
@@ -5645,16 +5373,15 @@ class AppConfig:
 
         if len(self.ScriptConfig) > 0:
             return True
-        path = self.ScriptConfig.persist_path
+        path = self.ScriptConfig.file
         if path is None or not path.is_file():
             return True
         try:
-            from app.utils.io import read_dict_file
-
-            data = read_dict_file(path, allow_empty=True)
+            text = path.read_text(encoding="utf-8")
+            data = json.loads(text) if text.strip() else {}
         except (OSError, ValueError):
             return False
-        return not bool(data.get("order"))
+        return not (isinstance(data, dict) and data)
 
     async def clean_maafw_runtime_blobs(self) -> None:
         """回收没有任何内嵌副本引用的共用运行时文件（只剩库里这一个硬链接的）。
@@ -5818,7 +5545,7 @@ class AppConfig:
         # 和增删脚本。items() 是 zip(order 列表, data 逐项查找) 的惰性结构，
         # list() 消费它并非原子拷贝、并发增删仍可 KeyError 中止本轮；直接对
         # data 的 dict 视图做 list() 才是单条 C 级拷贝的真原子快照
-        retention_days = self.setting.Function.HistoryRetentionTime
+        retention_days = self.get("Function", "HistoryRetentionTime")
         if retention_days == 0:
             logger.info("原生日志永久保留, 跳过 MFW 原生日志备份清理")
             return
@@ -5864,7 +5591,7 @@ class AppConfig:
 
         # 只读一次：定时器在工作线程跑本函数，循环内逐目录重读会看到扫描
         # 中途的设置变更（改成 0 时剩余目录会按 0 天 cutoff 全部删除）
-        retention_days = self.setting.Function.HistoryRetentionTime
+        retention_days = self.get("Function", "HistoryRetentionTime")
         if retention_days == 0:
             logger.info("历史记录永久保留, 跳过历史记录清理")
             return

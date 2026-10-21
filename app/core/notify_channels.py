@@ -23,7 +23,6 @@
 
 from __future__ import annotations
 
-import inspect
 from typing import Any, Mapping
 
 from app.models.notification_channel import (
@@ -95,7 +94,7 @@ class TargetConfigView:
     def get(self, group: str, name: str) -> Any:
         if group != "Notify":
             raise ValueError("通知渠道只能读取 Notify 配置")
-        return getattr(self.__config.Notify, name)
+        return self.__config.get(group, name)
 
     @property
     def Notify_CustomWebhooks(self) -> Any:
@@ -107,25 +106,15 @@ class RuntimeConfigView:
 
     def __init__(self, config: Any) -> None:
         self.__config = config
-        self.__receivers: list[Any] = []
 
     def get(self, name: str) -> Any:
-        return getattr(self.__config.Notify, name)
+        return self.__config.get("Notify", name)
 
     async def update(self, values: Mapping[str, Any]) -> None:
-        await self.__config.update(
-            type(self.__config).model_validate({"Notify": dict(values)}),
-            check_visibility=False,
-        )
+        await self.__config.update({"Notify": dict(values)})
 
     def bind(self, name: str, callback: Any) -> None:
-        async def on_changed(sender, event):
-            result = callback(event.value)
-            if inspect.isawaitable(result):
-                await result
-
-        self.__receivers.append(on_changed)
-        self.__config.connect(on_changed, phase="runtime", group="Notify", field=name)
+        self.__config.bind("Notify", name, callback)
 
 
 def _get_registry() -> ChannelRegistry:
@@ -186,7 +175,7 @@ def initialize_notification_channels(
         except Exception as exc:
             get_logger("通知服务").warning(f"系统通知依赖不可用: {type(exc).__name__}")
 
-    def read_proxy() -> str | None:
+    def read_proxy() -> Any:
         import httpx
 
         # 沿用 Config.proxy 的校验/无效值回退，但不记录含凭据的代理地址。
@@ -194,9 +183,7 @@ def initialize_notification_channels(
         if not url:
             return None
         try:
-            # 只校验格式，HTTP 与 WebSocket 共用原始代理地址。
-            httpx.Proxy(url)
-            return url
+            return httpx.Proxy(url)
         except Exception as exc:
             get_logger("通知服务").warning(f"通知代理配置无效: {type(exc).__name__}")
             return None
@@ -217,7 +204,7 @@ def initialize_notification_channels(
         return WSClientManager()
 
     dependencies = ChannelDependencies(
-        config=RuntimeConfigView(Config.setting),
+        config=RuntimeConfigView(Config),
         read_proxy=read_proxy,
         smtp_factory=smtplib.SMTP_SSL,
         http_factory=http_client,

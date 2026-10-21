@@ -306,7 +306,6 @@ export interface MaaFWUserTaskQueueSectionEmits {
   deleteQueueTemplate: [name: string]
   reorderTasks: [taskIds: string[]]
   selectTask: [taskId: string]
-  toggleTaskChecked: [taskId: string]
   moveTask: [taskId: string, direction: -1 | 1]
   taskDragEnd: []
   taskOptionUpdate: [taskId: string, payload: { optionName: string; value: MaaFWTaskOptionValue }]

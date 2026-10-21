@@ -1,7 +1,11 @@
+import asyncio
 import os
 import subprocess
 
 from ..common.process_runner import ProcessRunner
+
+# 强制清理时连续执行 taskkill /F /T 的次数（需求：到时或结束时直接调用 taskkill /F /T 强杀 3 遍）
+FORCE_KILL_PASSES = 3
 
 
 class WindowsProcessPlatform:
@@ -21,32 +25,81 @@ class WindowsProcessPlatform:
     # 父进程若恰好处在一个不允许 breakaway 的 Job 里，带这个标志的
     # CreateProcess 会以 ERROR_ACCESS_DENIED（WinError 5）失败；
     # process_runner.create_subprocess 对此有去掉该位重试一次的兜底。
-    creation_flags = subprocess.CREATE_NO_WINDOW
-    breakaway_flags = subprocess.CREATE_BREAKAWAY_FROM_JOB
+    creation_flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    breakaway_flags = getattr(subprocess, "CREATE_BREAKAWAY_FROM_JOB", 0)
     # 自更新时接替当前进程的安装程序必须活过后端退出，因此这组标志固定带
     # 脱离位。注意 DETACHED_PROCESS 本身不会让子进程脱离 Job，必须靠
     # CREATE_BREAKAWAY_FROM_JOB 才行，不要以为 DETACHED_PROCESS 已经处理了
     # 这件事。
     detached_flags = (
-        subprocess.CREATE_NEW_PROCESS_GROUP
-        | subprocess.DETACHED_PROCESS
-        | subprocess.CREATE_NO_WINDOW
-        | subprocess.CREATE_BREAKAWAY_FROM_JOB
+        getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+        | getattr(subprocess, "DETACHED_PROCESS", 0)
+        | getattr(subprocess, "CREATE_NO_WINDOW", 0)
+        | getattr(subprocess, "CREATE_BREAKAWAY_FROM_JOB", 0)
     )
 
     async def open_protocol(self, protocol_url: str) -> None:
-        os.startfile(protocol_url)
+        if hasattr(os, "startfile"):
+            os.startfile(protocol_url)
 
-    async def kill_process(self, pid: int, kill_tree: bool = False) -> tuple[bool, str]:
-        """用 taskkill 终止进程，返回 (是否成功, 失败原因)。"""
+    async def kill_process(
+        self,
+        pid: int,
+        kill_tree: bool = True,
+        passes: int = FORCE_KILL_PASSES,
+    ) -> tuple[bool, str]:
+        """用 taskkill /F /T 连续强杀进程（默认强杀 3 遍），返回 (是否成功, 失败原因)。"""
 
         args = ["taskkill", "/F"]
         if kill_tree:
             args.append("/T")
         args.extend(["/PID", str(pid)])
 
-        result = await ProcessRunner.run_process(*args)
-        if result.returncode != 0:
-            output = result.stderr.strip() or result.stdout.strip() or "无错误信息"
-            return False, f"返回码: {result.returncode}, 原因: {output}"
-        return True, ""
+        any_succeeded = False
+        last_error = ""
+        total_passes = max(1, int(passes))
+
+        for attempt in range(total_passes):
+            result = await ProcessRunner.run_process(*args)
+            if result.returncode == 0:
+                any_succeeded = True
+            else:
+                output = result.stderr.strip() or result.stdout.strip() or "无错误信息"
+                last_error = f"返回码: {result.returncode}, 原因: {output}"
+            if attempt + 1 < total_passes:
+                await asyncio.sleep(0.1)
+
+        if any_succeeded:
+            return True, ""
+        return False, last_error
+
+    async def kill_process_by_image_name(
+        self,
+        image_name: str,
+        kill_tree: bool = True,
+        passes: int = FORCE_KILL_PASSES,
+    ) -> tuple[bool, str]:
+        """按映像名（/IM）连续调用 taskkill /F /T 强杀 3 遍（覆盖本地及 Child Session 子会话进程）。"""
+
+        args = ["taskkill", "/F"]
+        if kill_tree:
+            args.append("/T")
+        args.extend(["/IM", str(image_name)])
+
+        any_succeeded = False
+        last_error = ""
+        total_passes = max(1, int(passes))
+
+        for attempt in range(total_passes):
+            result = await ProcessRunner.run_process(*args)
+            if result.returncode == 0:
+                any_succeeded = True
+            else:
+                output = result.stderr.strip() or result.stdout.strip() or "无错误信息"
+                last_error = f"返回码: {result.returncode}, 原因: {output}"
+            if attempt + 1 < total_passes:
+                await asyncio.sleep(0.1)
+
+        if any_succeeded:
+            return True, ""
+        return False, last_error

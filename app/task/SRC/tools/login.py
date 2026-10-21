@@ -69,7 +69,7 @@ async def login(
                 "action": {"param": {"package": package_name}}
             },
             "Bilibili隐私政策[StarRailEmulator]": {
-                "enabled": Config.setting.Function.IfAgreeBilibili
+                "enabled": Config.get("Function", "IfAgreeBilibili")
             },
             "下滑账号列表[StarRailEmulator]": {"on_error": []},
             "下滑账号列表-B服[StarRailEmulator]": {"on_error": []},
@@ -102,7 +102,7 @@ async def login(
                 "action": {"param": {"package": package_name}}
             },
             "Bilibili隐私政策[StarRailEmulator]": {
-                "enabled": Config.setting.Function.IfAgreeBilibili
+                "enabled": Config.get("Function", "IfAgreeBilibili")
             },
             "选中账号[StarRailEmulator]": {
                 "recognition": {

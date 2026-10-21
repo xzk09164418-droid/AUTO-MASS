@@ -4,48 +4,48 @@
 /* eslint-disable */
 export type GeneralUserConfig_Info = {
     /**
-     * base 来源（shared=共享/independent=独立/native=原生）
-     */
-    Base?: ('shared' | 'independent' | 'native' | null);
-    /**
-     * 是否在任务后执行脚本
-     */
-    IfScriptAfterTask?: (boolean | null);
-    /**
-     * 是否在任务前执行脚本
-     */
-    IfScriptBeforeTask?: (boolean | null);
-    /**
-     * 兼容旧版用户独立脚本配置
-     */
-    IfUseMasConfig?: (boolean | null);
-    /**
-     * 用户名称
+     * 用户名
      */
     Name?: (string | null);
     /**
-     * 备注
+     * 用户状态
      */
-    Notes?: (string | null);
+    Status?: (boolean | null);
     /**
      * 剩余天数
      */
     RemainedDay?: (number | null);
     /**
-     * 任务后脚本路径
+     * base 来源（shared=共享、independent=独立、native=脚本原生配置）
      */
-    ScriptAfterTask?: (string | null);
+    Base?: ('shared' | 'independent' | 'native' | null);
+    /**
+     * 兼容旧版用户独立配置开关
+     */
+    IfUseMasConfig?: (boolean | null);
+    /**
+     * 是否在任务前执行脚本
+     */
+    IfScriptBeforeTask?: (boolean | null);
     /**
      * 任务前脚本路径
      */
     ScriptBeforeTask?: (string | null);
     /**
-     * 是否启用
+     * 是否在任务后执行脚本
      */
-    Status?: (boolean | null);
+    IfScriptAfterTask?: (boolean | null);
     /**
-     * 用户标签信息
+     * 任务后脚本路径
      */
-    readonly Tag?: (string | null);
+    ScriptAfterTask?: (string | null);
+    /**
+     * 备注
+     */
+    Notes?: (string | null);
+    /**
+     * 用户标签列表（JSON字符串，TagItem的dict列表）
+     */
+    Tag?: (string | null);
 };
 

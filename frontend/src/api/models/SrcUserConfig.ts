@@ -7,9 +7,21 @@ import type { SrcUserConfig_Info } from './SrcUserConfig_Info';
 import type { SrcUserConfig_Notify } from './SrcUserConfig_Notify';
 import type { SrcUserConfig_Stage } from './SrcUserConfig_Stage';
 export type SrcUserConfig = {
-    Data?: (SrcUserConfig_Data | null);
+    /**
+     * 基础信息
+     */
     Info?: (SrcUserConfig_Info | null);
-    Notify?: (SrcUserConfig_Notify | null);
+    /**
+     * 关卡配置
+     */
     Stage?: (SrcUserConfig_Stage | null);
+    /**
+     * 用户数据
+     */
+    Data?: (SrcUserConfig_Data | null);
+    /**
+     * 单独通知
+     */
+    Notify?: (SrcUserConfig_Notify | null);
 };
 

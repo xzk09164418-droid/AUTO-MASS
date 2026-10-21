@@ -242,7 +242,7 @@ class MuMu6Manager(AppLaunchMixin, MumuManager):
             "launch",
             "-pkg",
             package_name,
-            timeout=self.config.Info.MaxWaitTime,
+            timeout=self.config.get("Info", "MaxWaitTime"),
             if_merge_std=True,
             breakaway=True,
         )
@@ -346,7 +346,7 @@ class MuMu6Manager(AppLaunchMixin, MumuManager):
         result = await ProcessRunner.run_process(
             self.emulator_path,
             *args,
-            timeout=self.config.Info.MaxWaitTime,
+            timeout=self.config.get("Info", "MaxWaitTime"),
             if_merge_std=True,
         )
         return str(getattr(result, "stdout", "") or "")
@@ -619,8 +619,9 @@ async def build_manager(
 
     ``manager_exe`` 必须是该安装的 ``MuMuManager.exe``。
     """
-    config = EmulatorConfig.build(
-        payload={
+    config = EmulatorConfig()
+    await config.load(
+        {
             "Info": {
                 "Name": Path(manager_exe).parent.name,
                 "Type": "mumu",
@@ -630,5 +631,4 @@ async def build_manager(
             }
         }
     )
-    await config.activate()
     return MuMu6Manager(config)

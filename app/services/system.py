@@ -65,7 +65,6 @@ class _SystemHandler:
     def get_power_countdown_snapshot(self) -> PowerCountdownSnapshot:
         """返回当前电源倒计时的 HTTP 初始快照。"""
 
-        # 延时阶段 remaining 为 0, 此时只是在等待, 不该被当作倒计时推给前端
         active = bool(
             self.power_task is not None
             and not self.power_task.done()
@@ -78,17 +77,7 @@ class _SystemHandler:
         )
 
     async def set_Sleep(self, if_allow_sleep: bool) -> None:
-        """
-        设置系统休眠
-
-        Parameters
-        ----------
-        if_allow_sleep: bool
-            是否允许系统休眠
-        """
-
         if not power.supported:
-            # 该方法绑定在配置项上, 启动流程会无条件调用, 因此记录后跳过而非抛出
             logger.info(f"当前平台不支持阻止休眠, 跳过设置(目标值: {if_allow_sleep})")
             return
         await power.set_sleep_prevention(if_allow_sleep)
@@ -96,11 +85,9 @@ class _SystemHandler:
     async def set_SelfStart(self, if_self_start: bool) -> None:
         """设置程序开机自启。"""
 
-        # 开发环境不管理需要提权的开机自启任务计划
         if os.getenv("AUTO_MAS_ENV") == "development":
             return
         if not startup.supported:
-            # 同上, 启动流程会无条件调用, 记录后跳过
             logger.info(f"当前平台不支持开机自启, 跳过设置(目标值: {if_self_start})")
             return
         await startup.set_enabled(if_self_start)
@@ -120,17 +107,10 @@ class _SystemHandler:
         ],
         from_frontend: bool = False,
     ) -> None:
-        """
-        执行系统电源操作
-
-        :param mode: 电源操作
-        """
-
         if mode == "NoAction":
             logger.info("不执行系统电源操作")
             return
 
-        # 回放在后台复制；真正执行电源动作前给它有限的收尾窗口。
         from app.services.obs_replay import ObsReplay
 
         if not await ObsReplay.drain():
@@ -144,28 +124,20 @@ class _SystemHandler:
                 try:
                     await self._request_frontend_close(restart=restart)
                 except TimeoutError as e:
-                    # 退出 / 重启是用户设定的完成后操作或安装更新的要求，前端卡死不能让
-                    # 后端就此留下不退；此前这里只抛异常，退出被静默放弃。
                     logger.error(f"{e}，仍继续{action}主程序")
             Config.server.should_exit = True
             return
 
         if mode not in power.supported_actions:
             raise RuntimeError(f"当前平台不支持电源操作: {mode}")
-        # 强制关机（shutdown /f）不等程序退出，魔改 AVD 实例同样要先让安卓正常关机（不成再 sync 后关）；
-        # 其余模拟器的进程清理仍只在原来三种操作上做
         if mode in {"Shutdown", "ShutdownForce", "Reboot", "Logoff"}:
             await self.close_avd_instances()
         if mode in {"Shutdown", "Reboot", "Logoff"}:
             await self.kill_emulator_processes()
         logger.info(f"执行电源操作: {mode}")
-        # 系统电源动作必须先于前端关闭执行：请求前端退出会让 Electron 退出并连带结束后端进程，
-        # 若先等前端断开，关机/重启等命令将永远没有机会执行（issue #611）。
         await power.execute(mode)
 
     async def _request_frontend_close(self, restart: bool = False) -> None:
-        """请求前端退出或重启，并等待主会话断开（后端自行的 KillSelf / RestartSelf 场景）。"""
-
         action = "重启" if restart else "退出"
         sent = await Publisher.send(
             id=protocol.ID_MAIN,
@@ -176,8 +148,6 @@ class _SystemHandler:
             ),
         )
         if not sent:
-            # 当前没有前端会话。退出时这本身已满足“前端关闭”前置条件；重启则没人接收信号，
-            # 只能退到后端退出这一步（Runtime 监督下会被重新拉起），记一条日志免得看着像成功了。
             logger.info(f"当前无前端主连接，继续{action}主程序")
             if restart:
                 logger.warning("重启请求没有前端接收，本次只重启后端进程")
@@ -191,7 +161,6 @@ class _SystemHandler:
                 f"前端未在 {self.frontend_close_timeout:g} 秒内断开主连接"
             )
 
-        # 主连接断开是 renderer 退出的可观测边界；给 Electron 窗口销毁留出短暂调度时间。
         await asyncio.sleep(0.2)
 
     async def _power_task(
@@ -211,12 +180,9 @@ class _SystemHandler:
         *,
         before_power: Callable[[], Awaitable[bool]] | None = None,
     ) -> None:
-        """电源任务：先静默等待队列设定的延时，再逐秒推送倒计时状态，归零后执行电源操作"""
-
         self.current_power_operation = power_sign
         try:
             if delay > 0:
-                # 延时阶段保持静默：不推送倒计时，调度中心的电源标志仍显示待执行操作
                 await asyncio.sleep(delay)
             for remaining in range(self.countdown, 0, -1):
                 self.current_power_remaining = remaining
@@ -244,8 +210,6 @@ class _SystemHandler:
     async def start_power_task(
         self, *, before_power: Callable[[], Awaitable[bool]] | None = None
     ):
-        """开始电源任务"""
-
         if self.power_task is None or self.power_task.done():
             power_sign = Config.power_sign
             delay = Config.power_delay
@@ -257,7 +221,6 @@ class _SystemHandler:
             )
 
             def _on_done(done_task: asyncio.Task) -> None:
-                # 电源任务无人 await，异常只能在这里取出记录，否则失败不留痕迹
                 if done_task.cancelled():
                     return
                 exc = done_task.exception()
@@ -279,8 +242,6 @@ class _SystemHandler:
     async def _publish_power_cancelled(
         self, power_task: Optional[asyncio.Task]
     ) -> None:
-        """按电源任务身份幂等发布取消事件。"""
-
         if power_task is not None and self._power_cancelled_event_task is power_task:
             return
         self._power_cancelled_event_task = power_task
@@ -289,14 +250,10 @@ class _SystemHandler:
         )
 
     async def cancel_pending_power_task(self) -> None:
-        """存在待执行的电源任务时取消它，没有则跳过。"""
-
         if self.power_task is not None and not self.power_task.done():
             await self.cancel_power_task()
 
     async def cancel_power_task(self):
-        """取消电源任务"""
-
         power_task = self.power_task
         if power_task is not None and not power_task.done():
             power_task.cancel()
@@ -312,21 +269,14 @@ class _SystemHandler:
             raise RuntimeError("当前无电源任务在运行")
 
     async def close_avd_instances(self) -> None:
-        """按进程名强杀之前，先把在跑的魔改 AVD 实例正常关掉（安卓正常关机，不成再 sync + 关）。
-
-        强杀不走客体关机流程，客体页缓存里没写回的数据会丢。整体限时（30 秒），出错只记日志，
-        不拦住电源操作。
-        """
         try:
             from app.utils.emulator2.avd import service as avd_service
 
             await avd_service.close_running_instances()
-        except Exception as e:  # noqa: BLE001 - 关不掉也要继续关机
+        except Exception as e:
             logger.warning(f"关闭魔改 AVD 实例失败，继续电源操作: {e}")
 
     async def kill_emulator_processes(self):
-        """这里暂时仅支持 MuMu 模拟器"""
-
         logger.info("正在清除模拟器进程")
 
         keywords = ["Nemu", "nemu", "emulator", "MuMu"]
@@ -345,31 +295,13 @@ class _SystemHandler:
         logger.success("模拟器进程清除完成")
 
     async def is_process_running(self, path: Path | str) -> bool:
-        """按镜像路径判断该进程是否还在跑。
-
-        Args:
-            path (Path | str): 目标进程路径。
-
-        Returns:
-            bool: 有该路径的进程在跑时返回 True。读不出镜像路径的同名候选不算——
-                那些进程无法归到这个路径上，与 `kill_process` 用同一套判据。
-        """
-
         return bool((await self._scan_processes_by_path(path)).pids)
 
     async def kill_process(self, path: Path | str, *, kill_tree: bool = True) -> bool:
-        """根据路径中止进程。
-
-        Args:
-            path (Path | str): 目标进程路径。
-            kill_tree (bool): 是否同时中止子进程树。
-
-        Returns:
-            bool: 所有匹配进程均成功中止时返回 True。
-        """
+        """根据路径中止进程（在 Windows 下调用 taskkill /F /T 连续强杀 3 遍）。"""
 
         path = Path(path)
-        logger.info(f"开始中止进程: {path}")
+        logger.info(f"开始中止进程(强杀3遍): {path}")
 
         scan = await self._scan_processes_by_path(path)
         success = scan.complete
@@ -379,7 +311,8 @@ class _SystemHandler:
                 f"存在无法确认路径的同名进程: {path.name}, PID: {scan.uncertain_pids}"
             )
 
-        for pid in scan.pids:
+        target_pids = list(dict.fromkeys([*scan.pids, *scan.uncertain_pids]))
+        for pid in target_pids:
             try:
                 pid_success = await self.kill_process_by_pid(pid, kill_tree=kill_tree)
             except Exception as e:
@@ -392,6 +325,20 @@ class _SystemHandler:
             if not pid_success:
                 success = False
 
+        # 若未扫描到本会话 PID 但启用了本地远程桌面（Child Session），按映像名兜底强杀 3 遍
+        if not target_pids and os.name == "nt" and path.name:
+            try:
+                from app.core.child_session import ChildSessionManager
+
+                if ChildSessionManager.enabled and hasattr(
+                    platform_process, "kill_process_by_image_name"
+                ):
+                    await platform_process.kill_process_by_image_name(
+                        path.name, kill_tree=kill_tree
+                    )
+            except Exception:
+                pass
+
         if first_error is not None:
             raise first_error
         if success:
@@ -399,17 +346,9 @@ class _SystemHandler:
         return success
 
     async def kill_process_by_pid(self, pid: int, *, kill_tree: bool = True) -> bool:
-        """根据 PID 中止进程。
+        """根据 PID 中止进程（底层在 Windows 上连续调用 taskkill /F /T 3 遍）。"""
 
-        Args:
-            pid (int): 目标进程 PID。
-            kill_tree (bool): 是否同时中止子进程树。
-
-        Returns:
-            bool: 进程成功终止时返回 True。
-        """
-
-        logger.info(f"开始中止进程 PID: {pid}")
+        logger.info(f"开始中止进程 PID: {pid} (taskkill /F /T x3)")
         succeeded, reason = await platform_process.kill_process(pid, kill_tree)
         if not succeeded:
             if not psutil.pid_exists(pid):

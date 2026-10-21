@@ -31,7 +31,6 @@ from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING
 from urllib.parse import urlparse
 
-from app.models.config import Webhook
 from app.models.notification import (
     DEFAULT_WEBHOOK_TEMPLATE,
     WECOM_ROBOT_HOST,
@@ -42,6 +41,8 @@ from app.models.notification import (
 
 if TYPE_CHECKING:
     from httpx import Proxy
+
+    from app.models.config import Webhook
 
 from app.models.notification_channel import ChannelDependencies
 
@@ -151,15 +152,6 @@ class Sender:
         images: Sequence[NotificationImage], optional
             可选图片资源，由 Webhook 协议适配器编码
         """
-        if isinstance(webhook, Webhook):
-            webhook = WebhookTargetSnapshot(
-                name=webhook.Info.Name,
-                enabled=webhook.Info.Enabled,
-                url=webhook.Data.Url,
-                template=webhook.Data.Template,
-                headers=webhook.Data.Headers,
-                method=webhook.Data.Method,
-            )
         proxy = self.dependencies.read_proxy()
         image = images[-1] if images else None
         image_base64 = (
@@ -167,15 +159,15 @@ class Sender:
             if image is not None and image.data is not None
             else ""
         )
-        if not webhook.enabled:
+        if not webhook.get("Info", "Enabled"):
             return
 
-        if webhook.url == "":
+        if webhook.get("Data", "Url") == "":
             self.dependencies.logger.warning("Webhook URL 不能为空")
             raise ValueError("Webhook URL 不能为空")
 
         # 解析模板
-        template = webhook.template or DEFAULT_WEBHOOK_TEMPLATE
+        template = webhook.get("Data", "Template") or DEFAULT_WEBHOOK_TEMPLATE
 
         # 替换模板变量
         try:
@@ -264,14 +256,14 @@ class Sender:
 
         # 准备请求头
         headers = {"Content-Type": "application/json"}
-        headers.update(json.loads(webhook.headers))
+        headers.update(json.loads(webhook.get("Data", "Headers")))
 
-        url = webhook.url
+        url = webhook.get("Data", "Url")
 
         async with self.dependencies.http_factory(
             **_webhook_client_kwargs(url, proxy)
         ) as client:
-            if webhook.method == "POST":
+            if webhook.get("Data", "Method") == "POST":
                 if isinstance(data, str):
                     response = await client.post(url=url, content=data, headers=headers)
                 elif data is None:
@@ -281,7 +273,7 @@ class Sender:
                     )
                 else:
                     response = await client.post(url=url, json=data, headers=headers)
-            elif webhook.method == "GET":
+            elif webhook.get("Data", "Method") == "GET":
                 if isinstance(data, dict):
                     # Flatten params to ensure all values are str or list of str
                     params = {}
@@ -299,20 +291,22 @@ class Sender:
             self.dependencies.logger.warning(
                 f"Webhook 推送失败: HTTP {response.status_code}"
             )
-            raise Exception(f"[{webhook.name}] HTTP {response.status_code}")
+            raise Exception(
+                f"[{webhook.get('Info', 'Name')}] HTTP {response.status_code}"
+            )
         failure = webhook_body_failure(response.text, url)
         if failure is not None:
             self.dependencies.logger.warning(f"Webhook 服务端拒绝: {failure}")
-            raise Exception(f"[{webhook.name}] 服务端拒绝")
+            raise Exception(f"[{webhook.get('Info', 'Name')}] 服务端拒绝")
         self.dependencies.logger.success(
-            f"自定义Webhook推送成功: {webhook.name} - {title}"
+            f"自定义Webhook推送成功: {webhook.get('Info', 'Name')} - {title}"
         )
 
         # 企业微信群机器人的文本消息放不下图，失败截图要单独补发一条图片消息；
         # 模板里自己写了 {image_base64} 的说明用户已经处理过图，不再补发。
         if image_base64 and "{image_base64}" not in template and _is_wecom_robot(url):
             await self._push_wecom_image(
-                url, image_base64, headers, webhook.name, proxy=proxy
+                url, image_base64, headers, webhook.get("Info", "Name"), proxy=proxy
             )
 
     async def _push_wecom_image(

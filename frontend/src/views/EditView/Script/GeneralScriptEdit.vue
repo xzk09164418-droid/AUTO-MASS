@@ -344,6 +344,12 @@
               </a-form-item>
             </a-col>
           </a-row>
+          <a-alert
+            type="info"
+            show-icon
+            style="margin-bottom: 16px"
+            message="精简控制与双模超时说明：已移除配置文件回写，仅通过上方「启动参数」控制外部程序启停；「日志路径」为可选项，留空时日志超时 (RunTimeLimit) 自动失效，只要在总上限时间 (HardTimeLimit，含全部重试) 内自行退出即视为成功，超时则调用 taskkill /F /T 强杀 3 遍。"
+          />
           <a-row :gutter="24">
             <a-col :span="12">
               <a-form-item name="logPath" :rules="rules.logPath">
@@ -994,7 +1000,7 @@ import type { GeneralScriptConfig, ScriptType } from '@/types/script.ts'
 import { useEmulatorDeviceOptions } from '@/composables/useEmulatorDeviceOptions.ts'
 import { useScriptApi } from '@/composables/useScriptApi.ts'
 import { useSaveQueue } from '@/composables/useSaveQueue'
-import { useEmulatorOptions } from '@/composables/useEmulatorOptions'
+import { Service, type ComboBoxItem } from '@/api'
 import {
   IDLE_SHARE_AUTH,
   useShareApi,
@@ -1193,7 +1199,7 @@ const pathUtils = {
 const appDataPath = ref('')
 
 // 路径验证函数
-const validatePath = (rootPath: string | null, targetPath: string, pathName: string): boolean => {
+const validatePath = (rootPath: string, targetPath: string, pathName: string): boolean => {
   if (!targetPath || targetPath === '.') return true
   if (!rootPath || rootPath === '.') {
     message.warning(t('edit.setScriptRootDirectory', { p0: pathName }))
@@ -1414,6 +1420,11 @@ const generalConfig = reactive<GeneralScriptConfig>({
     PushLogPatterns: '',
     UpdateConfigMode: 'Never',
   },
+  SubConfigsInfo: {
+    UserData: {
+      instances: [],
+    },
+  },
 })
 
 // ==================== 表单校验规则 ====================
@@ -1422,12 +1433,12 @@ const rules = {
   type: [{ required: true, message: t('edit.pickScriptType'), trigger: 'change' }],
   rootPath: [{ required: true, message: t('edit.pickScriptRootDirectory2'), trigger: 'blur' }],
   scriptPath: [{ required: true, message: t('edit.pickMainProgramPath'), trigger: 'blur' }],
-  configPath: [{ required: true, message: t('edit.pickConfigurationFilePath'), trigger: 'blur' }],
-  logPath: [{ required: true, message: t('edit.pickLogFilePath'), trigger: 'blur' }],
-  logTimeStart: [{ required: true, message: t('edit.enterWhereLogTimestamp2'), trigger: 'blur' }],
-  logTimeEnd: [{ required: true, message: t('edit.enterWhereLogTimestamp'), trigger: 'blur' }],
-  logTimeFormat: [{ required: true, message: t('edit.enterLogTimestampFormat'), trigger: 'blur' }],
-  errorLog: [{ required: true, message: t('edit.enterFailureLog'), trigger: 'blur' }],
+  configPath: [{ required: false, message: t('edit.pickConfigurationFilePath'), trigger: 'blur' }],
+  logPath: [{ required: false, message: '可选：留空则进入无日志模式（上限时间内自行退出即判成功）', trigger: 'blur' }],
+  logTimeStart: [{ required: false, message: t('edit.enterWhereLogTimestamp2'), trigger: 'blur' }],
+  logTimeEnd: [{ required: false, message: t('edit.enterWhereLogTimestamp'), trigger: 'blur' }],
+  logTimeFormat: [{ required: false, message: t('edit.enterLogTimestampFormat'), trigger: 'blur' }],
+  errorLog: [{ required: false, message: t('edit.enterFailureLog'), trigger: 'blur' }],
 }
 
 const logTimeFormatPreview = computed(() => {
@@ -1491,8 +1502,8 @@ const errorLogRegexError = computed(() => {
 })
 
 // 模拟器相关状态
-const { emulatorLoading, emulatorOptions, loadEmulatorOptions, clearEmulatorOptions } =
-  useEmulatorOptions()
+const emulatorLoading = ref(false)
+const emulatorOptions = ref<ComboBoxItem[]>([])
 
 // 延迟注册 ConfigPathMode watcher（在加载脚本并完成初始化后再注册）
 // 注意：此 watcher 用于业务逻辑处理（配置文件类型切换时重置路径），而非简单的配置自动保存
@@ -1724,6 +1735,24 @@ const handleCancel = () => {
 }
 
 // 模拟器相关方法
+const loadEmulatorOptions = async () => {
+  emulatorLoading.value = true
+  try {
+    const response = await Service.getEmulatorComboxApiInfoComboxEmulatorPost()
+    if (response && response.code === 200) {
+      emulatorOptions.value = response.data || []
+    } else {
+      message.error(t('edit.couldNotLoadEmulator'))
+    }
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error)
+    logger.error(`加载模拟器选项失败: ${errorMsg}`)
+    message.error(t('edit.couldNotLoadEmulator'))
+  } finally {
+    emulatorLoading.value = false
+  }
+}
+
 const handleEmulatorChange = async (emulatorId: string) => {
   // 清空模拟器实例选择
   generalConfig.Game.EmulatorIndex = ''
@@ -1773,7 +1802,7 @@ const handleGameTypeChange = async (gameType: string) => {
     generalConfig.Game.URL = ''
     generalConfig.Game.EmulatorId = ''
     generalConfig.Game.EmulatorIndex = ''
-    clearEmulatorOptions()
+    emulatorOptions.value = []
     updateFields = {
       ...updateFields,
       URL: '',
@@ -1788,7 +1817,7 @@ const handleGameTypeChange = async (gameType: string) => {
     generalConfig.Game.IfForceClose = false
     generalConfig.Game.EmulatorId = ''
     generalConfig.Game.EmulatorIndex = ''
-    clearEmulatorOptions()
+    emulatorOptions.value = []
     updateFields = {
       ...updateFields,
       Path: '.',

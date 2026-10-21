@@ -96,22 +96,22 @@ class GameMaintenanceClient:
         # 与公告一样持久保存内容、ETag 和检查时间，重启后继续复用。
         try:
             cached_windows = parse_maintenance(
-                json.loads(Config.setting.Data.Maintenance)
+                json.loads(Config.get("Data", "Maintenance"))
             )
         except ValueError as exc:
             cached_windows = None
             logger.warning(f"维护信息缓存无效，重新获取: {exc}")
-        checked_at = Config.setting.Data.LastMaintenanceUpdated
-        remaining = (
-            CACHE_SECONDS - (datetime.now().astimezone() - checked_at).total_seconds()
+        checked_at = datetime.strptime(
+            Config.get("Data", "LastMaintenanceUpdated"), "%Y-%m-%d %H:%M:%S"
         )
+        remaining = CACHE_SECONDS - (datetime.now() - checked_at).total_seconds()
         if cached_windows is not None and 0 < remaining <= CACHE_SECONDS:
             self._windows = cached_windows
             self._next_refresh = time.monotonic() + remaining
             return
 
         try:
-            etag = Config.setting.Data.MaintenanceETag
+            etag = Config.get("Data", "MaintenanceETag")
             headers = (
                 {"If-None-Match": etag} if cached_windows is not None and etag else {}
             )
@@ -124,34 +124,24 @@ class GameMaintenanceClient:
                         if cached_windows is None:
                             raise ValueError("维护信息未变更但本地缓存无效")
                         windows = cached_windows
-                        await Config.setting.update(
-                            type(Config.setting).model_validate(
-                                {
-                                    "Data": {
-                                        "LastMaintenanceUpdated": datetime.now().astimezone()
-                                    }
-                                }
-                            ),
-                            check_visibility=False,
+                        await Config.set(
+                            "Data",
+                            "LastMaintenanceUpdated",
+                            datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                         )
                     elif response.status_code == 200:
                         data = response.json()
                         windows = parse_maintenance(data)
-                        await Config.setting.update(
-                            type(Config.setting).model_validate(
-                                {
-                                    "Data": {
-                                        "Maintenance": json.dumps(
-                                            data, ensure_ascii=False
-                                        ),
-                                        "MaintenanceETag": response.headers.get(
-                                            "ETag", ""
-                                        ),
-                                        "LastMaintenanceUpdated": datetime.now().astimezone(),
-                                    }
+                        await Config.update(
+                            {
+                                "Data": {
+                                    "Maintenance": json.dumps(data, ensure_ascii=False),
+                                    "MaintenanceETag": response.headers.get("ETag", ""),
+                                    "LastMaintenanceUpdated": datetime.now().strftime(
+                                        "%Y-%m-%d %H:%M:%S"
+                                    ),
                                 }
-                            ),
-                            check_visibility=False,
+                            }
                         )
                     else:
                         response.raise_for_status()

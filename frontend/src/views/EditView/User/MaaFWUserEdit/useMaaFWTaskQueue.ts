@@ -209,12 +209,8 @@ export function useMaaFWTaskQueue({
     taskSnapshot.value.taskOrder = partitionTaskOrder(taskSnapshot.value.taskOrder)
     const queuedTaskIdSet = new Set(taskSnapshot.value.taskOrder)
     taskSnapshot.value.taskChecked = Object.fromEntries(
-      taskSnapshot.value.taskOrder.map(taskId => [
-        taskId,
-        taskSnapshot.value.taskChecked[taskId] !== false,
-      ])
+      taskSnapshot.value.taskOrder.map(taskId => [taskId, true])
     )
-    taskSnapshot.value.keepUnchecked = true
     taskSnapshot.value.taskOptions = Object.fromEntries(
       Object.entries(taskSnapshot.value.taskOptions).filter(([taskId]) =>
         queuedTaskIdSet.has(taskId)
@@ -223,12 +219,6 @@ export function useMaaFWTaskQueue({
     setTaskLabels(pickMaaFWTaskLabels(taskSnapshot.value.taskLabels, queuedTaskIdSet))
     formData.Task.SelectedPreset = ''
     await savePresetAndSnapshot()
-  }
-
-  const toggleTaskChecked = async (taskId: string) => {
-    if (!getTaskInfoById(taskId) || !taskSnapshot.value.taskOrder.includes(taskId)) return
-    taskSnapshot.value.taskChecked[taskId] = taskSnapshot.value.taskChecked[taskId] === false
-    await persistQueuedSnapshot()
   }
 
   /** 显示名表为空时连键一起去掉：没改过名的用户快照与以前逐字节相同 */
@@ -278,7 +268,7 @@ export function useMaaFWTaskQueue({
    * `SelectedPreset` 必须写空：快照为空时运行器会按它的名字去找项目 preset。
    */
   const replaceQueueWith = async (
-    source: Pick<MaaFWQueueSource, 'entries' | 'taskOptions' | 'taskLabels' | 'taskChecked'>
+    source: Pick<MaaFWQueueSource, 'entries' | 'taskOptions' | 'taskLabels'>
   ): Promise<number | null> => {
     const importedCount = countMaaFWQueueReplacementImports(source, taskSnapshot.value, isPretaskId)
     const nextSnapshot = buildMaaFWQueueReplacement(
@@ -422,7 +412,6 @@ export function useMaaFWTaskQueue({
     selectedTask,
     applyQueuedTaskIds,
     selectTask,
-    toggleTaskChecked,
     persistQueuedSnapshot,
     applyPresetTemplate,
     passwordFields,

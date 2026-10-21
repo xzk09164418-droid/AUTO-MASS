@@ -38,7 +38,7 @@
           <a-button
             size="small"
             :disabled="loading"
-            @click="emitSave('Data.GreenTicketStoreMonth', new Date().toISOString())"
+            @click="emitSave('Data.GreenTicketStoreMonth', serverMonthMarker())"
           >
             {{ t('edit.markAsDone2') }}
           </a-button>
@@ -341,9 +341,10 @@ const dailyTasks = [
 
 const annihilationEnabled = computed(() => formData.value.Task.Annihilation !== 'Close')
 
-// 剿灭周按用户区服的游戏日换日；绿票购买月份固定按 UTC+4，与后端一致。
+// 剿灭周 / 绿票月标记按用户区服的游戏日换日，与后端 AutoProxy 一致
 const gameDayOffset = () => getGameDayOffset(formData.value.Info.Server)
 const serverWeekMarker = () => currentWeekMarker(new Date(), gameDayOffset())
+const serverMonthMarker = () => currentMonthMarker(new Date(), gameDayOffset())
 
 const annihilationCompletedThisWeek = computed(
   () => formData.value.Data?.AnnihilationCompletedWeek === serverWeekMarker()
@@ -433,13 +434,9 @@ const infrastSummary = computed(() => {
   )
 })
 
-const greenTicketStoreDoneThisMonth = computed(() => {
-  const completedAt = formData.value.Data?.GreenTicketStoreMonth
-  return (
-    Boolean(completedAt) &&
-    currentMonthMarker(new Date(completedAt), 4) === currentMonthMarker(new Date(), 4)
-  )
-})
+const greenTicketStoreDoneThisMonth = computed(
+  () => formData.value.Data?.GreenTicketStoreMonth === serverMonthMarker()
+)
 
 const greenTicketStoreSummary = computed(() => {
   if (!formData.value.Task.IfGreenTicketStore) return ''

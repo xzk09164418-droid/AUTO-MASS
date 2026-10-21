@@ -279,10 +279,7 @@ class _UpdateHandler:
                 return False
 
             try:
-                await Config.setting.update(
-                    type(Config.setting).model_validate({"Update": {"Source": "CNB"}}),
-                    check_visibility=False,
-                )
+                await Config.set("Update", "Source", "CNB")
             except Exception as error:
                 await self._publish_failed(
                     f"切换至 CNB 源失败: {type(error).__name__}: {str(error)}"
@@ -339,7 +336,7 @@ class _UpdateHandler:
         )
 
     def _get_download_source(self) -> str:
-        return Config.setting.Update.Source
+        return Config.get("Update", "Source")
 
     def _get_download_url(
         self,
@@ -422,10 +419,10 @@ class _UpdateHandler:
                 "os": "win",
                 "arch": "x64",
                 "current_version": current_version,
-                "cdk": Config.setting.Update.MirrorChyanCDK
-                if Config.setting.Update.Source == "MirrorChyan"
+                "cdk": Config.get("Update", "MirrorChyanCDK")
+                if Config.get("Update", "Source") == "MirrorChyan"
                 else "",
-                "channel": Config.setting.Update.Channel,
+                "channel": Config.get("Update", "Channel"),
             },
             proxy=Config.proxy,
             timeout=5,

@@ -443,7 +443,7 @@ const checkUpdate = async () => {
 
   // 手动检查立即恢复：先终止暂停、清空截止日期，再做完整检查
   if (settings.Update?.PauseUntil) {
-    await handleSettingChange('Update', 'PauseUntil', null)
+    await handleSettingChange('Update', 'PauseUntil', '')
   }
 
   logger.info(`检查前状态:{
@@ -619,10 +619,7 @@ onMounted(() => {
   font-size: 32px;
   font-weight: 700;
   color: var(--ant-color-text);
-  background: var(
-    --app-page-title-color,
-    linear-gradient(135deg, var(--ant-color-primary), var(--ant-color-primary-hover))
-  );
+  background: linear-gradient(135deg, var(--ant-color-primary), var(--ant-color-primary-hover));
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
