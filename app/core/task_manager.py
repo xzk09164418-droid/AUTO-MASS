@@ -1413,10 +1413,103 @@ class _TaskManager:
         self._startup_queue_started = False
         self._startup_queue_task: asyncio.Task | None = None
         self._last_standalone_script_idx: int = -1
+        self._pending_timed_queue_runs: dict[uuid.UUID, int] = {}
+        self._timed_queue_workers: dict[uuid.UUID, asyncio.Task[None]] = {}
+        self._queue_finished_at: dict[uuid.UUID, float] = {}
 
     def is_queue_running(self, queue_id: str | uuid.UUID) -> bool:
         """包含正在停止和收尾的任务，避免上一轮释放资源前再次启动。"""
         return any(info.queue_id == str(queue_id) for info in self.task_info.values())
+
+    def has_pending_timed_queue_run(self, queue_id: str | uuid.UUID) -> bool:
+        return uuid.UUID(str(queue_id)) in self._timed_queue_workers
+
+    def defer_timed_queue_run(self, queue_id: uuid.UUID, *, count: int = 1) -> None:
+        """保留撞上当前轮的定时请求，整轮收尾后间隔 10 秒依次运行。"""
+        if self._stopping_all or any(
+            info.queue_id == str(queue_id)
+            and getattr(self.task_handler.get(task_id), "is_closing", False)
+            for task_id, info in self.task_info.items()
+        ):
+            return
+        self._pending_timed_queue_runs[queue_id] = (
+            self._pending_timed_queue_runs.get(queue_id, 0) + count
+        )
+        if queue_id not in self._timed_queue_workers:
+            self._timed_queue_workers[queue_id] = asyncio.create_task(
+                self._run_deferred_timed_queue(queue_id)
+            )
+        logger.info(
+            f"队列 {queue_id} 定时已顺延，待运行 {self._pending_timed_queue_runs[queue_id]} 轮"
+        )
+
+    async def _run_deferred_timed_queue(self, queue_id: uuid.UUID) -> None:
+        try:
+            while self._pending_timed_queue_runs.get(queue_id, 0):
+                while self.is_queue_running(queue_id):
+                    await asyncio.sleep(0.2)
+                if queue_id not in Config.QueueConfig:
+                    return
+                finished_at = self._queue_finished_at.get(queue_id, time.perf_counter())
+                logger.info(f"队列 {queue_id} 将于收尾 10 秒后启动顺延定时")
+                remaining = finished_at + 10 - time.perf_counter()
+                while remaining > 0:
+                    await asyncio.sleep(remaining)
+                    remaining = finished_at + 10 - time.perf_counter()
+                # 等待期间手动开了一轮时，等该轮完整结束后再重新计时。
+                if self.is_queue_running(queue_id) or self._queue_finished_at.get(
+                    queue_id, finished_at
+                ) != finished_at:
+                    continue
+                if queue_id not in Config.QueueConfig:
+                    return
+                queue = Config.QueueConfig[queue_id]
+                if queue.get("Info", "CycleEnabled") or not queue.get(
+                    "Info", "TimeEnabled"
+                ):
+                    return
+                try:
+                    await self.add_task(
+                        "AutoProxy",
+                        str(queue_id),
+                        new_task_info={
+                            "queueId": str(queue_id),
+                            "taskName": f"队列 - {queue.get('Info', 'Name')}",
+                            "taskType": "顺延定时代理",
+                        },
+                        trigger_source="scheduled_task",
+                    )
+                except RuntimeError:
+                    if self.is_queue_running(queue_id):
+                        continue
+                    raise
+                self._pending_timed_queue_runs[queue_id] -= 1
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception(f"队列 {queue_id} 顺延定时启动失败")
+        finally:
+            if self._timed_queue_workers.get(queue_id) is asyncio.current_task():
+                self._timed_queue_workers.pop(queue_id, None)
+                self._pending_timed_queue_runs.pop(queue_id, None)
+
+    async def cancel_pending_timed_queue_runs(
+        self, queue_id: str | uuid.UUID | None = None
+    ) -> None:
+        queue_ids = (
+            list(self._timed_queue_workers)
+            if queue_id is None
+            else [uuid.UUID(str(queue_id))]
+        )
+        workers = []
+        for uid in queue_ids:
+            self._pending_timed_queue_runs.pop(uid, None)
+            worker = self._timed_queue_workers.pop(uid, None)
+            if worker is not None:
+                worker.cancel()
+                workers.append(worker)
+        if workers:
+            await asyncio.gather(*workers, return_exceptions=True)
 
     @staticmethod
     def _queue_script_entries(
@@ -1801,10 +1894,13 @@ class _TaskManager:
         power_enabled = bool(task_info.mode != "ScriptConfig")
         self.task_info.pop(task_uid, None)
         self.task_handler.pop(task_uid, None)
+        if task_info.queue_id is not None:
+            self._queue_finished_at[uuid.UUID(task_info.queue_id)] = time.perf_counter()
 
         if (
             power_enabled
             and not self._stopping_all
+            and not self._timed_queue_workers
             and len(self.task_handler) == 0
             and Config.power_sign != "NoAction"
         ):
@@ -1822,6 +1918,7 @@ class _TaskManager:
                 Config.power_sign = "NoAction"
                 Config.power_delay = 0
                 try:
+                    await self.cancel_pending_timed_queue_runs()
                     if System.power_task is not None and not System.power_task.done():
                         await System.cancel_power_task()
 
@@ -1860,17 +1957,21 @@ class _TaskManager:
                 return
             if self.task_handler[uid].is_closing:
                 raise RuntimeError("任务已在中止中")
-            self.task_handler[uid].cancel()
-            self.task_handler[uid].is_closing = True
+            handler = self.task_handler[uid]
+            handler.cancel()
+            handler.is_closing = True
+            queue_id = self.task_info[uid].queue_id
+            if queue_id is not None:
+                await self.cancel_pending_timed_queue_runs(queue_id)
             logger.info(f"等待任务 {task_id} 结束...")
-            await self.task_handler[uid].accomplish.wait()
+            await handler.accomplish.wait()
             logger.info(f"任务 {task_id} 已结束")
 
     # ==================== 全局热键与快捷任务控制 ====================
 
     async def toggle_start_stop(self) -> dict[str, Any]:
         """控制程序启停：若有任务正在运行则停止全部任务；若无任务则启动首个可用队列或脚本。"""
-        if self.task_handler:
+        if self.task_handler or self._timed_queue_workers:
             await self.stop_task("ALL")
             return {"action": "stopped", "message": "已停止全部正在运行的任务"}
 

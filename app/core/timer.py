@@ -134,6 +134,7 @@ class _MainTimer:
                 await asyncio.gather(*tasks, return_exceptions=True)
                 logger.info("主业务定时器已关闭")
         finally:
+            await TaskManager.cancel_pending_timed_queue_runs()
             self.started = False
 
     async def second_task(self):
@@ -297,9 +298,14 @@ class _MainTimer:
                 logger.info(f"补跑错过的定时 {planned:%Y-%m-%d %H:%M}：{uid}")
             # 检查区间已前移，一个队列唤起失败不能连带跳过其余队列
             try:
-                if TaskManager.is_queue_running(uid):
+                if TaskManager.is_queue_running(
+                    uid
+                ) or TaskManager.has_pending_timed_queue_run(uid):
                     logger.info(
-                        f"队列 {uid} 仍在运行，跳过本次定时 {planned:%Y-%m-%d %H:%M}"
+                        f"队列 {uid} 仍在运行或等待顺延，保留本次定时 {planned:%Y-%m-%d %H:%M}"
+                    )
+                    TaskManager.defer_timed_queue_run(
+                        uid, count=len({slot_time for _, slot_time in due})
                     )
                     await queue.set(
                         "Data", "LastTimedStart", planned.strftime("%Y-%m-%d %H:%M")
