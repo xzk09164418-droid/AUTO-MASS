@@ -103,6 +103,15 @@
           </div>
         </div>
 
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">当前正在执行的任务</div>
+            <button class="btn btn-sm" onclick="switchTab('scheduler')">查看调度中心</button>
+          </div>
+          <div id="home-runtime-status" class="form-hint" role="status">正在加载运行状态...</div>
+          <div id="home-runtime-tasks" class="runtime-task-list"></div>
+        </div>
+
         <div class="grid-2">
           <div class="card">
             <div class="card-header">
@@ -357,58 +366,99 @@ python remote_script_controller.py release-desktop --caller "OtherBot"</div>
             <div class="page-subtitle">管理多脚本串联执行队列、定时触发器，并在相邻子任务间隔自动让渡外部远程桌面请求</div>
           </div>
           <div class="btn-group">
-            <button class="btn btn-primary" onclick="createNewQueue()">➕ 新建调度队列</button>
+            <button class="btn btn-primary" id="queue-create-button" onclick="createNewQueue()">➕ 新建调度队列</button>
+            <button class="btn" onclick="openScheduleEditor()">➕ 新增定时</button>
             <button class="btn" onclick="loadQueues()">🔄 刷新队列</button>
           </div>
         </div>
 
-        <div class="card">
-          <table class="data-table">
+        <div class="card queue-table-scroll">
+          <table class="data-table queue-summary-table">
             <thead>
               <tr>
                 <th>队列名称</th>
                 <th>队列 ID</th>
+                <th>定时计划</th>
                 <th>启动时运行</th>
                 <th>结束后电源动作</th>
                 <th>操作</th>
               </tr>
             </thead>
             <tbody id="queues-table-body">
-              <tr><td colspan="5">加载中...</td></tr>
+              <tr><td colspan="6">加载中...</td></tr>
             </tbody>
           </table>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">定时列表</div>
+            <button class="btn btn-sm btn-primary" onclick="openScheduleEditor()">新增定时</button>
+          </div>
+          <div class="queue-table-scroll">
+            <table class="data-table queue-times-table">
+              <thead><tr><th>所属队列</th><th>触发时间</th><th>重复日期</th><th>状态</th><th>操作</th></tr></thead>
+              <tbody id="queue-times-table-body"><tr><td colspan="5">加载中...</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card" id="schedule-editor-card" style="display:none">
+          <div class="card-header"><div class="card-title" id="schedule-editor-title">新增定时</div></div>
+          <form id="schedule-editor-form" onsubmit="saveSchedule(event)">
+            <fieldset id="schedule-editor-fields" class="queue-editor-fields">
+              <div class="form-grid">
+                <div class="form-item"><label for="schedule-queue">所属队列</label><select class="select" id="schedule-queue" required onchange="updateScheduleQueueHint()"></select></div>
+                <div class="form-item"><label for="schedule-time">启动时间</label><input class="input" id="schedule-time" type="time" required /></div>
+                <div class="form-item"><label for="schedule-enabled">此条定时</label><select class="select" id="schedule-enabled"><option value="true">启用</option><option value="false">禁用</option></select></div>
+              </div>
+              <fieldset class="schedule-days"><legend>重复日期</legend><div id="schedule-days-options" class="btn-group"></div></fieldset>
+              <p class="form-hint" id="schedule-queue-hint"></p>
+              <p class="queue-editor-error" id="schedule-editor-error" role="alert"></p>
+              <div class="btn-group"><button class="btn btn-primary" type="submit" id="schedule-save-button">保存定时</button><button class="btn" type="button" onclick="closeScheduleEditor()">取消</button></div>
+            </fieldset>
+          </form>
         </div>
 
         <div class="card" id="queue-editor-card" style="display:none">
           <div class="card-header">
             <div class="card-title">📋 编辑队列：<span id="edit-queue-title"></span></div>
             <div class="btn-group">
-              <button class="btn btn-primary" onclick="saveCurrentQueue()">💾 保存队列设置</button>
+              <button class="btn btn-primary" id="queue-save-button" onclick="saveCurrentQueue()">💾 保存队列设置</button>
               <button class="btn" onclick="closeQueueEditor()">关闭</button>
             </div>
           </div>
           <div class="form-grid">
             <div class="form-item">
-              <label>队列名称 (Info.Name)</label>
+              <label for="ed-queue-name">队列名称</label>
               <input class="input" id="ed-queue-name" />
             </div>
             <div class="form-item">
-              <label>软件启动时自动运行该队列 (Setting.StartUpEnabled)</label>
+              <label for="ed-queue-startup">软件启动时运行</label>
               <select class="select" id="ed-queue-startup">
-                <option value="false">否</option>
-                <option value="true">是</option>
+                <option value="Never">不运行</option>
+                <option value="Always">每次启动</option>
+                <option value="DailyFirst">每天首次启动</option>
               </select>
             </div>
             <div class="form-item">
-              <label>队列完成后电源操作 (Setting.EndPowerAction)</label>
+              <label for="ed-queue-power">队列完成后操作</label>
               <select class="select" id="ed-queue-power">
                 <option value="NoAction">无操作</option>
-                <option value="CloseSelf">退出程序</option>
-                <option value="Sleep">休眠</option>
+                <option value="KillSelf">退出程序</option>
+                <option value="RestartSelf">重启程序</option>
+                <option value="Sleep">睡眠</option>
+                <option value="Hibernate">休眠</option>
                 <option value="Shutdown">关机</option>
+                <option value="ShutdownForce">强制关机</option>
+                <option value="Reboot">重启电脑</option>
+                <option value="Logoff">注销</option>
               </select>
             </div>
           </div>
+
+          <div class="form-item"><label for="ed-queue-timed">队列定时启动总开关</label><select class="select" id="ed-queue-timed"><option value="true">启用</option><option value="false">关闭</option></select><span class="form-hint">循环队列不使用定时启动。修改定时不影响已经运行的任务。</span></div>
+          <p class="queue-editor-error" id="queue-editor-error" role="alert"></p>
 
           <div style="margin-top:16px; padding-top:12px; border-top:1px solid var(--border-color)">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px">
@@ -683,6 +733,9 @@ Content-Type: application/json
         <button class="btn btn-primary" value="manual">手动启动远程桌面</button>
       </div>
     </form>
+  </dialog>
+  <dialog class="desktop-fallback-dialog" id="queue-confirm-dialog" aria-labelledby="queue-confirm-title">
+    <form method="dialog"><h2 id="queue-confirm-title">确认操作</h2><p id="queue-confirm-message"></p><div class="desktop-fallback-actions"><button class="btn" value="cancel" autofocus>取消</button><button class="btn btn-danger" value="confirm">确认</button></div></form>
   </dialog>
   <div class="toast-box" id="toast-box"></div>
   <script src="app.js"></script>

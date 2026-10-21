@@ -295,9 +295,18 @@ class _MainTimer:
 
             if now_wall - planned >= timedelta(minutes=1):
                 logger.info(f"补跑错过的定时 {planned:%Y-%m-%d %H:%M}：{uid}")
-            logger.info(f"定时唤起任务：{uid}")
             # 检查区间已前移，一个队列唤起失败不能连带跳过其余队列
             try:
+                if TaskManager.is_queue_running(uid):
+                    logger.info(
+                        f"队列 {uid} 仍在运行，跳过本次定时 {planned:%Y-%m-%d %H:%M}"
+                    )
+                    await queue.set(
+                        "Data", "LastTimedStart", planned.strftime("%Y-%m-%d %H:%M")
+                    )
+                    continue
+
+                logger.info(f"定时唤起任务：{uid}")
                 await TaskManager.add_task(
                     "AutoProxy",
                     str(uid),

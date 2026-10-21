@@ -492,3 +492,66 @@ body {
   gap: 8px;
   margin-top: 24px;
 }
+
+.runtime-task-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.runtime-task-card {
+  padding: 16px;
+  margin-bottom: 8px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  background: var(--bg-subtle);
+  line-height: 1.8;
+  overflow-wrap: anywhere;
+}
+
+.runtime-task-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.runtime-task-card summary {
+  cursor: pointer;
+  color: var(--primary);
+}
+
+.runtime-step-list {
+  padding-left: 24px;
+  color: var(--text-secondary);
+}
+
+.queue-table-scroll {
+  overflow-x: auto;
+  scrollbar-color: var(--text-muted) var(--bg-card);
+  scrollbar-width: thin;
+}
+
+.queue-summary-table {
+  min-width: 840px;
+}
+
+.queue-summary-table th {
+  white-space: nowrap;
+}
+
+.queue-summary-table td:nth-child(3) {
+  min-width: 220px;
+}
+
+.queue-times-table {
+  min-width: 700px;
+}
+
+.queue-times-table td:last-child { min-width: 240px; }
+.queue-editor-fields { border: 0; padding: 0; min-width: 0; }
+.schedule-days { border: 1px solid var(--border-color); border-radius: var(--radius); padding: 12px; margin: 12px 0; }
+.schedule-days label { display: inline-flex; align-items: center; gap: 4px; padding: 4px; }
+.queue-editor-error { color: var(--danger); margin: 12px 0; }

@@ -5,12 +5,27 @@ const state = {
   scriptsData: {},
   queuesIndex: [],
   queuesData: {},
+  queueSchedules: {},
+  runtimeTasks: [],
+  scheduleEditor: null,
+  schedulePending: false,
+  scheduleDraft: '',
+  queueDraft: '',
+  queueSavePending: false,
+  queueCreatePending: false,
+  queueDeletePending: new Set(),
   currentEditScriptId: null,
   currentEditQueueId: null,
   childSessionStatus: null,
   globalSettings: null,
   ws: null,
 };
+
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, (char) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  })[char]);
+}
 
 function showToast(msg) {
   const el = document.getElementById('toast-box');
@@ -445,38 +460,238 @@ async function deleteScriptUser(scriptId, userId) {
 async function loadQueues() {
   try {
     const res = await apiCall('/api/queue/get', 'POST', {});
+    if (res.code !== 200) throw new Error(res.message || '队列加载失败');
     state.queuesIndex = res.index || [];
     state.queuesData = res.data || {};
+    const schedules = await Promise.all(state.queuesIndex.map(async (queue) => {
+      try {
+        const result = await apiCall('/api/queue/time/get', 'POST', { queueId: queue.uid });
+        if (result.code !== 200) throw new Error(result.message || '定时加载失败');
+        return [queue.uid, result];
+      } catch (error) {
+        return [queue.uid, { error: error.message || '定时加载失败' }];
+      }
+    }));
+    state.queueSchedules = Object.fromEntries(schedules);
     renderQueuesTable();
+    renderQueueSchedules();
+    renderRuntimeTasks(state.runtimeTasks);
     refreshDispatchSelector();
   } catch (err) {
-    console.error('loadQueues error:', err);
+    document.getElementById('queues-table-body').innerHTML =
+      `<tr><td colspan="6">加载失败：${escapeHtml(err.message)}，请点击刷新队列重试。</td></tr>`;
+    document.getElementById('queue-times-table-body').innerHTML =
+      '<tr><td colspan="5">暂时无法查询定时，请刷新重试。</td></tr>';
   }
+}
+
+const scheduleDays = [
+  ['Monday', '周一'], ['Tuesday', '周二'], ['Wednesday', '周三'],
+  ['Thursday', '周四'], ['Friday', '周五'], ['Saturday', '周六'], ['Sunday', '周日'],
+];
+
+function formatScheduleDays(days = []) {
+  const selected = scheduleDays.filter(([day]) => days.includes(day));
+  return selected.length === 7 ? '每天' : selected.map(([, label]) => label).join('、') || '未设置运行日期';
+}
+
+function renderQueueSchedules() {
+  const rows = state.queuesIndex.flatMap((queue) => {
+    const cfg = state.queuesData[queue.uid] || {};
+    const name = escapeHtml(cfg.Info?.Name || '调度队列');
+    const schedule = state.queueSchedules[queue.uid];
+    if (schedule?.error) return [`<tr><td>${name}</td><td colspan="4">${escapeHtml(schedule.error)}，请刷新重试</td></tr>`];
+    return (schedule?.index || []).map((item) => {
+      const info = schedule.data[item.uid]?.Info || {};
+      const enabled = cfg.Info?.TimeEnabled && !cfg.Info?.CycleEnabled && info.Enabled && info.Days?.length;
+      const status = cfg.Info?.CycleEnabled ? '循环队列不使用定时' : !cfg.Info?.TimeEnabled
+        ? '队列定时已关闭' : !info.Enabled ? '定时已禁用' : !info.Days?.length ? '未设置运行日期' : '已启用';
+      return `<tr><td>${name}</td><td>${escapeHtml(info.Time || '未设置')}</td>
+        <td>${formatScheduleDays(info.Days)}</td><td><span class="tag ${enabled ? 'green' : ''}">${status}</span></td>
+        <td><div class="btn-group"><button class="btn btn-sm" ${state.schedulePending ? 'disabled' : ''} onclick="openScheduleEditor('${queue.uid}','${item.uid}')">修改</button>
+        <button class="btn btn-sm" ${state.schedulePending ? 'disabled' : ''} onclick="toggleSchedule('${queue.uid}','${item.uid}')">${info.Enabled ? '禁用' : '启用'}</button>
+        <button class="btn btn-sm btn-danger" ${state.schedulePending ? 'disabled' : ''} onclick="deleteSchedule('${queue.uid}','${item.uid}')">删除定时</button></div></td></tr>`;
+    });
+  });
+  document.getElementById('queue-times-table-body').innerHTML = rows.join('') ||
+    '<tr><td colspan="5">暂无定时计划，点击「新增定时」添加。</td></tr>';
+}
+
+async function queueRequest(path, body) {
+  const result = await apiCall(path, 'POST', body);
+  if (result.code !== 200) throw new Error(result.message || '操作失败，请重试');
+  return result;
+}
+
+function confirmQueueChange(message) {
+  const dialog = document.getElementById('queue-confirm-dialog');
+  if (dialog.open) return Promise.resolve(false);
+  document.getElementById('queue-confirm-message').textContent = message;
+  return new Promise((resolve) => {
+    dialog.addEventListener('close', () => resolve(dialog.returnValue === 'confirm'), { once: true });
+    dialog.returnValue = 'cancel';
+    dialog.showModal();
+  });
+}
+
+function readScheduleDraft() {
+  return {
+    queueId: document.getElementById('schedule-queue').value,
+    Info: {
+      Enabled: document.getElementById('schedule-enabled').value === 'true',
+      Time: document.getElementById('schedule-time').value,
+      Days: Array.from(document.querySelectorAll('#schedule-days-options input:checked'), (input) => input.value),
+    },
+  };
+}
+
+async function closeScheduleEditor() {
+  if (state.schedulePending) return false;
+  if (state.scheduleEditor && state.scheduleDraft !== JSON.stringify(readScheduleDraft()) &&
+    !await confirmQueueChange('有尚未保存的定时修改，确定放弃吗？')) return false;
+  state.scheduleEditor = null;
+  document.getElementById('schedule-editor-card').style.display = 'none';
+  return true;
+}
+
+async function openScheduleEditor(queueId = '', timeSetId = '') {
+  if (!await closeScheduleEditor()) return;
+  if (!state.queuesIndex.length) { showToast('请先新建调度队列，再添加定时'); return; }
+  const info = state.queueSchedules[queueId]?.data?.[timeSetId]?.Info;
+  if (timeSetId && !info) { showToast('定时数据已变化，请刷新列表后重试'); return; }
+  state.scheduleEditor = { queueId, timeSetId };
+  document.getElementById('schedule-editor-title').textContent = timeSetId ? '修改定时' : '新增定时';
+  document.getElementById('schedule-queue').innerHTML = state.queuesIndex.map((queue) =>
+    `<option value="${queue.uid}">${escapeHtml(state.queuesData[queue.uid]?.Info?.Name || queue.uid)}</option>`).join('');
+  document.getElementById('schedule-queue').value = queueId || state.queuesIndex[0].uid;
+  document.getElementById('schedule-time').value = info?.Time || '06:10';
+  document.getElementById('schedule-enabled').value = String(info?.Enabled ?? true);
+  const days = info?.Days || scheduleDays.map(([day]) => day);
+  document.getElementById('schedule-days-options').innerHTML = scheduleDays.map(([day, label]) =>
+    `<label><input type="checkbox" value="${day}" ${days.includes(day) ? 'checked' : ''} /> ${label}</label>`).join('');
+  document.getElementById('schedule-editor-error').textContent = '';
+  document.getElementById('schedule-editor-card').style.display = 'block';
+  updateScheduleQueueHint();
+  state.scheduleDraft = JSON.stringify(readScheduleDraft());
+  document.getElementById('schedule-editor-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function updateScheduleQueueHint() {
+  const info = state.queuesData[document.getElementById('schedule-queue').value]?.Info;
+  document.getElementById('schedule-queue-hint').textContent = info?.CycleEnabled
+    ? '该队列是循环队列，定时启动不会生效。请改选普通队列。'
+    : !info?.TimeEnabled ? '该队列的定时总开关已关闭。保存后请在「编辑队列」中启用。'
+      : '按本机时间触发；修改所属队列会将此定时移到目标队列。';
+}
+
+async function saveSchedule(event) {
+  event.preventDefault();
+  if (state.schedulePending || !state.scheduleEditor) return;
+  const errorBox = document.getElementById('schedule-editor-error');
+  errorBox.textContent = '';
+  const draft = readScheduleDraft();
+  if (!draft.queueId || !/^([01]\d|2[0-3]):[0-5]\d$/.test(draft.Info.Time) || !draft.Info.Days.length) {
+    errorBox.textContent = '请选择所属队列、有效时间和至少一个重复日期。'; return;
+  }
+  if (state.queuesData[draft.queueId]?.Info?.CycleEnabled) {
+    errorBox.textContent = '循环队列不使用定时启动，请选择普通队列。'; return;
+  }
+  state.schedulePending = true;
+  document.getElementById('schedule-editor-fields').disabled = true;
+  document.getElementById('schedule-save-button').textContent = '保存中...';
+  const original = state.scheduleEditor;
+  let createdId = '';
+  try {
+    let timeSetId = original.timeSetId;
+    if (!timeSetId || original.queueId !== draft.queueId) {
+      const added = await queueRequest('/api/queue/time/add', { queueId: draft.queueId });
+      if (!added.timeSetId) throw new Error('未返回新定时编号，请刷新检查');
+      createdId = timeSetId = added.timeSetId;
+    }
+    await queueRequest('/api/queue/time/update', { queueId: draft.queueId, timeSetId, data: { Info: draft.Info } });
+    if (original.timeSetId && original.queueId !== draft.queueId) {
+      await queueRequest('/api/queue/time/delete', { queueId: original.queueId, timeSetId: original.timeSetId });
+    }
+    createdId = '';
+    state.scheduleEditor = null;
+    document.getElementById('schedule-editor-card').style.display = 'none';
+    showToast('定时已保存');
+    await loadQueues();
+  } catch (error) {
+    let message = error.message;
+    if (createdId) {
+      try { await queueRequest('/api/queue/time/delete', { queueId: draft.queueId, timeSetId: createdId }); }
+      catch (_) { message += '；新增项未能清理，请刷新列表检查目标队列，避免重复定时。'; }
+    }
+    errorBox.textContent = `保存失败：${message}`;
+  } finally {
+    state.schedulePending = false;
+    document.getElementById('schedule-editor-fields').disabled = false;
+    document.getElementById('schedule-save-button').textContent = '保存定时';
+    renderQueueSchedules();
+  }
+}
+
+async function toggleSchedule(queueId, timeSetId) {
+  if (state.schedulePending) return;
+  const info = state.queueSchedules[queueId]?.data?.[timeSetId]?.Info;
+  if (!info) return;
+  state.schedulePending = true;
+  renderQueueSchedules();
+  try {
+    await queueRequest('/api/queue/time/update', { queueId, timeSetId, data: { Info: { Enabled: !info.Enabled } } });
+    await loadQueues();
+  } catch (error) { showToast(`修改定时失败：${error.message}`); }
+  finally { state.schedulePending = false; renderQueueSchedules(); }
+}
+
+async function deleteSchedule(queueId, timeSetId) {
+  if (state.schedulePending) return;
+  const info = state.queueSchedules[queueId]?.data?.[timeSetId]?.Info;
+  if (!info || !await confirmQueueChange(`删除「${state.queuesData[queueId]?.Info?.Name}」的 ${formatScheduleDays(info.Days)} ${info.Time} 定时？不会停止已启动的任务。`)) return;
+  state.schedulePending = true;
+  renderQueueSchedules();
+  try {
+    await queueRequest('/api/queue/time/delete', { queueId, timeSetId });
+    if (state.scheduleEditor?.queueId === queueId && state.scheduleEditor?.timeSetId === timeSetId) {
+      state.scheduleEditor = null;
+      document.getElementById('schedule-editor-card').style.display = 'none';
+    }
+    await loadQueues(); showToast('定时已删除');
+  } catch (error) { showToast(`删除定时失败：${error.message}`); }
+  finally { state.schedulePending = false; renderQueueSchedules(); }
 }
 
 function renderQueuesTable() {
   const tbody = document.getElementById('queues-table-body');
   if (!tbody) return;
   if (state.queuesIndex.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="5" style="color:var(--text-muted)">暂无调度队列，点击右上角「新建调度队列」添加</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" style="color:var(--text-muted)">暂无调度队列，点击右上角「新建调度队列」添加</td></tr>';
     return;
   }
   tbody.innerHTML = state.queuesIndex
     .map((q) => {
       const cfg = state.queuesData[q.uid] || {};
       const qname = cfg.Info?.Name || '默认调度队列';
-      const startup = cfg.Setting?.StartUpEnabled ? '是' : '否';
-      const power = cfg.Setting?.EndPowerAction || 'NoAction';
+      const startup = { Never: '不运行', Always: '每次启动', DailyFirst: '每天首次启动' }[cfg.Info?.StartUpMode] || '不运行';
+      const power = cfg.Info?.AfterAccomplish || 'NoAction';
+      const schedule = state.queueSchedules[q.uid];
+      const times = (schedule?.index || []).map((item) => schedule.data[item.uid]?.Info)
+        .filter((info) => info?.Enabled).map((info) => `${formatScheduleDays(info.Days)} ${info.Time}`);
+      const scheduleText = schedule?.error ? '定时加载失败' : cfg.Info?.CycleEnabled ? '循环队列'
+        : !cfg.Info?.TimeEnabled ? '定时已关闭' : times.join('；') || '未设置启用的定时';
+      const running = state.runtimeTasks.some((task) => task.queueId === q.uid);
       return `<tr>
-        <td><strong>${qname}</strong></td>
+        <td><strong>${escapeHtml(qname)}</strong></td>
         <td><code>${q.uid.slice(0, 8)}...</code></td>
-        <td><span class="tag ${cfg.Setting?.StartUpEnabled ? 'green' : ''}">${startup}</span></td>
+        <td>${escapeHtml(scheduleText)}</td>
+        <td>${startup}</td>
         <td>${power}</td>
         <td>
           <div class="btn-group">
-            <button class="btn btn-sm btn-primary" onclick="openQueueEditor('${q.uid}')">编辑队列项</button>
-            <button class="btn btn-sm" onclick="startTaskById('${q.uid}')">▶ 立即启动队列</button>
-            <button class="btn btn-sm btn-danger" onclick="deleteQueue('${q.uid}')">删除</button>
+            <button class="btn btn-sm btn-primary" onclick="openQueueEditor('${q.uid}')">编辑队列</button>
+            <button class="btn btn-sm" ${running ? 'disabled' : ''} onclick="startTaskById('${q.uid}')">${running ? '本轮运行中' : '▶ 立即启动队列'}</button>
+            <button class="btn btn-sm btn-danger" ${running || state.queueDeletePending.has(q.uid) ? 'disabled' : ''} onclick="deleteQueue('${q.uid}')">${state.queueDeletePending.has(q.uid) ? '删除中...' : '删除队列'}</button>
           </div>
         </td>
       </tr>`;
@@ -488,22 +703,37 @@ function renderQueuesTable() {
 }
 
 async function createNewQueue() {
-  const res = await apiCall('/api/queue/add', 'POST', {});
-  if (res.code === 200 && res.queueId) {
+  if (state.queueCreatePending || !await closeQueueEditor()) return;
+  state.queueCreatePending = true;
+  document.getElementById('queue-create-button').disabled = true;
+  document.getElementById('queue-create-button').textContent = '创建中...';
+  try {
+    const res = await queueRequest('/api/queue/add', {});
+    if (!res.queueId) throw new Error('未返回队列编号，请刷新检查');
     showToast('已创建新调度队列');
     await loadQueues();
-    openQueueEditor(res.queueId);
+    await openQueueEditor(res.queueId);
+  } catch (error) { showToast(`新建队列失败：${error.message}`); }
+  finally {
+    state.queueCreatePending = false;
+    document.getElementById('queue-create-button').disabled = false;
+    document.getElementById('queue-create-button').textContent = '新建调度队列';
   }
 }
 
 async function openQueueEditor(queueId) {
+  if (state.currentEditQueueId && !await closeQueueEditor()) return;
   state.currentEditQueueId = queueId;
   const cfg = state.queuesData[queueId] || {};
   document.getElementById('queue-editor-card').style.display = 'block';
   document.getElementById('edit-queue-title').textContent = cfg.Info?.Name || '调度队列';
   document.getElementById('ed-queue-name').value = cfg.Info?.Name || '';
-  document.getElementById('ed-queue-startup').value = String(Boolean(cfg.Setting?.StartUpEnabled));
-  document.getElementById('ed-queue-power').value = cfg.Setting?.EndPowerAction || 'NoAction';
+  document.getElementById('ed-queue-startup').value = cfg.Info?.StartUpMode || 'Never';
+  document.getElementById('ed-queue-power').value = cfg.Info?.AfterAccomplish || 'NoAction';
+  document.getElementById('ed-queue-timed').value = String(Boolean(cfg.Info?.TimeEnabled));
+  document.getElementById('ed-queue-timed').disabled = Boolean(cfg.Info?.CycleEnabled);
+  document.getElementById('queue-editor-error').textContent = '';
+  state.queueDraft = JSON.stringify(readQueueDraft());
 
   const sel = document.getElementById('queue-add-script-select');
   if (sel) {
@@ -512,28 +742,49 @@ async function openQueueEditor(queueId) {
       .join('');
   }
   await loadQueueItems(queueId);
+  document.getElementById('queue-editor-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
-function closeQueueEditor() {
+function readQueueDraft() {
+  return {
+    Name: document.getElementById('ed-queue-name').value.trim(),
+    StartUpMode: document.getElementById('ed-queue-startup').value,
+    AfterAccomplish: document.getElementById('ed-queue-power').value,
+    TimeEnabled: document.getElementById('ed-queue-timed').value === 'true',
+  };
+}
+
+async function closeQueueEditor() {
+  if (state.queueSavePending) return false;
+  if (state.currentEditQueueId && state.queueDraft !== JSON.stringify(readQueueDraft()) &&
+    !await confirmQueueChange('有尚未保存的队列设置，确定放弃吗？')) return false;
   state.currentEditQueueId = null;
   document.getElementById('queue-editor-card').style.display = 'none';
+  return true;
 }
 
 async function saveCurrentQueue() {
   const queueId = state.currentEditQueueId;
-  if (!queueId) return;
-  await apiCall('/api/queue/update', 'POST', {
-    queueId,
-    data: {
-      Info: { Name: document.getElementById('ed-queue-name').value.trim() || '调度队列' },
-      Setting: {
-        StartUpEnabled: document.getElementById('ed-queue-startup').value === 'true',
-        EndPowerAction: document.getElementById('ed-queue-power').value,
-      },
-    },
-  });
-  showToast('队列配置已保存');
-  await loadQueues();
+  if (!queueId || state.queueSavePending) return;
+  const info = readQueueDraft();
+  const errorBox = document.getElementById('queue-editor-error');
+  errorBox.textContent = '';
+  if (!info.Name) { errorBox.textContent = '请输入队列名称。'; return; }
+  state.queueSavePending = true;
+  document.getElementById('queue-save-button').disabled = true;
+  document.getElementById('queue-save-button').textContent = '保存中...';
+  try {
+    await queueRequest('/api/queue/update', { queueId, data: { Info: info } });
+    state.queueDraft = JSON.stringify(info);
+    document.getElementById('edit-queue-title').textContent = info.Name;
+    showToast('队列配置已保存');
+    await loadQueues();
+  } catch (error) { errorBox.textContent = `保存失败：${error.message}`; }
+  finally {
+    state.queueSavePending = false;
+    document.getElementById('queue-save-button').disabled = false;
+    document.getElementById('queue-save-button').textContent = '保存队列设置';
+  }
 }
 
 async function loadQueueItems(queueId) {
@@ -583,10 +834,27 @@ async function deleteQueueItem(queueId, queueItemId) {
 }
 
 async function deleteQueue(queueId) {
-  if (!confirm('确定要删除该调度队列吗？')) return;
-  await apiCall('/api/queue/delete', 'POST', { queueId });
-  if (state.currentEditQueueId === queueId) closeQueueEditor();
-  await loadQueues();
+  if (state.queueDeletePending.has(queueId) || state.queueSavePending || state.schedulePending) return;
+  const name = state.queuesData[queueId]?.Info?.Name || '调度队列';
+  if (!await confirmQueueChange(`删除「${name}」及其全部定时和队列项？脚本本身不会删除。`)) return;
+  state.queueDeletePending.add(queueId);
+  renderQueuesTable();
+  try {
+    const snapshot = await apiCall('/api/dispatch/runtime-snapshot');
+    if (!Array.isArray(snapshot.tasks)) throw new Error('无法确认运行状态，请稍后重试');
+    if (snapshot.tasks.some((task) => task.queueId === queueId)) throw new Error('队列正在运行，请等待本轮结束后再删除');
+    await queueRequest('/api/queue/delete', { queueId });
+    if (state.currentEditQueueId === queueId) {
+      state.currentEditQueueId = null;
+      document.getElementById('queue-editor-card').style.display = 'none';
+    }
+    if (state.scheduleEditor?.queueId === queueId || (state.scheduleEditor && document.getElementById('schedule-queue').value === queueId)) {
+      state.scheduleEditor = null;
+      document.getElementById('schedule-editor-card').style.display = 'none';
+    }
+    await loadQueues(); showToast('队列及所属定时已删除');
+  } catch (error) { showToast(`删除队列失败：${error.message}`); }
+  finally { state.queueDeletePending.delete(queueId); renderQueuesTable(); }
 }
 
 // ==================== 4. 调度中心、任务启停与上下任务导航 ====================
@@ -633,6 +901,13 @@ async function startTaskById(taskId) {
   if (dispatchStartPending) return;
   dispatchStartPending = true;
   try {
+    if (state.queuesData[taskId]) {
+      const snapshot = await apiCall('/api/dispatch/runtime-snapshot');
+      if (!Array.isArray(snapshot.tasks)) throw new Error('无法确认队列状态，请稍后重试');
+      if (snapshot.tasks.some((task) => task.queueId === taskId)) {
+        throw new Error('该队列已在运行，请等待本轮结束');
+      }
+    }
     let remoteError = '';
     try {
       const desktop = await apiCall('/api/child-session/status');
@@ -710,26 +985,55 @@ async function updatePowerSign(powerSign) {
   showToast(`已设置任务完成后电源动作: ${powerSign}`);
 }
 
+function renderRuntimeTasks(tasks) {
+  const expandedTasks = new Set(Array.from(
+    document.querySelectorAll('.runtime-task-card details[open]'), (detail) => detail.dataset.taskId,
+  ));
+  document.getElementById('home-running-count').textContent = String(tasks.length);
+  document.getElementById('home-running-sub').textContent = tasks.length ? '执行进度每 4 秒自动刷新' : '当前没有运行中的任务';
+  const content = tasks.map((task) => {
+    const steps = task.task_info || [];
+    const running = steps.filter((step) => step.status === '运行');
+    const finished = steps.filter((step) => ['完成', '异常', '跳过'].includes(step.status)).length;
+    const queueName = state.queuesData[task.queueId]?.Info?.Name;
+    const scriptName = state.scriptsData[task.scriptId]?.Info?.Name;
+    const name = queueName || scriptName || (task.queueId ? '调度队列' : '脚本任务');
+    const users = running.flatMap((step) => (step.userList || [])
+      .filter((user) => user.status === '运行').map((user) => user.name));
+    const abnormal = steps.filter((step) => step.status === '异常' || step.userList?.some((user) => user.status === '异常')).length;
+    return `<article class="runtime-task-card">
+      <div class="runtime-task-heading"><strong>${escapeHtml(name)}</strong>
+        <span class="tag ${task.stopping ? '' : 'green'}">${task.stopping ? '正在停止' : '执行中'}</span></div>
+      <div>当前任务：${escapeHtml(running.map((step) => step.name).join('、') || (task.stopping ? '等待清理完成' : '等待下一步骤或释放资源'))}</div>
+      ${users.length ? `<div>当前用户：${escapeHtml(users.join('、'))}</div>` : ''}
+      <div class="form-hint">进度：${finished} / ${steps.length} 项已结束${abnormal ? `，${abnormal} 项出现异常` : ''}</div>
+      <details data-task-id="${escapeHtml(task.taskId)}" ${expandedTasks.has(task.taskId) ? 'open' : ''}><summary>查看全部步骤</summary><ol class="runtime-step-list">${steps.map((step) =>
+        `<li>${escapeHtml(step.name)} — ${escapeHtml(step.status)}</li>`).join('')}</ol></details>
+      <div class="form-hint">任务编号：${escapeHtml(task.taskId)}</div>
+    </article>`;
+  }).join('');
+  document.getElementById('home-runtime-tasks').innerHTML = content;
+  document.getElementById('runtime-tasks-box').innerHTML = content || '当前暂无正在运行的任务。';
+}
+
+let runtimeSnapshotPending = false;
+
 async function loadRuntimeSnapshot() {
+  if (runtimeSnapshotPending) return;
+  runtimeSnapshotPending = true;
+  const status = document.getElementById('home-runtime-status');
   try {
     const snap = await apiCall('/api/dispatch/runtime-snapshot', 'GET');
-    const tasks = snap?.tasks || [];
-    document.getElementById('home-running-count').textContent = String(tasks.length);
-    const box = document.getElementById('runtime-tasks-box');
-    if (!box) return;
-    if (tasks.length === 0) {
-      box.innerHTML = '当前暂无正在运行的任务。可通过左侧下拉框启动队列，或按 <code>Ctrl+Alt+S</code> 启动默认队列。';
-    } else {
-      box.innerHTML = tasks
-        .map(
-          (t) => `<div style="padding:10px; background:var(--bg-subtle); border-radius:8px; margin-bottom:8px">
-            <div><strong>任务 ID:</strong> <code>${t.taskId}</code> (${t.mode})</div>
-            <div><strong>当前脚本索引:</strong> ${t.currentScriptIndex ?? 0}</div>
-          </div>`
-        )
-        .join('');
-    }
-  } catch (_) {}
+    if (!Array.isArray(snap.tasks)) throw new Error(snap.message || '运行状态查询失败');
+    state.runtimeTasks = snap.tasks;
+    renderRuntimeTasks(snap.tasks);
+    renderQueuesTable();
+    status.textContent = snap.tasks.length ? `最近更新：${new Date().toLocaleTimeString()}，每 4 秒刷新` : '当前暂无正在运行的任务。';
+  } catch (error) {
+    status.textContent = `运行状态刷新失败：${error.message}；保留上次结果，将自动重试。`;
+  } finally {
+    runtimeSnapshotPending = false;
+  }
 }
 
 // ==================== 5. 历史记录与全局设置 ====================
@@ -891,5 +1195,6 @@ window.addEventListener('DOMContentLoaded', () => {
   setInterval(() => {
     loadHealthAndSummary();
     loadChildSessionStatus();
+    loadRuntimeSnapshot();
   }, 4000);
 });

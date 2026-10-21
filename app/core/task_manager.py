@@ -1415,6 +1415,10 @@ class _TaskManager:
         self._startup_queue_task: asyncio.Task | None = None
         self._last_standalone_script_idx: int = -1
 
+    def is_queue_running(self, queue_id: str | uuid.UUID) -> bool:
+        """包含正在停止和收尾的任务，避免上一轮释放资源前再次启动。"""
+        return any(info.queue_id == str(queue_id) for info in self.task_info.values())
+
     @staticmethod
     def _queue_script_entries(
         queue_id: uuid.UUID,
@@ -1621,6 +1625,11 @@ class _TaskManager:
 
         if self._stopping_all:
             raise RuntimeError("正在停止全部任务，暂不接受新任务")
+
+        if uid in Config.QueueConfig and self.is_queue_running(uid):
+            raise RuntimeError(
+                f"队列 {Config.QueueConfig[uid].get('Info', 'Name')} 已在运行，请等待本轮结束"
+            )
 
         if user_id is not None and user_ids is not None:
             raise ValueError("多选用户不能与单独运行用户同时使用")
