@@ -325,19 +325,7 @@ class _SystemHandler:
             if not pid_success:
                 success = False
 
-        # 若未扫描到本会话 PID 但启用了本地远程桌面（Child Session），按映像名兜底强杀 3 遍
-        if not target_pids and os.name == "nt" and path.name:
-            try:
-                from app.core.child_session import ChildSessionManager
-
-                if ChildSessionManager.enabled and hasattr(
-                    platform_process, "kill_process_by_image_name"
-                ):
-                    await platform_process.kill_process_by_image_name(
-                        path.name, kill_tree=kill_tree
-                    )
-            except Exception:
-                pass
+        # 无匹配 PID 时不按映像名兜底，否则会越过会话与精确路径边界误杀同名程序。
 
         if first_error is not None:
             raise first_error
@@ -369,14 +357,26 @@ class _SystemHandler:
         uncertain_pids: list[int] = []
         target_path = str(path).casefold()
         target_name = path.name.casefold()
+        session_matches = None
+        if os.name == "nt":
+            from app.utils.platform.windows.session import in_execution_session
+
+            session_matches = in_execution_session
 
         def _scan() -> bool:
             try:
+                protected_pids = {os.getpid()}
+                protected_pids.update(proc.pid for proc in psutil.Process().parents())
                 processes = psutil.process_iter(["pid", "name", "exe"])
                 for proc in processes:
                     try:
                         info = proc.info
                     except (psutil.NoSuchProcess, psutil.ZombieProcess):
+                        continue
+
+                    if info["pid"] in protected_pids:
+                        continue
+                    if session_matches is not None and not session_matches(info["pid"]):
                         continue
 
                     process_path = info.get("exe")

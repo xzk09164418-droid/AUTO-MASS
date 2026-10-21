@@ -62,6 +62,7 @@ from app.tools.ocr import Box, OCRItem, ocr_image
 from app.utils import get_logger
 from app.utils.platform import IS_WINDOWS
 from app.utils.platform.display import per_monitor_dpi as _per_monitor_dpi
+from app.utils.platform.windows.session import in_execution_session
 
 if IS_WINDOWS:
     # pyautogui 与 pywin32 仅 Windows 可用（无图形会话导入即失败），随入口的
@@ -270,6 +271,8 @@ def find_launcher_pids(launcher_path: Path) -> list[int]:
     root_prefix = str(launcher_path.parent).casefold().rstrip("\\/") + "\\"
     pids: list[int] = []
     for process in psutil.process_iter(["name", "exe"]):
+        if not in_execution_session(process.pid):
+            continue
         try:
             name = (process.info["name"] or "").casefold()
             if name not in _LAUNCHER_PROCESS_NAMES:
@@ -302,6 +305,8 @@ def find_game_pids(launcher_path: Path) -> list[int]:
     root_prefix = str(launcher_path.parent).casefold().rstrip("\\/") + "\\"
     pids: list[int] = []
     for process in psutil.process_iter(["name", "exe"]):
+        if not in_execution_session(process.pid):
+            continue
         try:
             name = (process.info["name"] or "").casefold()
             if name != _GAME_PROCESS.casefold():
@@ -335,6 +340,8 @@ def find_client_pids(client_exe: Path | None, launcher_path: Path | None) -> set
         return pids
     target = str(client_exe).casefold()
     for process in psutil.process_iter(["name", "exe"]):
+        if not in_execution_session(process.pid):
+            continue
         try:
             name = (process.info["name"] or "").casefold()
             if name != _GAME_PROCESS.casefold():

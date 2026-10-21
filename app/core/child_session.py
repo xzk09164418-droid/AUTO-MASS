@@ -364,6 +364,11 @@ class _ChildSessionManager:
         """关闭远程桌面宿主服务。"""
         if os.name != "nt":
             return
+        # 任务后端退出时不能关闭自己所在的桌面；宿主生命周期由主桌面桥接管理。
+        from app.utils.platform.windows.session import EXECUTION_SESSION_ENV
+
+        if os.environ.get(EXECUTION_SESSION_ENV) is not None:
+            return
         with suppress(Exception):
             await self._http_call("/shutdown", method="POST", payload={}, timeout=3.0)
         if self._host_process is not None and self._host_process.returncode is None:
@@ -380,6 +385,11 @@ class _ChildSessionManager:
         status = await self._http_call("/status", method="GET", timeout=2.0)
         if status is not None:
             return status
+
+        from app.utils.platform.windows.session import EXECUTION_SESSION_ENV
+
+        if os.environ.get(EXECUTION_SESSION_ENV) is not None:
+            raise RuntimeError("主桌面 RDP 宿主不可用，不能在执行会话中创建嵌套子桌面")
 
         if self._host_process is not None and self._host_process.returncode is None:
             logger.warning("远程桌面宿主仍在运行但尚未响应，请检查宿主启动状态，跳过重复启动")
@@ -431,6 +441,16 @@ class _ChildSessionManager:
             status = await self.ensure_host_running()
             if status is not None:
                 sid = status.get("childSessionId")
+                from app.utils.platform.windows.session import (
+                    EXECUTION_SESSION_ENV,
+                    get_process_session_id,
+                )
+
+                expected = os.environ.get(EXECUTION_SESSION_ENV)
+                if expected is not None and (
+                    sid != int(expected) or get_process_session_id() != int(expected)
+                ):
+                    raise RuntimeError("RDP 执行会话已改变，请重新启动主程序")
                 if sid is not None and status.get("connectedState") == 1:
                     return int(sid)
                 width, height = self.desktop_resolution
@@ -441,6 +461,8 @@ class _ChildSessionManager:
                     timeout=65.0,
                 )
                 if conn_resp and conn_resp.get("childSessionId") is not None:
+                    if expected is not None and conn_resp["childSessionId"] != int(expected):
+                        raise RuntimeError("RDP 重连后执行会话已改变，请重新启动主程序")
                     return int(conn_resp["childSessionId"])
 
             # 回退：直接通过 wtsapi32 读取已建立的 ChildSessionId
@@ -571,8 +593,17 @@ class _ChildSessionManager:
         while time.monotonic() < deadline:
             if state_file.is_file():
                 wrapped._refresh_from_disk()
+                data = json.loads(state_file.read_text(encoding="utf-8"))
+                if data.get("session_id") != session_id:
+                    wrapped.terminate()
+                    raise RuntimeError("进程包装器未在指定的 RDP 子会话启动")
+                if wrapped._status == "error":
+                    raise RuntimeError(f"RDP 子会话启动失败: {wrapped._error}")
                 break
             await asyncio.sleep(0.1)
+        else:
+            wrapped.terminate()
+            raise RuntimeError("RDP 子会话进程启动超时，未收到包装器状态")
 
         logger.info(
             f"已在远程桌面 (Session={session_id}) 通过包装器启动进程: {target_cmd}, PID={wrapped.pid}"
@@ -650,8 +681,8 @@ class _ChildSessionManager:
         if not self._leases:
             return
 
-        need_disconnect = any(l.disconnect_rdp_view for l in self._leases.values())
-        callers = ", ".join(sorted({l.caller for l in self._leases.values()}))
+        need_disconnect = any(lease.disconnect_rdp_view for lease in self._leases.values())
+        callers = ", ".join(sorted({lease.caller for lease in self._leases.values()}))
 
         if need_disconnect and not self._rdp_view_disconnected_for_external:
             await self._http_call(
@@ -709,7 +740,7 @@ class _ChildSessionManager:
         if not self._leases:
             return False
 
-        callers = ", ".join(sorted({l.caller for l in self._leases.values()}))
+        callers = ", ".join(sorted({lease.caller for lease in self._leases.values()}))
         logger.info(
             f"[{boundary_label}] 检测到外部程序 ({callers}) 需要使用本地远程桌面，"
             "正在让渡远程桌面并暂停后续任务，等待外部程序停止使用回传..."

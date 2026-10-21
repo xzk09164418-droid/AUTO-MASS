@@ -94,7 +94,6 @@ from .queue_cycle import (
     parse_cycle_time,
     sort_for_preview,
 )
-
 from .ws import MainConnection, Publisher, protocol
 
 System = LazyProxy("app.services", "System")
@@ -1621,6 +1620,9 @@ class _TaskManager:
         view_only: bool = False,
         instance_idx: int | None = None,
     ) -> uuid.UUID:
+        from app.core.desktop_runtime import ensure_execution_session
+
+        await ensure_execution_session()
         uid = uuid.UUID(id)
 
         if self._stopping_all:

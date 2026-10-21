@@ -35,6 +35,10 @@ from app.utils import get_logger
 from app.utils.platform import window
 from app.utils.platform.common.errors import UnsupportedPlatformError
 from app.utils.platform.process import platform_process
+from app.utils.platform.windows.session import (
+    EXECUTION_SESSION_ENV,
+    in_execution_session,
+)
 
 from .process_runner import (  # noqa: F401  # 兼容 re-export：ProcessManager.py 经本模块再导出
     ProcessResult,
@@ -43,6 +47,13 @@ from .process_runner import (  # noqa: F401  # 兼容 re-export：ProcessManager
 )
 
 logger = get_logger("进程管理")
+
+
+def _in_execution_session(pid: int) -> bool:
+    if os.name != "nt":
+        return True
+    return in_execution_session(pid)
+
 
 # 后继进程改绑的搜索窗口（秒）: 覆盖引导式启动器自更新/接力换进程的间隙
 _RESEEK_TIMEOUT_SECONDS = 5.0
@@ -73,6 +84,8 @@ def match_process(proc: psutil.Process, target: ProcessInfo) -> bool:
     """
 
     info = proc.info
+    if not _in_execution_session(proc.pid):
+        return False
     if target.pid is not None and proc.pid != target.pid:
         return False
     if target.name is not None and info["name"] != target.name:
@@ -92,7 +105,9 @@ def is_process_running(process_name: str) -> bool:
 
     for proc in psutil.process_iter(["name"]):
         with suppress(psutil.NoSuchProcess, psutil.AccessDenied):
-            if proc.info.get("name") == process_name:
+            if proc.info.get("name") == process_name and _in_execution_session(
+                proc.pid
+            ):
                 # 平台不支持窗口能力时 get_window_handles 返回空列表, 循环不进入
                 for hwnd in get_window_handles(proc.pid):
                     if window.is_visible(hwnd):
@@ -110,7 +125,9 @@ def is_process_alive(process_name: str) -> bool:
 
     for proc in psutil.process_iter(["name"]):
         with suppress(psutil.NoSuchProcess, psutil.AccessDenied):
-            if proc.info.get("name") == process_name:
+            if proc.info.get("name") == process_name and _in_execution_session(
+                proc.pid
+            ):
                 return True
     return False
 
@@ -245,12 +262,20 @@ class ProcessManager:
         self.last_returncode = None
         self._launched_program = Path(program) if program else None
 
+        if os.name == "nt" and not _in_execution_session(os.getpid()):
+            raise RuntimeError("当前进程不在指定的 RDP 执行会话")
+
         # 判断是否需要在本地远程桌面（Child Session）中执行任务
         if use_child_session is None and os.name == "nt":
             try:
                 from app.core.child_session import ChildSessionManager
 
                 use_child_session = ChildSessionManager.enabled
+                # 后端本身已迁入子桌面时直接创建进程，继承同一会话并保留管道语义。
+                if os.environ.get(EXECUTION_SESSION_ENV) is not None:
+                    use_child_session = False
+            except RuntimeError:
+                raise
             except Exception:
                 use_child_session = False
 

@@ -262,6 +262,16 @@ def main(argv: list[str] | None = None):
 
     Config.set_restore_pool_resolver(resolve_restore_pools)
 
+    import asyncio
+
+    from app.core.desktop_runtime import relay_to_execution_session
+
+    relay_returncode = asyncio.run(
+        relay_to_execution_session(list(sys.argv[1:] if argv is None else argv))
+    )
+    if relay_returncode is not None:
+        raise SystemExit(relay_returncode)
+
     init_sentry(
         release=Config.VERSION,
         development=development_environment,
@@ -269,7 +279,6 @@ def main(argv: list[str] | None = None):
         dist=resolve_sentry_dist(current_dir),
     )
 
-    import asyncio
     from contextlib import asynccontextmanager, suppress
 
     import uvicorn
@@ -286,6 +295,10 @@ def main(argv: list[str] | None = None):
         asyncio.create_task(asyncio.to_thread(ssl.create_default_context))
 
         await Config.init_config()
+
+        from app.core.desktop_runtime import watch_execution_session
+
+        desktop_watch = asyncio.create_task(watch_execution_session())
 
         # 默认强制开启远程桌面托盘隐藏模式，避免打扰主桌面
         with suppress(Exception):
@@ -476,6 +489,10 @@ def main(argv: list[str] | None = None):
 
             await MainTimer.stop()
             await TaskManager.stop_task("ALL")
+
+            desktop_watch.cancel()
+            with suppress(asyncio.CancelledError):
+                await desktop_watch
 
             from app.core.child_session import ChildSessionManager
             from app.core.desktop_guard import DesktopGuard
