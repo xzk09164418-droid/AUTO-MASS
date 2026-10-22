@@ -23,8 +23,8 @@ const path = require('path');
 const { spawn, exec } = require('child_process');
 
 const ROOT_DIR = path.resolve(__dirname, '..');
-const WEBUI_DIR = path.join(__dirname, 'webui');
-const DIST_DIR = path.join(__dirname, 'dist');
+const DIST_DIR = path.join(__dirname, 'dist-browser');
+const { createBrowserHost } = require('./web/host.cjs');
 
 function parseArgs(argv) {
   const opts = {
@@ -207,9 +207,11 @@ function openSystemBrowser(url, appMode = false) {
 }
 
 function resolveStaticFile(requestPath) {
-  let cleanPath = decodeURIComponent(requestPath.split('?')[0] || '/');
+  let cleanPath;
+  try { cleanPath = decodeURIComponent(requestPath.split('?')[0] || '/'); }
+  catch { return null; }
   if (cleanPath === '/' || cleanPath === '') {
-    cleanPath = '/index.html';
+    cleanPath = '/browser.html';
   }
 
   // 特殊静态图标映射
@@ -220,19 +222,20 @@ function resolveStaticFile(requestPath) {
     }
   }
 
-  // 优先查找 frontend/webui，其次查找 frontend/dist
-  const roots = [WEBUI_DIR, DIST_DIR];
+  const roots = [DIST_DIR];
   for (const base of roots) {
     if (!fs.existsSync(base)) continue;
     const target = path.resolve(base, '.' + cleanPath);
-    if (target.startsWith(base) && fs.existsSync(target) && fs.statSync(target).isFile()) {
+    if (target.startsWith(base + path.sep) && fs.existsSync(target) && fs.statSync(target).isFile()) {
       return target;
     }
   }
 
-  // SPA History 路由回退到 index.html
+  // 缺失的资源应返回 404，避免音频和脚本收到 HTML 后被误判为存在。
+  if (path.extname(cleanPath)) return null;
+  // SPA History 路由回退到浏览器入口。
   for (const base of roots) {
-    const indexFile = path.join(base, 'index.html');
+    const indexFile = path.join(base, 'browser.html');
     if (fs.existsSync(indexFile)) {
       return indexFile;
     }
@@ -241,8 +244,10 @@ function resolveStaticFile(requestPath) {
 }
 
 function startFrontendServer(opts, backendProc) {
-  const server = http.createServer((req, res) => {
+  const handleHost = createBrowserHost(ROOT_DIR, opts.backendPort);
+  const server = http.createServer(async (req, res) => {
     const reqUrl = req.url || '/';
+    if (await handleHost(req, res)) return;
 
     // 前端配置探测端点
     if (reqUrl === '/__frontend_config') {

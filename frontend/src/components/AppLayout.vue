@@ -110,6 +110,15 @@ const mainMenuItems = computed(() => [
   { key: '/emulators', label: t('comp.emulators'), icon: icon('emulators', DatabaseOutlined) },
   { key: '/queue', label: t('comp.queue'), icon: icon('queue', UnorderedListOutlined) },
   { key: '/scheduler', label: t('comp.scheduler'), icon: icon('scheduler', ControlOutlined) },
+  ...(window.__AUTO_MAS_BROWSER_HOST__
+    ? [
+        {
+          key: '/local-controls',
+          label: t('localControls.title'),
+          icon: icon('tools', ControlOutlined),
+        },
+      ]
+    : []),
 ])
 
 // 开发环境专用菜单项

@@ -37,7 +37,7 @@ export async function getInitializationDecision(): Promise<InitializationDecisio
     }
   }
 
-  if (import.meta.env.DEV) {
+  if (import.meta.env.DEV || window.__AUTO_MAS_BROWSER_HOST__) {
     return {
       mode: 'skip-home',
       currentVersion,

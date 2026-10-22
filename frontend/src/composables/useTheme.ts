@@ -217,6 +217,8 @@ const updateCSSVariables = () => {
   root.style.setProperty('--ant-color-bg-elevated', antTokens.colorBgElevated)
   root.style.setProperty('--ant-color-border', antTokens.colorBorder)
   root.style.setProperty('--ant-color-border-secondary', antTokens.colorBorderSecondary)
+  root.style.setProperty('--ant-box-shadow-secondary', antTokens.boxShadowSecondary)
+  root.style.setProperty('--ant-box-shadow-tertiary', antTokens.boxShadowTertiary)
   root.style.setProperty('--ant-color-bg-container-disabled', antTokens.colorBgContainerDisabled)
   root.style.setProperty('--ant-color-bg-mask', antTokens.colorBgMask)
   root.style.setProperty('--ant-color-split', antTokens.colorSplit)

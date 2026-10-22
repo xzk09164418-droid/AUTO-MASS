@@ -66,6 +66,7 @@ interface TabBasicProps {
   handlePauseHomeEffectsWhenRunningChange(_enabled: boolean): Promise<void>
   handleSettingChange(category: keyof GlobalConfig, key: string, value: any): Promise<void>
 }
+const isBrowserHost = window.__AUTO_MAS_BROWSER_HOST__ === true
 
 const {
   settings,
@@ -237,7 +238,7 @@ const handleLocaleChange = (value: unknown): void => {
       </a-row>
     </div>
 
-    <MascotSettings />
+    <MascotSettings v-if="!isBrowserHost" />
 
     <PressSoundSettings
       :enabled="pressSoundEnabled"
@@ -357,7 +358,7 @@ const handleLocaleChange = (value: unknown): void => {
       </a-row>
     </div>
 
-    <div class="form-section">
+    <div v-if="!isBrowserHost" class="form-section">
       <div class="section-header">
         <h3>{{ t('setting.basic.traySection') }}</h3>
       </div>
@@ -403,7 +404,7 @@ const handleLocaleChange = (value: unknown): void => {
       </a-row>
       <TrayMenuEditor />
     </div>
-    <div class="form-section">
+    <div v-if="!isBrowserHost" class="form-section">
       <div class="section-header">
         <h3>{{ t('setting.basic.windowSection') }}</h3>
       </div>

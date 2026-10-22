@@ -44,6 +44,16 @@ const devRoutes = import.meta.env.DEV
   : []
 
 const routes = [
+  ...(window.__AUTO_MAS_BROWSER_HOST__
+    ? [
+        {
+          path: '/local-controls',
+          name: 'LocalControls',
+          component: () => import('../views/LocalControls.vue'),
+          meta: { title: '本机与热键' },
+        },
+      ]
+    : []),
   {
     path: '/',
     redirect: () => '/initialization',
@@ -399,7 +409,7 @@ router.beforeEach(async (to, from, next) => {
     return
   }
 
-  const isDev = import.meta.env.DEV
+  const isDev = import.meta.env.DEV || window.__AUTO_MAS_BROWSER_HOST__
   if (isDev) {
     // 开发模式免初始化门禁，但直达内页（如刷新后落在 /scripts）时仍需
     // 建立主 WebSocket 连接并标记初始化，否则 isAppReady 恒为 false 导致整窗空白。

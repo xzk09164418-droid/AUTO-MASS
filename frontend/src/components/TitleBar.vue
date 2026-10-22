@@ -54,7 +54,7 @@
     <div class="title-bar-center drag-region"></div>
 
     <!-- 右侧：窗口控制按钮 -->
-    <div v-if="!isMacOS" class="title-bar-right">
+    <div v-if="!isMacOS && !windowIsBrowser" class="title-bar-right">
       <div class="window-controls">
         <button
           class="control-button minimize-button"
@@ -191,6 +191,7 @@ const { t } = useI18n()
 
 const logger = window.electronAPI.getLogger('标题栏')
 const isMacOS = window.electronAPI.isMacOS
+const windowIsBrowser = window.__AUTO_MAS_BROWSER_HOST__
 const router = useRouter()
 const { isBootstrapping, resetInitializationStatus } = useAppInitialization()
 const { showUpdateModal } = useUpdateModal()

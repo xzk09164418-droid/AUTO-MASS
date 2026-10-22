@@ -12,7 +12,7 @@ type VueSentryOptions = NonNullable<Parameters<typeof VueSentry.init>[0]>
 const startSentry = () => {
   if (!sentryContext) return
   // 开发环境不上报
-  if (import.meta.env.DEV) return
+  if (import.meta.env.DEV || window.__AUTO_MAS_BROWSER_HOST__) return
 
   Sentry.init<VueSentryOptions>(
     {

@@ -9,6 +9,7 @@ import { useAppClosing } from './composables/useAppClosing.ts'
 import { useAudioPlayer } from './composables/useAudioPlayer.ts'
 import { useAppInitialization } from './composables/useAppInitialization.ts'
 import AppLayout from './components/AppLayout.vue'
+import BrowserFilePicker from './components/BrowserFilePicker.vue'
 import TitleBar from './components/TitleBar.vue'
 import UpdateModal from './components/UpdateModal.vue'
 import GlobalPowerCountdown from './components/GlobalPowerCountdown.vue'
@@ -27,6 +28,7 @@ import { useSchedulerLogic } from './views/scheduler/useSchedulerLogic'
 import { TaskCreateIn } from './api'
 
 const logger = window.electronAPI.getLogger('App组件')
+const windowIsBrowser = window.__AUTO_MAS_BROWSER_HOST__
 
 // 调试面板及其子页只进开发构建：编译期常量让生产包直接摇掉这近两千行
 const DebugPanel =
@@ -54,21 +56,23 @@ const isStandalonePage = computed(
 )
 
 const { trackStartedTask } = useSchedulerLogic()
-useDesktopMascotHost({ isStandalonePage, isInitializationPage, playSound, trackStartedTask })
-useTrayTaskActions({
-  active: computed(
-    () =>
-      !isStandalonePage.value &&
-      (isInitializationPage.value || (isAppReady.value && performanceStore.initialized))
-  ),
-  canStart: () => !isBackendRuntimeUpdating(),
-  onStarted: task =>
-    trackStartedTask({
-      ...task,
-      selectedMode: TaskCreateIn.mode.AUTO_PROXY,
-      modeLabel: t('scheduler.mode.autoProxy'),
-    }),
-})
+if (!window.__AUTO_MAS_BROWSER_HOST__) {
+  useDesktopMascotHost({ isStandalonePage, isInitializationPage, playSound, trackStartedTask })
+  useTrayTaskActions({
+    active: computed(
+      () =>
+        !isStandalonePage.value &&
+        (isInitializationPage.value || (isAppReady.value && performanceStore.initialized))
+    ),
+    canStart: () => !isBackendRuntimeUpdating(),
+    onStarted: task =>
+      trackStartedTask({
+        ...task,
+        selectedMode: TaskCreateIn.mode.AUTO_PROXY,
+        modeLabel: t('scheduler.mode.autoProxy'),
+      }),
+  })
+}
 
 onMounted(async () => {
   logger.info('App组件已挂载')
@@ -98,6 +102,7 @@ onMounted(async () => {
 
 <template>
   <ConfigProvider :theme="antdTheme" :locale="antdLocale">
+    <BrowserFilePicker v-if="windowIsBrowser" />
     <ThemeTokenBridge />
     <AppearanceDecoration />
     <!-- 初始化页面使用带标题栏的全屏布局 -->

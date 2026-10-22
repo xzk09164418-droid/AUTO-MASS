@@ -592,6 +592,8 @@ export interface ElectronAPI extends DesktopMascotHostAPI, DesktopMascotTaskHost
 
 declare global {
   interface Window {
+    /** Node.js 宿主 + 系统浏览器，不使用 Electron 运行时。 */
+    __AUTO_MAS_BROWSER_HOST__?: boolean
     electronAPI: ElectronAPI
     /** 调试用:由 WebSocketMessageListener 挂载的消息弹窗触发接口 */
     __debugShowQuestion?: (questionData: Record<string, unknown>) => Promise<void>

@@ -102,6 +102,7 @@ const handleMaaFWMenuClick = ({ key }: { key: string | number }) => {
 const runtimeLaunchMode = ref<RuntimeLaunchModeSetting>('auto')
 const runtimeLaunchModeState = ref<RuntimeLaunchModeState | null>(null)
 const runtimeLaunchModeLoading = ref(false)
+const isBrowserHost = window.__AUTO_MAS_BROWSER_HOST__ === true
 
 const runtimeLaunchModeOptions = computed(() => [
   { label: t('setting.advanced.runtimeLaunchModeAuto'), value: 'auto' },
@@ -365,7 +366,7 @@ const exportDataBackup = async () => {
       </a-row>
     </div>
 
-    <div class="form-section">
+    <div v-if="!isBrowserHost" class="form-section">
       <div class="section-header">
         <h3>{{ t('setting.advanced.devSection') }}</h3>
       </div>
@@ -397,6 +398,7 @@ const exportDataBackup = async () => {
               :value="runtimeLaunchMode"
               :options="runtimeLaunchModeOptions"
               :loading="runtimeLaunchModeLoading"
+              :disabled="isBrowserHost"
               size="large"
               style="width: 100%"
               @change="handleRuntimeLaunchModeChange"
@@ -407,7 +409,14 @@ const exportDataBackup = async () => {
                   mode: effectiveModeLabel,
                 })
               }}
-              · {{ t('setting.advanced.runtimeLaunchModeRestartHint') }}
+              ·
+              {{
+                t(
+                  isBrowserHost
+                    ? 'browser.nodeHost'
+                    : 'setting.advanced.runtimeLaunchModeRestartHint'
+                )
+              }}
             </span>
           </div>
         </a-col>
