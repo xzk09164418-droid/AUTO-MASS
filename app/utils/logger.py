@@ -30,6 +30,7 @@ import os
 os.environ.setdefault("LOGURU_DIAGNOSE", "NO")
 
 import sys
+from datetime import timedelta, timezone
 from pathlib import Path
 
 from loguru import logger as _logger
@@ -46,6 +47,7 @@ def _sanitize_record(record):
     """在每个 Loguru sink 写出前过滤敏感字段。"""
 
     record["message"] = sanitize_log_message(str(record["message"]))
+    record["time"] = record["time"].astimezone(timezone(timedelta(hours=8)))
     return True
 
 

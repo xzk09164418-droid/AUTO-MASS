@@ -25,6 +25,7 @@ const { spawn, exec } = require('child_process');
 const ROOT_DIR = path.resolve(__dirname, '..');
 const DIST_DIR = path.join(__dirname, 'dist-browser');
 const { createBrowserHost } = require('./web/host.cjs');
+const { createRuntimeLogs } = require('./web/runtimeLogs.cjs');
 let backendStartPromise = null;
 let backendProcess = null;
 let backendLaunchError = null;
@@ -275,8 +276,9 @@ function resolveStaticFile(requestPath) {
   return null;
 }
 
-function startFrontendServer(opts) {
+function startFrontendServer(opts, runtimeLogs) {
   const handleHost = createBrowserHost(ROOT_DIR, opts.backendPort, {
+    runtimeLogs,
     stopFrontend() {
       // 先返回托盘请求，再关闭 HTTP 与 WebSocket；不触碰 Python 后端。
       setTimeout(() => process.exit(0), 250);
@@ -427,7 +429,12 @@ function startFrontendServer(opts) {
 
 async function main() {
   const opts = parseArgs(process.argv);
-  startFrontendServer(opts);
+  const runtimeLogs = createRuntimeLogs(ROOT_DIR, require('./dist-host/services.cjs'));
+  for (const [method, level] of Object.entries({ log: 'INFO', info: 'INFO', debug: 'DEBUG', warn: 'WARNING', error: 'ERROR' })) {
+    const original = console[method].bind(console);
+    console[method] = (...args) => { runtimeLogs.write(level, 'Node 前端', ...args); original(...args); };
+  }
+  startFrontendServer(opts, runtimeLogs);
   try { await ensureBackendStarted(opts); }
   catch (error) { console.error('[AUTO-MAS] 后端启动未完成:', error.message); }
 }

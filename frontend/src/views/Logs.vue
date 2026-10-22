@@ -7,6 +7,7 @@ import { FileZipOutlined, SyncOutlined } from '@ant-design/icons-vue'
 import { VueMonacoEditor } from '@guolao/vue-monaco-editor'
 import { useLogHighlight } from '@/composables/useLogHighlight'
 import { useLogExport } from '@/composables/useLogExport'
+import { invokeBrowserHost } from '@/composables/useBrowserHost'
 const logger = window.electronAPI.getLogger('日志查看')
 const route = useRoute()
 const { t } = useI18n()
@@ -25,9 +26,12 @@ const loadError = ref('')
 const logMode = ref<LogMode>('follow')
 // 主进程用 `#/logs?file=frontend` 指定落地时选中哪一份；启动路径要的是前端日志，
 // 那时后端还没起来，app.log 打开就是空的。没带参数时维持原来的默认。
-const selectedLogFile = ref<'app' | 'frontend'>(
-  route.query.file === 'frontend' ? 'frontend' : 'app'
-)
+const isBrowserHost = window.__AUTO_MAS_BROWSER_HOST__ === true
+const archiveOptions = ref<{ value: string; label: string }[]>([])
+const logSource = ref('')
+const logStartedAt = ref('')
+let sourceId = ''
+const selectedLogFile = ref<string>(route.query.file === 'frontend' ? 'frontend' : 'app')
 const realTimeEnabled = ref(true)
 const { exportingLogs, packageLogs } = useLogExport()
 let editorInstance: any = null
@@ -40,9 +44,11 @@ const REFRESH_INTERVAL_MS = 2000
 
 // 文件不存在时主进程返回空串。直接把空串塞进编辑器只会得到一片白，说一句人话。
 const emptyHint = computed(() =>
-  selectedLogFile.value === 'app'
-    ? '后端日志还是空的。后端这一程可能还没启动起来，先看「前端日志」。'
-    : '前端日志还是空的。'
+  selectedLogFile.value.startsWith('archive:')
+    ? t('logs.archiveEmpty')
+    : selectedLogFile.value === 'app'
+      ? t('logs.backendEmpty')
+      : t('logs.frontendEmpty')
 )
 
 // Monaco Editor 配置
@@ -142,7 +148,17 @@ const loadLogs = async (silent = false) => {
   const seq = ++loadSeq
   try {
     const fileName = selectedLogFile.value === 'app' ? 'app.log' : 'frontend.log'
-    const result = await window.electronAPI.getLogs?.(0, fileName, logOffset)
+    const runtimeResult = isBrowserHost
+      ? await invokeBrowserHost<{
+          content: string
+          size: number
+          reset: boolean
+          sourceId: string
+          source: string
+          startedAt: string
+        }>('getRuntimeLogs', selectedLogFile.value, logOffset, sourceId)
+      : undefined
+    const result = runtimeResult ?? (await window.electronAPI.getLogs?.(0, fileName, logOffset))
     if (seq !== loadSeq) {
       return
     }
@@ -151,6 +167,11 @@ const loadLogs = async (silent = false) => {
       return
     }
     loadError.value = ''
+    if (runtimeResult) {
+      sourceId = runtimeResult.sourceId
+      logSource.value = runtimeResult.source
+      logStartedAt.value = runtimeResult.startedAt
+    }
     logOffset = result.size
     if (!silent || result.reset || !logs.value) {
       replaceLogs(result.content)
@@ -206,7 +227,26 @@ const toggleRealTime = () => {
 
 // 切换日志文件
 const onLogFileChange = () => {
+  sourceId = ''
   loadLogs()
+}
+
+const selectArchive = (value: string) => {
+  selectedLogFile.value = value
+  onLogFileChange()
+}
+
+const loadArchives = async () => {
+  try {
+    archiveOptions.value =
+      await invokeBrowserHost<{ value: string; label: string }[]>('listLogArchives')
+  } catch (error) {
+    message.error(`${t('logs.archiveLoadFailed')}: ${String(error)}`)
+  }
+}
+
+const handleArchiveDropdown = (open: boolean) => {
+  if (open) void loadArchives()
 }
 
 // 隐藏时停掉定时器，回到可见先补一次再继续
@@ -230,7 +270,9 @@ watch(logs, value => {
 })
 
 onMounted(() => {
-  loadLogs()
+  void loadLogs().then(() => {
+    if (isBrowserHost) void loadArchives()
+  })
   if (realTimeEnabled.value) {
     startRealTimeRefresh()
   }
@@ -261,8 +303,23 @@ onUnmounted(() => {
             @change="onLogFileChange"
           >
             <a-radio-button value="app">{{ t('logs.backendLog') }}</a-radio-button>
-            <a-radio-button value="frontend">{{ t('logs.frontendLog') }}</a-radio-button>
+            <a-radio-button value="frontend">{{
+              isBrowserHost ? t('logs.nodeFrontendLog') : t('logs.frontendLog')
+            }}</a-radio-button>
           </a-radio-group>
+
+          <a-select
+            v-if="isBrowserHost"
+            :value="selectedLogFile.startsWith('archive:') ? selectedLogFile : undefined"
+            :options="archiveOptions"
+            :placeholder="t('logs.viewArchive')"
+            :aria-label="t('logs.viewArchive')"
+            class="archive-select"
+            show-search
+            option-filter-prop="label"
+            @change="selectArchive"
+            @dropdown-visible-change="handleArchiveDropdown"
+          />
 
           <a-button :type="logMode === 'follow' ? 'primary' : 'default'" @click="toggleLogMode">
             {{ logMode === 'follow' ? t('logs.followLatest') : t('logs.freeBrowse') }}
@@ -284,6 +341,16 @@ onUnmounted(() => {
         </a-space>
       </div>
     </div>
+
+    <p v-if="isBrowserHost" class="log-source">
+      {{ logSource }} · {{ t('logs.beijingTime') }}
+      <template v-if="logStartedAt">
+        · {{ t('logs.runStartedAt', { time: logStartedAt }) }}</template
+      >
+      <template v-if="selectedLogFile.startsWith('archive:')">
+        · {{ t('logs.originalArchiveTime') }}</template
+      >
+    </p>
 
     <a-alert
       v-if="loadError"
@@ -357,6 +424,15 @@ onUnmounted(() => {
   gap: 12px;
   min-width: 0;
   justify-content: flex-end;
+}
+
+.archive-select {
+  width: 260px;
+  max-width: 100%;
+}
+.log-source {
+  color: var(--ant-color-text-secondary);
+  margin: 0 0 12px;
 }
 
 .logs-content {

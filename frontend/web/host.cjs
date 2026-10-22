@@ -59,6 +59,14 @@ function createBrowserHost(root, backendPort, lifecycle = {}) {
       child.once('spawn', () => resolve({ success: true }))
     })
   const api = {
+    getRuntimeLogs: (...args) => lifecycle.runtimeLogs.read(...args),
+    listLogArchives: () => lifecycle.runtimeLogs.list(),
+    writeFrontendLog(level, module, args) {
+      const levels = { debug: 'DEBUG', info: 'INFO', warn: 'WARNING', error: 'ERROR' }
+      if (!Object.hasOwn(levels, level) || typeof module !== 'string' || !Array.isArray(args))
+        throw new Error('无效的前端日志')
+      lifecycle.runtimeLogs.write(levels[level], module, ...args)
+    },
     frontendStop: () => {
       if (!lifecycle.stopFrontend) throw new Error('当前宿主未配置前端停止能力')
       return lifecycle.stopFrontend()
@@ -189,6 +197,11 @@ function createBrowserHost(root, backendPort, lifecycle = {}) {
       if (!['app.log', 'frontend.log'].includes(fileName)) throw new Error('无效的日志文件')
       if (fromOffset !== undefined && (!Number.isSafeInteger(fromOffset) || fromOffset < 0))
         throw new Error('无效的日志读取位置')
+      if (lifecycle.runtimeLogs) {
+        return lifecycle.runtimeLogs
+          .read(fileName === 'app.log' ? 'app' : 'frontend', fromOffset || 0)
+          .then(result => (typeof fromOffset === 'number' ? result : result.content))
+      }
       const candidates = ['logs', 'debug'].map(directory => path.join(root, directory, fileName))
       const logPath = candidates.find(file => fs.existsSync(file)) || candidates[0]
       return typeof fromOffset === 'number'

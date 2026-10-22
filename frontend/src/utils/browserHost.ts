@@ -51,6 +51,12 @@ if (!window.electronAPI) {
           async (...args: unknown[]) => {
             const writer = console[level as 'debug' | 'info' | 'warn' | 'error']
             writer(`[${name}]`, ...args)
+            // 由 Node 宿主统一写入北京时间；保留调用方原有级别。
+            void invoke('writeFrontendLog', [
+              level,
+              name,
+              args.map(arg => (arg instanceof Error ? arg.stack || arg.message : arg)),
+            ]).catch(error => console.error('保存浏览器日志失败:', error))
           },
         ])
       ),
