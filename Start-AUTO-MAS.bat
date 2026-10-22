@@ -1,4 +1,10 @@
 @echo off
+:: 优先交给无窗口托盘启动器，批处理不再等待 Node.js 服务退出。
+if exist "%~dp0AUTO-MAS.exe" (
+    start "" "%~dp0AUTO-MAS.exe" %*
+    exit /b
+)
+
 chcp 65001 >nul
 cd /d "%~dp0"
 
@@ -23,12 +29,6 @@ where node >nul 2>&1
 if %errorLevel% equ 0 (
     echo [AUTO-MAS] 正在通过 Node.js 启动前后端分离服务并打开系统浏览器...
     node "%~dp0frontend\server.js" %*
-    exit /b
-)
-
-:: 若已编译 AUTO-MAS.exe 启动器，则调用它启动
-if exist "%~dp0AUTO-MAS.exe" (
-    start "" "%~dp0AUTO-MAS.exe" %*
     exit /b
 )
 

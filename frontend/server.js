@@ -202,13 +202,13 @@ function openSystemBrowser(url, appMode = false) {
   console.log(`[AUTO-MAS] 正在通过 Node.js 调用系统浏览器打开: ${url}`);
   if (process.platform === 'win32') {
     if (appMode) {
-      exec(`start "" msedge --app="${url}"`, (err) => {
+      exec(`start "" msedge --app="${url}"`, { windowsHide: true }, (err) => {
         if (err) {
-          exec(`cmd /c start "" "${url}"`);
+          exec(`cmd /c start "" "${url}"`, { windowsHide: true });
         }
       });
     } else {
-      exec(`cmd /c start "" "${url}"`);
+      exec(`cmd /c start "" "${url}"`, { windowsHide: true });
     }
   } else if (process.platform === 'darwin') {
     exec(`open "${url}"`);

@@ -10,6 +10,10 @@ yarn start:web
 
 默认通过本机浏览器打开 <http://127.0.0.1:36162/>。静默启动可执行
 `node server.js --no-browser`；连接已启动的独立后端可加 `--no-spawn-backend`。
+日常从桌面“AUTO-MAS 控制台”快捷方式或 `AUTO-MAS.exe` 启动，Node.js 与
+Python 均在后台运行，打开浏览器也不会弹出命令行窗口。`Start-AUTO-MAS.bat` 会优先
+转交此无窗口启动器并立即返回；双击 `.bat` 时 Windows 自身仍可能短暂显示
+命令行窗口，因此需要完全无黑框时使用上述快捷方式或 `.exe` 入口。
 前端端口用 `--port`，Python 后端端口用 `--backend-port` 设置。
 后端按需独立启动，关闭或重启 Node.js 前端服务不会结束后端任务。
 后端启动输出写入 `debug/backend-launcher.log`；停止后端请使用程序内的后端控制。
