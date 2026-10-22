@@ -56,10 +56,7 @@ onUnmounted(clearSlowTimer)
 <style scoped>
 .backend-startup-overlay {
   position: fixed;
-  top: 32px;
-  right: 0;
-  bottom: 0;
-  left: 0;
+  inset: 0;
   z-index: 9998;
   display: flex;
   align-items: center;
@@ -67,6 +64,10 @@ onUnmounted(clearSlowTimer)
   background: var(--ant-color-bg-mask, rgba(0, 0, 0, 0.45));
   backdrop-filter: blur(4px);
   animation: overlay-fade-in 0.2s ease-out;
+}
+
+:global(body:has(.title-bar)) .backend-startup-overlay {
+  top: 32px;
 }
 
 .startup-card {

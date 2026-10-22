@@ -14,6 +14,10 @@ yarn start:web
 Python 均在后台运行，打开浏览器也不会弹出命令行窗口。`Start-AUTO-MAS.bat` 会优先
 转交此无窗口启动器并立即返回；双击 `.bat` 时 Windows 自身仍可能短暂显示
 命令行窗口，因此需要完全无黑框时使用上述快捷方式或 `.exe` 入口。
+前端先提供页面与日志入口，后端在后台准备；并发连接共享同一次启动，等待超时
+也不会向仍在启动的进程重复下发启动。托盘双击复用服务，通过图形外壳打开浏览器，
+不执行 `cmd / start`。Python 后端及子会话包装器优先使用 `pythonw.exe`。
+浏览器启动遮罩覆盖整个页面可视区域，只有原生标题栏实际存在时才为其留空。
 前端端口用 `--port`，Python 后端端口用 `--backend-port` 设置。
 后端按需独立启动，关闭或重启 Node.js 前端服务不会结束后端任务。
 后端启动输出写入 `debug/backend-launcher.log`；停止后端请使用程序内的后端控制。
@@ -42,6 +46,8 @@ AUTO-MAS Vue 页面，使用相同的 Ant Design Vue 组件、主题与业务 AP
 `web/services.ts` 只复用原项目中的纯 Node 工具函数；构建器禁止其导入 Electron。
 原页面的 `window.electronAPI` 名称仅作为兼容接口，通过 HTTP 接入 Node.js 服务。
 窗口和浏览器开发工具由本机浏览器管理。
+启动器使用独立的 `data/browser-profile/` 浏览器配置目录并在该窗口禁用扩展，
+避免 Power Automate 等扩展打开额外命令窗口；不修改用户日常浏览器的扩展设置。
 
 界面配置继续保存在 `config/frontend_config.json`，任务与脚本配置使用原后端数据目录。
 浏览器资源包放在 `data/browser/`，不使用浏览器存储替代任务配置。

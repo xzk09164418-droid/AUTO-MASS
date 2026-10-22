@@ -514,9 +514,13 @@ class _ChildSessionManager:
                 TASK_LOGON_INTERACTIVE_TOKEN,
                 None,
             )
-            registered.RunEx(None, TASK_RUN_USE_SESSION_ID, int(session_id), None)
-            # 给任务计划程序留出启动时间，再删除本次使用的临时任务。
-            time.sleep(15.0)
+            running = registered.RunEx(None, TASK_RUN_USE_SESSION_ID, int(session_id), None)
+            # 进入运行态即可清理任务定义，不固定等待 15 秒。
+            deadline = time.monotonic() + 15.0
+            while running is not None and time.monotonic() < deadline:
+                if int(running.State) == 4:
+                    break
+                time.sleep(0.1)
         finally:
             with suppress(Exception):
                 root_folder.DeleteTask(task_name, 0)
@@ -560,6 +564,9 @@ class _ChildSessionManager:
 
         quoted_args = subprocess.list2cmdline(wrapper_args_list)
         python_exe = sys.executable
+        pythonw_exe = Path(python_exe).with_name("pythonw.exe")
+        if pythonw_exe.is_file():
+            python_exe = str(pythonw_exe)
 
         # 优先通过 C# ChildSessionHost 的 /launch 接口触发 Schedule.Service，若不可达则走 Python COM
         resp = await self._http_call(

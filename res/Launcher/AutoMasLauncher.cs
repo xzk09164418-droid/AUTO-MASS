@@ -31,6 +31,7 @@ namespace AutoMas.Launcher
         private readonly SemaphoreSlim _servicesLock = new SemaphoreSlim(1, 1);
         private NotifyIcon _trayIcon;
         private ContextMenuStrip _trayMenu;
+        private bool _openingBrowser;
 
         public LauncherTrayContext(string[] args)
         {
@@ -131,7 +132,9 @@ namespace AutoMas.Launcher
         {
             string[] candidates = new string[]
             {
+                Path.Combine(_rootDir, ".venv", "Scripts", "pythonw.exe"),
                 Path.Combine(_rootDir, ".venv", "Scripts", "python.exe"),
+                Path.Combine(_rootDir, "venv", "Scripts", "pythonw.exe"),
                 Path.Combine(_rootDir, "venv", "Scripts", "python.exe"),
                 Path.Combine(_rootDir, "python", "python.exe"),
                 "python.exe"
@@ -172,10 +175,12 @@ namespace AutoMas.Launcher
                 if (CheckPortReady(_frontendPort, "/__frontend_config"))
                 {
                     if (initialLaunch && !_headless)
-                        Process.Start(new ProcessStartInfo { FileName = string.Format("http://127.0.0.1:{0}", _frontendPort), UseShellExecute = true });
+                        OpenBrowserWindow(_frontendPort);
                     return;
                 }
                 await StartServicesCoreAsync(initialLaunch);
+                if (initialLaunch && !_headless)
+                    OpenBrowserWindow(CheckPortReady(_frontendPort, "/__frontend_config") ? _frontendPort : _backendPort);
             }
             finally { _servicesLock.Release(); }
         }
@@ -184,7 +189,7 @@ namespace AutoMas.Launcher
         {
             var serverJs = Path.Combine(_rootDir, "frontend", "server.js");
             // 从托盘重新打开页面不重放 --run-queue / --run-script 等启动动作。
-            var joinedArgs = initialLaunch ? string.Join(" ", _args) : "--no-browser";
+            var joinedArgs = initialLaunch ? string.Join(" ", _args) + " --no-browser" : "--no-browser";
 
             // 优先通过 Node.js 前后端分离宿主启动（会自动拉起 Python 后端并调用系统浏览器）
             if (File.Exists(serverJs) && CanRunCommand(ResolveNodeExe(), "--version"))
@@ -228,11 +233,6 @@ namespace AutoMas.Launcher
                 {
                     if (CheckPortReady(_backendPort))
                     {
-                        Process.Start(new ProcessStartInfo
-                        {
-                            FileName = string.Format("http://127.0.0.1:{0}", _backendPort),
-                            UseShellExecute = true
-                        });
                         break;
                     }
                     await Task.Delay(500);
@@ -290,22 +290,51 @@ namespace AutoMas.Launcher
             catch { return false; }
         }
 
+        private void OpenBrowserWindow(int port)
+        {
+            string browser = null;
+            foreach (string basePath in new[] {
+                Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86),
+                Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData) })
+            {
+                foreach (string relativePath in new[] {
+                    "Microsoft\\Edge\\Application\\msedge.exe",
+                    "Google\\Chrome\\Application\\chrome.exe" })
+                {
+                    string candidate = Path.Combine(basePath, relativePath);
+                    if (File.Exists(candidate)) { browser = candidate; break; }
+                }
+                if (browser != null) break;
+            }
+            string url = string.Format("http://127.0.0.1:{0}", port);
+            // 独立配置目录避免用户浏览器扩展启动 Native Messaging 的 CMD 宿主。
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = browser ?? "explorer.exe",
+                Arguments = browser == null ? url : string.Format(
+                    "--disable-extensions --no-first-run --no-default-browser-check --user-data-dir=\"{0}\" \"{1}\"",
+                    Path.Combine(_rootDir, "data", "browser-profile"), url),
+                UseShellExecute = false,
+                CreateNoWindow = true
+            });
+        }
+
         private async void OpenBrowserConsole()
         {
+            if (_openingBrowser) return;
+            _openingBrowser = true;
             try
             {
                 await StartServicesAsync(false);
                 int targetPort = CheckPortReady(_frontendPort, "/__frontend_config") ? _frontendPort : _backendPort;
-                Process.Start(new ProcessStartInfo
-                {
-                    FileName = string.Format("http://127.0.0.1:{0}", targetPort),
-                    UseShellExecute = true
-                });
+                OpenBrowserWindow(targetPort);
             }
             catch (Exception error)
             {
                 ShowControlError(error);
             }
+            finally { _openingBrowser = false; }
         }
 
         private void PostJsonAsync(string path, string jsonBody)

@@ -136,8 +136,13 @@ namespace BetterGenshinImpact.Service.ChildSession
                     throw new InvalidOperationException("任务计划程序没有返回运行实例。");
                 }
 
-                // 给任务计划程序留出启动时间，再删除本次使用的临时任务。
-                System.Threading.Thread.Sleep(TimeSpan.FromSeconds(15));
+                // 任务已进入运行态即可返回，不为每次启动固定增加 15 秒。
+                for (int attempt = 0; attempt < 150; attempt++)
+                {
+                    dynamic runningTask = runningTaskObject;
+                    if (Convert.ToInt32(runningTask.State) == 4) break;
+                    System.Threading.Thread.Sleep(100);
+                }
             }
             finally
             {

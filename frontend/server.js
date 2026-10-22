@@ -25,6 +25,9 @@ const { spawn, exec } = require('child_process');
 const ROOT_DIR = path.resolve(__dirname, '..');
 const DIST_DIR = path.join(__dirname, 'dist-browser');
 const { createBrowserHost } = require('./web/host.cjs');
+let backendStartPromise = null;
+let backendProcess = null;
+let backendLaunchError = null;
 
 function parseArgs(argv) {
   const opts = {
@@ -83,7 +86,9 @@ const MIME_TYPES = {
 
 function resolvePythonExecutable() {
   const candidates = [
+    path.join(ROOT_DIR, '.venv', 'Scripts', 'pythonw.exe'),
     path.join(ROOT_DIR, '.venv', 'Scripts', 'python.exe'),
+    path.join(ROOT_DIR, 'venv', 'Scripts', 'pythonw.exe'),
     path.join(ROOT_DIR, 'venv', 'Scripts', 'python.exe'),
     path.join(ROOT_DIR, 'python', 'python.exe'),
     path.join(ROOT_DIR, '.venv', 'bin', 'python'),
@@ -110,7 +115,8 @@ function checkBackendHealth(host, port, timeoutMs = 1500) {
         let body = '';
         res.on('data', (chunk) => (body += chunk));
         res.on('end', () => {
-          resolve(res.statusCode === 200);
+          try { resolve(res.statusCode === 200 && JSON.parse(body).ready !== false); }
+          catch { resolve(false); }
         });
       }
     );
@@ -122,7 +128,13 @@ function checkBackendHealth(host, port, timeoutMs = 1500) {
   });
 }
 
-async function ensureBackendStarted(opts) {
+function ensureBackendStarted(opts) {
+  if (backendStartPromise) return backendStartPromise;
+  backendStartPromise = startBackendOnce(opts).finally(() => { backendStartPromise = null; });
+  return backendStartPromise;
+}
+
+async function startBackendOnce(opts) {
   const alreadyUp = await checkBackendHealth(opts.backendHost, opts.backendPort);
   if (alreadyUp) {
     console.log(`[AUTO-MAS] 检测到 Python 后端已在 http://${opts.backendHost}:${opts.backendPort} 运行`);
@@ -156,31 +168,35 @@ async function ensureBackendStarted(opts) {
     console.log(`[AUTO-MAS] 正在后台启动 Python 后端: ${pyExe} ${pyArgs.join(' ')}`);
     const logDir = path.join(ROOT_DIR, 'debug');
     fs.mkdirSync(logDir, { recursive: true });
-    const logFd = fs.openSync(path.join(logDir, 'backend-launcher.log'), 'a');
-    let backendProc;
-    try {
-      // 后端及其远程桌面桥接独立于 Node，不能继承随前端关闭的输出管道。
-      backendProc = spawn(pyExe, pyArgs, {
-        cwd: ROOT_DIR,
-        detached: true,
-        windowsHide: true,
-        stdio: ['ignore', logFd, logFd],
-        env: {
-          ...process.env,
-          AUTO_MAS_HTTP_PORT: String(opts.backendPort),
-          AUTO_MAS_DEV: '1',
-          AUTO_MAS_BROWSER_HOST: '1',
-        },
-      });
-    } finally {
-      fs.closeSync(logFd);
+    let backendProc = backendProcess;
+    if (!backendProc || backendProc.exitCode !== null || backendLaunchError) {
+      const logFd = fs.openSync(path.join(logDir, 'backend-launcher.log'), 'a');
+      try {
+        // 后端及其远程桌面桥接独立于 Node，不能继承随前端关闭的输出管道。
+        backendProc = spawn(pyExe, pyArgs, {
+          cwd: ROOT_DIR,
+          detached: true,
+          windowsHide: true,
+          stdio: ['ignore', logFd, logFd],
+          env: {
+            ...process.env,
+            AUTO_MAS_HTTP_PORT: String(opts.backendPort),
+            AUTO_MAS_DEV: '1',
+            AUTO_MAS_BROWSER_HOST: '1',
+          },
+        });
+      } finally {
+        fs.closeSync(logFd);
+      }
+      backendProcess = backendProc;
+      backendLaunchError = null;
+      backendProc.on('error', (error) => { backendLaunchError = error; });
+      backendProc.unref();
     }
-    let launchError;
-    backendProc.on('error', (error) => { launchError = error; });
-    backendProc.unref();
 
-    for (let attempt = 0; attempt < 90; attempt++) {
-      if (launchError) throw launchError;
+    // 子会话冷启动可能超过一分钟；等待期间仍复用同一个启动进程。
+    for (let attempt = 0; attempt < 300; attempt++) {
+      if (backendLaunchError) throw backendLaunchError;
       if (backendProc.exitCode !== null) {
         throw new Error(`Python 后端已退出 (${backendProc.exitCode})，请查看 debug/backend-launcher.log`);
       }
@@ -191,8 +207,7 @@ async function ensureBackendStarted(opts) {
       }
       await new Promise((r) => setTimeout(r, 400));
     }
-    console.warn('[AUTO-MAS] 警告：等待后端健康检查超时，前端服务仍将继续启动');
-    return;
+    throw new Error('后端启动尚未完成，请查看 debug/backend-launcher.log；再次连接会等待现有进程，不重复启动');
   }
 
   return null;
@@ -201,15 +216,21 @@ async function ensureBackendStarted(opts) {
 function openSystemBrowser(url, appMode = false) {
   console.log(`[AUTO-MAS] 正在通过 Node.js 调用系统浏览器打开: ${url}`);
   if (process.platform === 'win32') {
-    if (appMode) {
-      exec(`start "" msedge --app="${url}"`, { windowsHide: true }, (err) => {
-        if (err) {
-          exec(`cmd /c start "" "${url}"`, { windowsHide: true });
-        }
-      });
-    } else {
-      exec(`cmd /c start "" "${url}"`, { windowsHide: true });
-    }
+    const edge = [process.env['ProgramFiles(x86)'], process.env.ProgramFiles, process.env.LOCALAPPDATA]
+      .filter(Boolean).map(base => path.join(base, 'Microsoft', 'Edge', 'Application', 'msedge.exe'))
+      .find(candidate => fs.existsSync(candidate));
+    const openDefault = () => {
+      const child = spawn('explorer.exe', [url], { windowsHide: true, stdio: 'ignore' });
+      child.on('error', error => console.error('[AUTO-MAS] 打开浏览器失败:', error.message));
+    };
+    if (edge) {
+      const child = spawn(edge, [
+        '--disable-extensions', '--no-first-run', '--no-default-browser-check',
+        `--user-data-dir=${path.join(ROOT_DIR, 'data', 'browser-profile')}`,
+        appMode ? `--app=${url}` : url,
+      ], { windowsHide: true, stdio: 'ignore' });
+      child.on('error', openDefault);
+    } else openDefault();
   } else if (process.platform === 'darwin') {
     exec(`open "${url}"`);
   } else {
@@ -406,8 +427,9 @@ function startFrontendServer(opts) {
 
 async function main() {
   const opts = parseArgs(process.argv);
-  await ensureBackendStarted(opts);
   startFrontendServer(opts);
+  try { await ensureBackendStarted(opts); }
+  catch (error) { console.error('[AUTO-MAS] 后端启动未完成:', error.message); }
 }
 
 main().catch((err) => {

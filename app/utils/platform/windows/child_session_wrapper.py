@@ -119,6 +119,7 @@ def run_wrapper(
             cwd=str(cwd) if cwd else None,
             env=env,
             stdin=subprocess.DEVNULL,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
     except Exception as exc:
         now = time.time()
