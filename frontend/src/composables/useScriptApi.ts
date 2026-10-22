@@ -21,7 +21,7 @@ import { getTaskRuntimeStates } from '@/composables/useTaskRuntimeState'
 import { isScriptConfigLocked } from '@/utils/scriptConfigLock'
 import { maafwScriptTypeByConfigType, maafwUserConfigTypes } from '@/composables/useMaaFWFlavor'
 
-const logger = window.electronAPI.getLogger('脚本API')
+const logger = window.hostAPI.getLogger('脚本API')
 
 // 首页卫星与活动区共用在途的列表请求，完成后释放，后续读取仍取最新数据。
 let scriptListRequest: Promise<ScriptGetOut> | null = null

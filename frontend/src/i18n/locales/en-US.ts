@@ -1088,7 +1088,8 @@ export default {
     important: 'Important',
     basicInfo: 'Basic info',
     couldNotCreateUser: 'Could not create the account',
-    filePickingUnavailableRun: 'File picking is unavailable — run this inside Electron',
+    filePickingUnavailableRun:
+      'File picking is unavailable — check that the local Node service is running',
     scriptDoesNotExist: 'The managed script does not exist, or it failed to load',
     scriptName: 'Managed script name',
     enterScriptName: 'Enter a managed script name',

@@ -5,7 +5,7 @@ import { useI18n } from 'vue-i18n'
 import type { TableColumnsType } from 'ant-design-vue'
 import { BetterGiService } from '@/api'
 
-const logger = window.electronAPI.getLogger('BetterGI自定义配置组')
+const logger = window.hostAPI.getLogger('BetterGI自定义配置组')
 
 interface BettergiCustomGroupRow {
   name: string

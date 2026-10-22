@@ -7,7 +7,7 @@ import { TaskCreateIn } from '@/api/models/TaskCreateIn'
 import { useWebSocket } from '@/composables/useWebSocket'
 import { WS_TASK_COMPLETED, WS_TASK_NOTICE } from '@/services/websocket/types'
 
-const logger = window.electronAPI.getLogger('OK-NTE配置会话')
+const logger = window.hostAPI.getLogger('OK-NTE配置会话')
 
 /**
  * OK-NTE 原生设置会话：打开 ok-nte 原生 GUI 并遮罩等待，保存后结束会话。

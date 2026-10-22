@@ -16,7 +16,7 @@ import { ref, shallowRef } from 'vue'
 import TaskTree from '@/components/TaskTree.vue'
 
 const { t } = useI18n()
-const logger = window.electronAPI.getLogger('任务总览面板')
+const logger = window.hostAPI.getLogger('任务总览面板')
 
 interface User {
   user_id: string

@@ -45,7 +45,7 @@ const composeModuleOrder = (
   return order
 }
 
-const getLayoutLogger = () => window.electronAPI.getLogger('首页布局')
+const getLayoutLogger = () => window.hostAPI.getLogger('首页布局')
 
 export const useHomeLayout = () => {
   const layoutReady = ref(false)

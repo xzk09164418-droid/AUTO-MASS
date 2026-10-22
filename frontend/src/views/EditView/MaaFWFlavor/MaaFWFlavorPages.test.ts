@@ -18,7 +18,7 @@ import { resolveMaaFWFlavor } from '@/composables/useMaaFWFlavor'
 
 const mocks = vi.hoisted(() => {
   const logger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} }
-  ;(globalThis as { window?: unknown }).window = { electronAPI: { getLogger: () => logger } }
+  ;(globalThis as { window?: unknown }).window = { hostAPI: { getLogger: () => logger } }
   /** 每个分节 stub 收到的全部属性与监听（不声明 props，全落在 attrs 上），按渲染者分开记 */
   const received = new Map<string, Record<string, unknown>>()
   /** 每个分节 stub 收到了哪些具名 slot（control 分节的 besidePackageName 由页面按特调决定填不填） */

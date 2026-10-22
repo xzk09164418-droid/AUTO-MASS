@@ -9,7 +9,7 @@ import { defineMaaFWLazyComponent, type MaaFWLazyComponent } from '@/composables
 
 const mocks = vi.hoisted(() => {
   const logger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} }
-  ;(globalThis as { window?: unknown }).window = { electronAPI: { getLogger: () => logger } }
+  ;(globalThis as { window?: unknown }).window = { hostAPI: { getLogger: () => logger } }
   return {
     route: {
       fullPath: '',

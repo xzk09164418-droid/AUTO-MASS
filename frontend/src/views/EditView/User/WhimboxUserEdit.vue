@@ -95,7 +95,7 @@ import ConfigRestoreSection from '@/views/EditView/User/components/ConfigRestore
 
 const { t } = useI18n()
 
-const logger = window.electronAPI.getLogger('奇想盒用户编辑')
+const logger = window.hostAPI.getLogger('奇想盒用户编辑')
 
 const router = useRouter()
 const route = useRoute()

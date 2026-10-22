@@ -1,4 +1,4 @@
-import type { RuntimeInitMode } from '@/types/electron'
+import type { RuntimeInitMode } from '@/types/host'
 
 type InitializationDecisionMode = 'skip-home' | 'full-init' | 'force-backend-update'
 
@@ -11,7 +11,7 @@ interface InitializationDecision {
 }
 
 export async function getInitializationDecision(): Promise<InitializationDecision> {
-  const api = window.electronAPI
+  const api = window.hostAPI
   const logger = api.getLogger('初始化决策')
   const currentVersion = import.meta.env.VITE_APP_VERSION
   // 浏览器的 Python 后端由 Node.js 宿主管理，不能进入桌面 Runtime 安装流程。

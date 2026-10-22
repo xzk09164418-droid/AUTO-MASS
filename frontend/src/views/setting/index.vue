@@ -28,7 +28,7 @@ import { useAppearanceSettings } from './useAppearanceSettings'
 
 defineOptions({ name: 'SettingsPage' })
 
-const logger = window.electronAPI.getLogger('设置')
+const logger = window.hostAPI.getLogger('设置')
 
 // 引入拆分后的 Tab 组件
 import TabBasic from './TabBasic.vue'
@@ -135,10 +135,10 @@ const NORMALIZED_SETTING_KEYS = new Set([
 
 const syncConfigToElectron = async (data: GlobalConfig) => {
   try {
-    if (window.electronAPI?.syncBackendConfig) {
+    if (window.hostAPI?.syncBackendConfig) {
       // toRaw 剥掉 reactive 代理：Electron IPC 的结构化克隆不支持 Proxy，直接传会报
       // "An object could not be cloned"（对已是普通对象的入参 toRaw 原样返回）
-      await window.electronAPI.syncBackendConfig({
+      await window.hostAPI.syncBackendConfig({
         UI: toRaw(data.UI),
         Start: toRaw(data.Start),
         Update: toRaw(data.Update),
@@ -227,8 +227,8 @@ const handleSettingChange = async (category: keyof GlobalConfig, key: string, va
   // 处理托盘相关配置（需要额外的实时更新调用）
   if (category === 'UI' && (key === 'IfShowTray' || key === 'IfToTray')) {
     try {
-      if (window.electronAPI?.updateTraySettings) {
-        await window.electronAPI.updateTraySettings({ [key]: value })
+      if (window.hostAPI?.updateTraySettings) {
+        await window.hostAPI.updateTraySettings({ [key]: value })
       }
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error)
@@ -336,7 +336,7 @@ const handlePressSoundVolumeChange = async (volume: number) => {
 /** 导入自定义音频：单文件模式导一个，双文件模式分别导按下与松开 */
 const handlePressSoundImport = async (kind: 'single' | 'press' | 'release' = 'single') => {
   try {
-    const files = await window.electronAPI.selectFile([
+    const files = await window.hostAPI.selectFile([
       { name: '音频文件', extensions: ['wav', 'mp3', 'ogg', 'm4a', 'aac', 'flac'] },
     ])
     if (files.length === 0) {
@@ -346,10 +346,7 @@ const handlePressSoundImport = async (kind: 'single' | 'press' | 'release' = 'si
     const filePath = files[0]
     // 上限交给主进程把关：超了它只回大小、不读内容，不会为了拒绝而先把整个文件读进内存。
     // 大小用它 stat 出来的真实字节数，不拿 base64 长度反推——那样会把 padding 当成文件内容
-    const { base64, size } = await window.electronAPI.readFileBase64(
-      filePath,
-      MAX_PRESS_SOUND_BYTES
-    )
+    const { base64, size } = await window.hostAPI.readFileBase64(filePath, MAX_PRESS_SOUND_BYTES)
     if (size > MAX_PRESS_SOUND_BYTES) {
       message.error(t('setting.toast.pressSoundTooLarge'))
       return
@@ -411,7 +408,7 @@ const handlePressSoundPreview = (phase?: PressSoundPhase) => {
 }
 
 // 其他操作
-const openDevTools = () => window.electronAPI?.openDevTools?.()
+const openDevTools = () => window.hostAPI?.openDevTools?.()
 
 // 更新检查 - 使用全局更新检查器
 const checkUpdate = async () => {

@@ -110,7 +110,7 @@ defineOptions({
   name: 'PlanManagementView',
 })
 
-const logger = window.electronAPI.getLogger('计划管理')
+const logger = window.hostAPI.getLogger('计划管理')
 
 const { getPlans, createPlan, updatePlan, deletePlan, reorderPlans } = usePlanApi()
 const route = useRoute()

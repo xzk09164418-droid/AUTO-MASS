@@ -13,11 +13,11 @@ interface TrayTaskActionsOptions {
 
 /** 托盘启动入口跟随应用作用域，不依赖标题栏组件的挂载。 */
 export function useTrayTaskActions(options: TrayTaskActionsOptions): void {
-  const logger = window.electronAPI.getLogger('托盘任务')
+  const logger = window.hostAPI.getLogger('托盘任务')
   const { startTask } = useTaskApi()
   const { playSound } = useAudioPlayer()
   let disposed = false
-  const dispose = window.electronAPI.onTrayActionRequest?.(request => {
+  const dispose = window.hostAPI.onTrayActionRequest?.(request => {
     if (request.action !== 'startTask' || !options.active.value || !options.canStart()) return
     const { taskId, label } = request
     if (!taskId) {

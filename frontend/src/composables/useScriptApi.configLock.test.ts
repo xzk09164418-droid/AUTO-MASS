@@ -33,7 +33,7 @@ describe('useScriptApi runtime config lock', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.stubGlobal('window', {
-      electronAPI: {
+      hostAPI: {
         getLogger: () => ({ warn: vi.fn(), error: vi.fn() }),
       },
     })

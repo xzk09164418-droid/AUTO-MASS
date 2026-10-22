@@ -62,7 +62,7 @@ const WISH_LINES = 4
 export function useSatelliteEggs(options: SatelliteEggsOptions) {
   const { getScene, getStage, spawnText, requestRender } = options
   const { t } = useI18n()
-  const logger = window.electronAPI.getLogger('卫星动画')
+  const logger = window.hostAPI.getLogger('卫星动画')
   const centerPoke = createCenterPokeCounter()
   const konami = createKonamiMatcher()
   const codes = createCodeMatcher(KEY_CODES)

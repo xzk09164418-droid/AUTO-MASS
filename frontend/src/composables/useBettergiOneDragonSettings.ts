@@ -8,7 +8,7 @@ import type {
   BetterGIOneDragonSettingsIn,
 } from '@/api'
 
-const logger = window.electronAPI.getLogger('BetterGI一条龙设置')
+const logger = window.hostAPI.getLogger('BetterGI一条龙设置')
 
 /**
  * 读取某用户一条龙配置的设置项（per-user 副本 → BGI 实配 → 内置模板的种子顺序）。

@@ -5,7 +5,7 @@ import type { PressSoundPreset } from '@/types/pressSound'
 import type { HomeLayoutConfig } from '@/types/home'
 import type { HomeSatelliteStyle } from '@/types/homeSatellite'
 
-const logger = window.electronAPI.getLogger('配置管理')
+const logger = window.hostAPI.getLogger('配置管理')
 
 export interface FrontendConfig {
   // 主题设置
@@ -128,10 +128,10 @@ function enqueueConfigOperation<T>(operation: () => Promise<T>): Promise<T> {
 
 // 读取配置（内部使用，不触发保存）
 async function getConfigInternal(): Promise<FrontendConfig> {
-  let fileConfig: Awaited<ReturnType<typeof window.electronAPI.loadConfig>>
+  let fileConfig: Awaited<ReturnType<typeof window.hostAPI.loadConfig>>
   try {
     // 优先从文件读取配置；旧 localStorage 仍需参与迁移，不能因为文件已有语言字段就丢掉旧主题。
-    fileConfig = await window.electronAPI.loadConfig()
+    fileConfig = await window.hostAPI.loadConfig()
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error)
     logger.error(`读取配置失败: ${errorMsg}`)
@@ -193,7 +193,7 @@ export async function getConfig(): Promise<FrontendConfig> {
     if (hasLocalStorage) {
       try {
         // 迁移只补齐缺失字段，不能用读取时的快照覆盖主进程的新值。
-        await window.electronAPI.saveConfig(getLegacyThemePatch(), config)
+        await window.hostAPI.saveConfig(getLegacyThemePatch(), config)
         localStorage.removeItem('app-config')
         localStorage.removeItem('theme-settings')
         localStorage.removeItem('theme-mode')
@@ -216,7 +216,7 @@ export async function saveConfig(config: Partial<FrontendConfig>): Promise<void>
     try {
       logger.info(`开始保存配置: 键=${Object.keys(config).join(',')}`)
       const defaults = await getConfigInternal() // 保留默认值和旧配置迁移
-      await window.electronAPI.saveConfig(config, defaults)
+      await window.hostAPI.saveConfig(config, defaults)
       // 迁移曾失败时旧主题键还在；用户已显式保存新值，删掉对应旧键，免得下次迁移把它覆盖回去。
       if (config.themeMode !== undefined) localStorage.removeItem('theme-mode')
       if (config.themeColor !== undefined) localStorage.removeItem('theme-color')
@@ -233,7 +233,7 @@ export async function saveConfig(config: Partial<FrontendConfig>): Promise<void>
 export async function resetConfig(): Promise<void> {
   return enqueueConfigOperation(async () => {
     try {
-      await window.electronAPI.resetConfig()
+      await window.hostAPI.resetConfig()
       localStorage.removeItem('app-config')
       localStorage.removeItem('theme-settings')
       localStorage.removeItem('theme-mode')

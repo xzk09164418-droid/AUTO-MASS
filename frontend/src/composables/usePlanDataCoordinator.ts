@@ -14,7 +14,7 @@ import { Service } from '@/api'
 import { GetStageIn } from '@/api'
 import { PLAN_CONFIG_TYPES } from '@/utils/planTypeRegistry'
 import { planColumnKeys, readPlanColumn, type PlanMode } from '@/utils/planDays'
-const logger = window.electronAPI.getLogger('计划数据协调器')
+const logger = window.hostAPI.getLogger('计划数据协调器')
 
 // 时间维度常量。这里只列一周七天：多天轮换的天键是 "1"~"N"，由计划表数据决定，不在常量里。
 export const TIME_KEYS = [

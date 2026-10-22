@@ -62,7 +62,7 @@ export interface MaaFWUserPageOptions {
  */
 export function useMaaFWUserPage({ scriptId, userId }: MaaFWUserPageOptions) {
   const { t } = useI18n()
-  const logger = window.electronAPI.getLogger('MaaFW用户编辑')
+  const logger = window.hostAPI.getLogger('MaaFW用户编辑')
   const router = useRouter()
   const { addUser, getUsers } = useUserApi()
   const { getScript } = useScriptApi()

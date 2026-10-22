@@ -46,7 +46,7 @@ interface SatellitePointerOptions {
 export function useSatellitePointer(options: SatellitePointerOptions) {
   const { getScene, getContainer, isBackgrounded, setHovered, requestRender } = options
   const { t } = useI18n()
-  const logger = window.electronAPI.getLogger('卫星动画')
+  const logger = window.hostAPI.getLogger('卫星动画')
   const dragging = ref(false)
   let press: PressState | null = null
 

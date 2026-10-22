@@ -25,7 +25,7 @@ const props = defineProps<{
 }>()
 
 const { t } = useI18n()
-const logger = window.electronAPI.getLogger('首页社区信息')
+const logger = window.hostAPI.getLogger('首页社区信息')
 const { querySignResult } = useCommunityActivityApi()
 const activityStore = useCommunityActivityStore()
 const { snapshots, loading, errorMessage: activityError } = storeToRefs(activityStore)

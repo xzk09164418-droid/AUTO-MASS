@@ -1,7 +1,7 @@
 import { computed, onUnmounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { message } from 'ant-design-vue'
-import type { RuntimeBinaryUpdateCheck } from '@/types/electron'
+import type { RuntimeBinaryUpdateCheck } from '@/types/host'
 
 export function useRuntimeBinaryUpdate(onUpdated: () => void) {
   const { t } = useI18n()
@@ -22,7 +22,7 @@ export function useRuntimeBinaryUpdate(onUpdated: () => void) {
   let disposed = false
 
   async function checkForUpdate() {
-    const api = window.electronAPI
+    const api = window.hostAPI
     try {
       const result = await api.checkRuntimeBinaryUpdate()
       if (!disposed) updateCheck.value = result
@@ -36,7 +36,7 @@ export function useRuntimeBinaryUpdate(onUpdated: () => void) {
     updating.value = true
     updateMessage.value = t('init.failure.runtimeUpdating')
     updateProgress.value = undefined
-    const api = window.electronAPI
+    const api = window.hostAPI
     let restart = false
     try {
       api.onRuntimeBinaryProgress(progress => {
@@ -80,7 +80,7 @@ export function useRuntimeBinaryUpdate(onUpdated: () => void) {
 
   onUnmounted(() => {
     disposed = true
-    if (updating.value) window.electronAPI.removeRuntimeBinaryProgressListener()
+    if (updating.value) window.hostAPI.removeRuntimeBinaryProgressListener()
   })
 
   return {

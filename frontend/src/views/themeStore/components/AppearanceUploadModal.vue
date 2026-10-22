@@ -49,7 +49,7 @@ const COVER_MODE_LABELS: Record<AppearanceCoverMode, string> = {
 }
 
 const { t } = useI18n()
-const logger = window.electronAPI.getLogger('主题商店')
+const logger = window.hostAPI.getLogger('主题商店')
 const { uploadAppearance, listAppearanceUploads, getInheritableAppearanceCover } = useShareApi()
 const { authorized, refresh: refreshAccount } = props.account
 const { items: mineItems, loading: mineLoading } = props.mine
@@ -204,7 +204,7 @@ const selectTarget = (value: SelectValue): void => {
 }
 
 const pickPackage = async (): Promise<void> => {
-  const paths = await window.electronAPI.selectFile([
+  const paths = await window.hostAPI.selectFile([
     { name: t('themeStore.upload.packageFilter'), extensions: ['zip'] },
   ])
   const picked = paths[0]
@@ -212,7 +212,7 @@ const pickPackage = async (): Promise<void> => {
   inspecting.value = true
   inspectError.value = null
   try {
-    const result = await window.electronAPI.inspectLocalAppearance?.(picked, props.categoryKey)
+    const result = await window.hostAPI.inspectLocalAppearance?.(picked, props.categoryKey)
     if (!result?.success || !result.appearance) {
       packageInfo.value = null
       zipPath.value = ''
@@ -239,13 +239,13 @@ const pickPackage = async (): Promise<void> => {
 }
 
 const pickCover = async (): Promise<void> => {
-  const paths = await window.electronAPI.selectFile([
+  const paths = await window.hostAPI.selectFile([
     { name: t('themeStore.upload.coverFilter'), extensions: ['png', 'jpg', 'jpeg', 'webp'] },
   ])
   const picked = paths[0]
   if (!picked) return
   // 主进程按上传时同样的规则先查一遍（≤8 MB、PNG / JPEG / WebP），不合格就不采用。
-  const result = await window.electronAPI.inspectAppearanceCover?.(picked)
+  const result = await window.hostAPI.inspectAppearanceCover?.(picked)
   if (!result?.success || !result.dataUrl) {
     message.error(result?.error || t('themeStore.upload.invalidCover'))
     return

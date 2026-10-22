@@ -7,7 +7,7 @@ import { TaskCreateIn } from '@/api/models/TaskCreateIn'
 import { useWebSocket } from '@/composables/useWebSocket'
 import { WS_TASK_COMPLETED, WS_TASK_NOTICE } from '@/services/websocket/types'
 
-const logger = window.electronAPI.getLogger('ZZZ-OD配置会话')
+const logger = window.hostAPI.getLogger('ZZZ-OD配置会话')
 
 /**
  * ZZZ-OD 原生设置会话：打开 zzz-od 原生 GUI 并遮罩等待，保存后结束会话。

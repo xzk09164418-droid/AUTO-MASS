@@ -372,7 +372,7 @@ const emit = defineEmits<{
   savingChange: [value: boolean]
 }>()
 
-const logger = window.electronAPI.getLogger('OK-NTE配置编辑')
+const logger = window.hostAPI.getLogger('OK-NTE配置编辑')
 const { configLocked } = useScriptConfigLock(() => props.scriptId)
 
 const loading = ref(false)

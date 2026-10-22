@@ -43,7 +43,7 @@ describe('backgroundInitNotice', () => {
     vi.useFakeTimers()
     vi.stubGlobal('window', {
       setTimeout: globalThis.setTimeout,
-      electronAPI: { getLogger: () => logger },
+      hostAPI: { getLogger: () => logger },
     })
     vi.resetModules()
     getHealth.mockReset()

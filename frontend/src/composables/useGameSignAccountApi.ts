@@ -5,7 +5,7 @@ import { Service, type GameSignAccountGroupConfig } from '@/api'
 
 export function useGameSignAccountApi() {
   const loading = ref(false)
-  const logger = window.electronAPI.getLogger('签到账号API')
+  const logger = window.hostAPI.getLogger('签到账号API')
 
   /**
    * 添加账号组

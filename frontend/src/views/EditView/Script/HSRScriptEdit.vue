@@ -787,7 +787,7 @@ const getDefaultCloudConfig = (): HSRCloudConfig => ({
   LoginTimeoutMinutes: 20,
 })
 
-const logger = window.electronAPI.getLogger('HSR 脚本编辑')
+const logger = window.hostAPI.getLogger('HSR 脚本编辑')
 
 const route = useRoute()
 const router = useRouter()
@@ -1203,18 +1203,18 @@ const joinPath = (folder: string, fileName: string) =>
 
 const selectPath = async (key: string) => {
   try {
-    if (!window.electronAPI) {
+    if (!window.hostAPI) {
       message.error(t('edit.filePickingUnavailableRun'))
       return
     }
-    const path = await window.electronAPI.selectFolder()
+    const path = await window.hostAPI.selectFolder()
     if (!path) return
 
     // 校验目录下是否存在期望的 exe；校验失败弹 Modal.warning 且不保存
     const expectedExe = PATH_VALIDATION[key]
     if (expectedExe && (key !== 'Game.Path' || hsrConfig.Game.Enabled)) {
       const exePath = joinPath(path, expectedExe)
-      const exists = await window.electronAPI.fileExists(exePath)
+      const exists = await window.hostAPI.fileExists(exePath)
       if (!exists) {
         Modal.warning({
           title: t('edit.invalidPath'),

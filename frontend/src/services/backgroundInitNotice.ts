@@ -9,7 +9,7 @@ import { notification } from 'ant-design-vue'
 import { Service, type BackendHealthOut } from '@/api'
 import { translate as t } from '@/i18n'
 
-const logger = window.electronAPI.getLogger('后台初始化')
+const logger = window.hostAPI.getLogger('后台初始化')
 
 // 后台初始化通常几秒内结束，最慢的活动关卡请求也在一分钟内；超过上限说明卡住了，
 // 不再追着问，下次连接时再查

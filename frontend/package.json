@@ -4,29 +4,21 @@
   "version": "v5.7.0",
   "description": "A Multi-Script, Multi-Config Management and Automation Software",
   "author": "AUTO-MAS Team",
-  "main": "dist-electron/main.js",
   "scripts": {
-    "dev": "concurrently \"vp dev\" \"yarn watch:main\" \"yarn electron-dev\"",
-    "dev:fullstack": "concurrently \"yarn backend\" \"vp dev\" \"yarn watch:main\" \"yarn electron-dev:wait\"",
+    "dev": "vp dev",
+    "dev:fullstack": "concurrently \"yarn backend\" \"vp dev\"",
     "backend": "cross-env PYTHONIOENCODING=utf-8 AUTO_MAS_HTTP_PORT=36164 python ../main.py",
-    "electron-dev:wait": "wait-on http://127.0.0.1:5173 http://127.0.0.1:36164/openapi.json && cross-env VITE_DEV_SERVER_URL=http://127.0.0.1:5173 electron .",
-    "watch:main": "tsc -p tsconfig.electron.json --watch",
-    "electron-dev": "wait-on http://127.0.0.1:5173 && cross-env VITE_DEV_SERVER_URL=http://127.0.0.1:5173 electron .",
-    "build:main": "tsc -p tsconfig.electron.json",
     "build:web": "vp build --config web/vite.config.ts && vp build --config web/services.config.ts",
     "start:web": "node server.js",
-    "build": "vp build && yarn build:main && electron-builder --publish never",
+    "build": "yarn build:web",
     "web": "vp dev",
-    "release": "vp build && yarn build:main && electron-builder --win --publish always",
-    "release:full": "vp build && yarn build:main && electron-builder --win --publish always --config build-json/electron-builder-full.json",
-    "release:lite": "vp build && yarn build:main && electron-builder --win --publish always --config build-json/electron-builder-lite.json",
     "lint": "vp lint .",
     "lint:fix": "vp lint . --fix",
     "lint:md": "markdownlint-cli2 \"**/*.md\"",
     "lint:md:fix": "markdownlint-cli2 --fix \"**/*.md\"",
     "format": "vp fmt . --write",
     "format:check": "vp fmt . --check",
-    "typecheck": "vue-tsc -p tsconfig.app.json --noEmit",
+    "typecheck": "vue-tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.node.json --noEmit",
     "openapi": "openapi --input http://127.0.0.1:36164/openapi.json --output ./src/api --client axios && node scripts/postprocess-openapi.mjs",
     "test": "vp test run",
     "e2e": "node e2e/run.mjs",
@@ -44,55 +36,10 @@
     "e2e:report": "playwright show-report playwright-report/browser",
     "e2e:check": "node --test e2e/harness.check.mjs && tsc -p tsconfig.e2e.json"
   },
-  "build": {
-    "asar": true,
-    "asarUnpack": [],
-    "extraMetadata": {
-      "env": "prod"
-    },
-    "appId": "top.auto-mas.frontend",
-    "productName": "AUTO-MAS",
-    "files": [
-      "dist/index.html",
-      "dist/mascot.html",
-      "dist/mascot-menu.html",
-      "dist/assets/**",
-      "!dist/assets/**/*.map",
-      "dict/AUTO-MAS.ico",
-      "dict/logo.png",
-      "dict/prts.png",
-      "dist-electron/**",
-      "public/**",
-      "!src/**",
-      "!**/*.map"
-    ],
-    "publish": [
-      {
-        "provider": "github",
-        "owner": "AUTO-MAS-Project",
-        "repo": "AUTO-MAS"
-      }
-    ],
-    "extraResources": [
-      {
-        "from": "src/assets",
-        "to": "assets",
-        "filter": [
-          "**/*"
-        ]
-      }
-    ],
-    "win": {
-      "requestedExecutionLevel": "requireAdministrator",
-      "icon": "public/AUTO-MAS.ico"
-    }
-  },
   "dependencies": {
-    "@sentry/electron": "7.16.0",
     "@sentry/vue": "10.67.0",
     "adm-zip": "^0.5.16",
     "axios": "1.15.2",
-    "electron-log": "^5.4.3",
     "form-data": "^4.0.4"
   },
   "devDependencies": {
@@ -113,9 +60,6 @@
     "concurrently": "^9.2.0",
     "cross-env": "^10.0.0",
     "dayjs": "^1.11.13",
-    "electron": "^37.2.5",
-    "electron-builder": "26.8.1",
-    "electron-builder-squirrel-windows": "26.15.3",
     "markdown-it": "^14.1.1",
     "markdownlint-cli2": "^0.18.1",
     "matter-js": "^0.20.0",

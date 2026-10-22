@@ -114,7 +114,7 @@ import { useI18n } from 'vue-i18n'
 import { message as feedback } from 'ant-design-vue'
 import { FileZipOutlined, TeamOutlined } from '@ant-design/icons-vue'
 import { useLogExport } from '@/composables/useLogExport'
-import type { RuntimeDoctorCheck, RuntimeInitMode } from '@/types/electron'
+import type { RuntimeDoctorCheck, RuntimeInitMode } from '@/types/host'
 import { useRuntimeBinaryUpdate } from '../useRuntimeBinaryUpdate'
 import type { MirrorConfig } from '@/types/mirror'
 import type {
@@ -203,9 +203,9 @@ onMounted(() => {
 })
 
 async function handleJoinGroup() {
-  const logger = window.electronAPI.getLogger('初始化求助')
+  const logger = window.hostAPI.getLogger('初始化求助')
   try {
-    const result = await window.electronAPI.openUrl(SUPPORT_GROUP_URL)
+    const result = await window.hostAPI.openUrl(SUPPORT_GROUP_URL)
     if (!result.success) throw new Error(String(result.error))
   } catch (error) {
     logger.error(`打开初始化求助群失败: ${error instanceof Error ? error.message : String(error)}`)

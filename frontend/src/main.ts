@@ -1,4 +1,4 @@
-import '@/utils/browserDevElectronAPI'
+import '@/utils/browserPreviewAPI'
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import App from './App.vue'
@@ -28,7 +28,7 @@ const rendererStartedAt = performance.now()
 message.config({ top: `${TITLE_BAR_HEIGHT + MESSAGE_TOP_GAP}px` })
 
 // 导入日志系统
-const logger = window.electronAPI.getLogger('前端主入口')
+const logger = window.hostAPI.getLogger('前端主入口')
 
 // Monaco 预加载推迟到浏览器空闲时段，避免与首屏渲染争抢主线程
 const preloadMonaco = () => {
@@ -57,9 +57,9 @@ import { initializeAppLifecycle } from '@/composables/useAppLifecycle'
 bootstrapRealtimeResidents()
 initializeAppLifecycle()
 
-// 从 Electron 获取 API 端点并设置 OpenAPI.BASE
-if (window.electronAPI?.getApiEndpoint) {
-  window.electronAPI
+// 从 Node 宿主 获取 API 端点并设置 OpenAPI.BASE
+if (window.hostAPI?.getApiEndpoint) {
+  window.hostAPI
     .getApiEndpoint('local')
     .then(endpoint => {
       OpenAPI.BASE = endpoint
@@ -73,7 +73,7 @@ if (window.electronAPI?.getApiEndpoint) {
       logger.info(`API基础URL (默认): ${OpenAPI.BASE}`)
     })
 } else {
-  // 非 Electron 环境，使用默认值
+  // 非 Node 宿主 环境，使用默认值
   OpenAPI.BASE = getDefaultHttpEndpoint()
   logger.info('前端应用开始初始化')
   logger.info(`API基础URL (默认): ${OpenAPI.BASE}`)

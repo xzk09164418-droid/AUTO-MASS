@@ -5,7 +5,7 @@ export function useOkwwIssueReport(logger: ReportLogger) {
   const { exporting, exportIssueReport } = useIssueReport(logger, {
     label: 'OK-WW',
     fallbackName: 'OK-WW-logs-*.zip',
-    exportFn: () => window.electronAPI?.exportOkwwIssueReport?.(),
+    exportFn: () => window.hostAPI?.exportOkwwIssueReport?.(),
   })
   return { exporting, exportOkwwIssueReport: exportIssueReport }
 }

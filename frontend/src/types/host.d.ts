@@ -18,7 +18,7 @@ import type {
   OnlineAppearanceQuery,
 } from '@/types/appearance'
 
-// Electron API 类型定义
+// Node 宿主 API 类型定义
 export interface PathDiscoveryCandidate {
   path: string
   channel?: 'China' | 'Global'
@@ -39,7 +39,7 @@ export interface RelatedProcess {
   command?: string
 }
 
-export interface ElectronConfig {
+export interface HostConfig {
   UI?: GlobalConfig_UI & {
     TrayItems?: unknown[]
     [key: string]: unknown
@@ -50,15 +50,15 @@ export interface ElectronConfig {
   [key: string]: unknown
 }
 
-export interface ElectronMirrorSource {
+export interface HostMirrorSource {
   name: string
   url: string
   type: 'official' | 'mirror'
   description: string
 }
 
-export type ElectronMirrorType = 'python' | 'get_pip' | 'git' | 'repo' | 'pip_mirror'
-export type ElectronApiEndpointKey = 'local' | 'websocket'
+export type HostMirrorType = 'python' | 'get_pip' | 'git' | 'repo' | 'pip_mirror'
+export type HostApiEndpointKey = 'local' | 'websocket'
 
 // ==================== Runtime 后端更新 ====================
 
@@ -187,7 +187,7 @@ export type RuntimeLaunchModeSetting = 'auto' | 'off' | 'development' | 'managed
 /** 最终生效值来自哪一级。 */
 export type RuntimeLaunchModeSource = 'env' | 'setting' | 'default'
 
-/** 日志页增量读取的返回，与主进程 electron/services/logFileReader.ts 一致 */
+/** 日志页增量读取的返回，与主进程 node/services/logFileReader.ts 一致 */
 export interface LogIncrement {
   /** 新增内容；reset 为 true 时是当前全文 */
   content: string
@@ -197,7 +197,7 @@ export interface LogIncrement {
   reset: boolean
 }
 
-/** 与主进程 electron/services/backendService.ts 的 BackendStatus 一致 */
+/** 与Node 宿主 的 BackendStatus 一致 */
 export interface BackendStatus {
   isRunning: boolean
   pid?: number
@@ -221,7 +221,7 @@ export interface VirtualDisplayPromptPayload {
   monitor?: { left: number; top: number; right: number; bottom: number } | null
 }
 
-export interface ElectronAPI extends DesktopMascotHostAPI, DesktopMascotTaskHostAPI {
+export interface HostAPI extends DesktopMascotHostAPI, DesktopMascotTaskHostAPI {
   isMacOS: boolean
   listMascots?: () => Promise<MascotSummary[]>
   importMascot?: (zipPath: string, replace?: boolean) => Promise<MascotImportResult>
@@ -286,7 +286,7 @@ export interface ElectronAPI extends DesktopMascotHostAPI, DesktopMascotTaskHost
   // 配置文件操作
   // 仅覆盖 config 中的字段；defaults 只补齐文件中缺失的字段。
   saveConfig: (config: unknown, defaults?: unknown) => Promise<void>
-  loadConfig: () => Promise<ElectronConfig | null>
+  loadConfig: () => Promise<HostConfig | null>
   resetConfig: () => Promise<void>
 
   // 应用初始化版本（保存前端版本号用于比对）
@@ -497,7 +497,7 @@ export interface ElectronAPI extends DesktopMascotHostAPI, DesktopMascotTaskHost
     selectedMirror?: string,
     rebuild?: boolean
   ) => Promise<InstallStageResult & { skipped?: boolean }>
-  getMirrors: (type: ElectronMirrorType) => Promise<ElectronMirrorSource[]>
+  getMirrors: (type: HostMirrorType) => Promise<HostMirrorSource[]>
   /** 初始化界面开局问一次：走没走 Runtime、回退日志文件、各段可用镜像键。 */
   getRuntimeInitContext?: () => Promise<RuntimeInitContext>
   updateRuntimeBinary: () => Promise<RuntimeBinaryUpdateResult>
@@ -506,7 +506,7 @@ export interface ElectronAPI extends DesktopMascotHostAPI, DesktopMascotTaskHost
   removeRuntimeBinaryProgressListener: () => void
 
   // API 端点获取
-  getApiEndpoint: (key: ElectronApiEndpointKey) => Promise<string>
+  getApiEndpoint: (key: HostApiEndpointKey) => Promise<string>
 
   // 完整初始化流程（Runtime 首次初始化与旧链路共用）
   initialize: (
@@ -594,7 +594,7 @@ declare global {
   interface Window {
     /** Node.js 宿主 + 系统浏览器，不使用 Electron 运行时。 */
     __AUTO_MAS_BROWSER_HOST__?: boolean
-    electronAPI: ElectronAPI
+    hostAPI: HostAPI
     /** 调试用:由 WebSocketMessageListener 挂载的消息弹窗触发接口 */
     __debugShowQuestion?: (questionData: Record<string, unknown>) => Promise<void>
     /** 调试用:调度中心调试信息输出 */

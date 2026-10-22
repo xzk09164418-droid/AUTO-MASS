@@ -117,7 +117,7 @@ describe('useAppLifecycle 断开提示', () => {
     devMode = false
     connectionStateRef.value = 'idle'
     vi.stubGlobal('window', {
-      electronAPI: {
+      hostAPI: {
         getLogger: () => logger,
         backendStatus: vi.fn(async () => ({ isRunning: true })),
       },
@@ -216,7 +216,7 @@ describe('useAppLifecycle 断开提示', () => {
     expect(modalWarning).not.toHaveBeenCalled()
     expect(modalError).not.toHaveBeenCalled()
     await new Promise(resolve => setTimeout(resolve, 0))
-    expect(window.electronAPI.backendStatus).not.toHaveBeenCalled()
+    expect(window.hostAPI.backendStatus).not.toHaveBeenCalled()
     expect(connection.scheduleReconnect).not.toHaveBeenCalled()
     expect(connection.reconnectNow).not.toHaveBeenCalled()
     expect(connection.shutdown).not.toHaveBeenCalled()
@@ -268,7 +268,7 @@ describe('useAppLifecycle 后端有意重启', () => {
     devMode = false
     connectionStateRef.value = 'idle'
     vi.stubGlobal('window', {
-      electronAPI: {
+      hostAPI: {
         getLogger: () => logger,
         backendStatus: vi.fn(async () => ({ isRunning: false })),
       },
@@ -294,7 +294,7 @@ describe('useAppLifecycle 后端有意重启', () => {
     expect(notificationWarning).not.toHaveBeenCalled()
     expect(modalWarning).not.toHaveBeenCalled()
     // 后端由更新流程负责拉起：不查进程状态，也不触发自动重启
-    expect(window.electronAPI.backendStatus).not.toHaveBeenCalled()
+    expect(window.hostAPI.backendStatus).not.toHaveBeenCalled()
     expect(connection.reconnectNow).not.toHaveBeenCalled()
     expect(backendStatus.value).toBe('starting')
   })
@@ -309,7 +309,7 @@ describe('useAppLifecycle 后端有意重启', () => {
 
     expect(modalWarning).not.toHaveBeenCalled()
     expect(notificationWarning).not.toHaveBeenCalled()
-    expect(window.electronAPI.backendStatus).not.toHaveBeenCalled()
+    expect(window.hostAPI.backendStatus).not.toHaveBeenCalled()
     expect(connection.scheduleReconnect).toHaveBeenCalledWith(3000)
   })
 
@@ -325,7 +325,7 @@ describe('useAppLifecycle 后端有意重启', () => {
     await new Promise(resolve => setTimeout(resolve, 0))
 
     expect(notificationWarning).toHaveBeenCalledTimes(1)
-    expect(window.electronAPI.backendStatus).toHaveBeenCalled()
+    expect(window.hostAPI.backendStatus).toHaveBeenCalled()
   })
 
   it('流程异常时显式结束窗口，断开立即恢复正常提示', async () => {

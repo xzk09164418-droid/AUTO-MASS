@@ -41,12 +41,12 @@ const handleOpenReplay = async (replay: ReplayRecord) => {
     message.error(t('history.replays.openFileFailed'))
     return
   }
-  if (!window.electronAPI?.openFile) {
+  if (!window.hostAPI?.openFile) {
     message.error(t('history.replays.openFileUnsupported'))
     return
   }
   try {
-    const result = await window.electronAPI.openFile(replay.filePath)
+    const result = await window.hostAPI.openFile(replay.filePath)
     if (result.success) {
       message.success(t('history.replays.played'))
     } else {
@@ -62,12 +62,12 @@ const handleLocateReplay = async (replay: ReplayRecord) => {
     message.error(t('history.replays.openDirectoryFailed'))
     return
   }
-  if (!window.electronAPI?.showItemInFolder) {
+  if (!window.hostAPI?.showItemInFolder) {
     message.error(t('history.replays.openDirectoryUnsupported'))
     return
   }
   try {
-    await window.electronAPI.showItemInFolder(replay.filePath)
+    await window.hostAPI.showItemInFolder(replay.filePath)
     message.success(t('history.replays.directoryOpened'))
   } catch (error) {
     message.error(error instanceof Error ? error.message : t('history.replays.openDirectoryFailed'))

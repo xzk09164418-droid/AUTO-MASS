@@ -1,4 +1,4 @@
-import type { Event, Stacktrace } from '@sentry/electron/renderer'
+import type { Event, Stacktrace } from '@sentry/vue'
 
 const PRIVATE_REQUEST_FIELDS = ['cookies', 'data', 'env', 'headers', 'query_string'] as const
 const LOCAL_PATH_PATTERN = /^(?:file:\/\/|[a-zA-Z]:[\\/])/

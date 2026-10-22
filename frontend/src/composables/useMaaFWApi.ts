@@ -9,7 +9,7 @@ import type {
   MaaFWTaskSnapshot,
 } from '@/types/script'
 
-const logger = window.electronAPI.getLogger('MaaFW接口')
+const logger = window.hostAPI.getLogger('MaaFW接口')
 
 /**
  * 拼接 MaaFW 项目内相对资源（图标、说明图片）的可访问 URL。

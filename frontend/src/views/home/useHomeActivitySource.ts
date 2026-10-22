@@ -12,7 +12,7 @@ import { onScopeDispose, ref, type Ref } from 'vue'
 const RETRY_DELAY_MS = 30_000
 const MAX_RETRIES = 8
 
-const logger = window.electronAPI.getLogger('活动数据')
+const logger = window.hostAPI.getLogger('活动数据')
 
 export interface HomeActivitySourceOptions<T> {
   /** 日志与失败文案里用的名字，调用方翻译好再传 */

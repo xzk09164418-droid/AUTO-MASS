@@ -18,7 +18,7 @@ import { useSchedulerLogic } from '@/views/scheduler/useSchedulerLogic'
 import { useTaskApi } from '@/composables/useTaskApi'
 
 export const useHomeQuickStart = () => {
-  const logger = window.electronAPI.getLogger('首页')
+  const logger = window.hostAPI.getLogger('首页')
   const { playSound } = useAudioPlayer()
   const { trackStartedTask } = useSchedulerLogic()
   const { startTask } = useTaskApi()

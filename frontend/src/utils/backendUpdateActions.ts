@@ -6,7 +6,7 @@
  * 不可重试时一个重试按钮都不给，改为提示携带日志反馈。
  */
 
-import type { RuntimeUpdateOutcome, RuntimeUpdateRetryAction } from '@/types/electron'
+import type { RuntimeUpdateOutcome, RuntimeUpdateRetryAction } from '@/types/host'
 
 interface BackendUpdateActions {
   /** 可展示的重试入口；不可重试时为空。 */

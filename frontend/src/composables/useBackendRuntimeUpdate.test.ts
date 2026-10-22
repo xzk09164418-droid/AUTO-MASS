@@ -33,7 +33,7 @@ describe('useBackendRuntimeUpdate 有意重启窗口', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.stubGlobal('window', {
-      electronAPI: {
+      hostAPI: {
         getLogger: () => logger,
         updateBackendViaRuntime,
         retryBackendUpdate,

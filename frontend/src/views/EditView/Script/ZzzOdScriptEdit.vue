@@ -371,7 +371,7 @@ import { useScriptApi } from '@/composables/useScriptApi'
 import { useSaveQueue } from '@/composables/useSaveQueue'
 
 const { t } = useI18n()
-const logger = window.electronAPI.getLogger('ZZZ-OD脚本编辑')
+const logger = window.hostAPI.getLogger('ZZZ-OD脚本编辑')
 const route = useRoute()
 const router = useRouter()
 const { getScript, updateScript } = useScriptApi()
@@ -537,7 +537,7 @@ const loadScript = async () => {
 }
 
 const selectGamePath = async () => {
-  const paths = await window.electronAPI?.selectFile([
+  const paths = await window.hostAPI?.selectFile([
     {
       name: 'ZenlessZoneZero.exe',
       extensions: ['exe'],
@@ -562,12 +562,12 @@ const selectGamePath = async () => {
 }
 
 const selectRootPath = async () => {
-  const picked = await window.electronAPI.selectFolder()
+  const picked = await window.hostAPI.selectFolder()
   if (!picked) return
   const normalized = picked.replace(/\\/g, '/')
   // 任一启动器存在即视为有效安装目录（RuntimeLauncher / 旧安装器 Launcher）
   const launcherChecks = await Promise.all(
-    ZZZOD_LAUNCHER_NAMES.map(name => window.electronAPI.fileExists(`${normalized}/${name}`))
+    ZZZOD_LAUNCHER_NAMES.map(name => window.hostAPI.fileExists(`${normalized}/${name}`))
   )
   if (!launcherChecks.some(Boolean)) {
     Modal.error({

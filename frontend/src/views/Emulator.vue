@@ -23,7 +23,7 @@ import { MAS_DOC_URLS } from '@/utils/openExternal'
 import { usePerformanceStore } from '@/stores/performance'
 const { t } = useI18n()
 
-const logger = window.electronAPI.getLogger('模拟器管理')
+const logger = window.hostAPI.getLogger('模拟器管理')
 const performanceStore = usePerformanceStore()
 
 defineOptions({ name: 'EmulatorManager' })
@@ -674,7 +674,7 @@ const showEmulator = async (uuid: string, index: string) => {
 // 路径选择
 const selectEmulatorPath = async (uuid: string) => {
   try {
-    if (!window.electronAPI) {
+    if (!window.hostAPI) {
       message.error(t('emulator.toast.filePickerUnavailable'))
       return
     }
@@ -683,7 +683,7 @@ const selectEmulatorPath = async (uuid: string) => {
     if (!editData) return
 
     // 选择任意文件
-    const paths = await window.electronAPI.selectFile([
+    const paths = await window.hostAPI.selectFile([
       { name: t('emulator.allFiles'), extensions: ['*'] },
     ])
 

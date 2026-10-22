@@ -55,7 +55,7 @@ vi.stubGlobal('document', {
 })
 vi.stubGlobal('window', {
   matchMedia: () => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() }),
-  electronAPI: {
+  hostAPI: {
     getLogger: () => ({ debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }),
     loadConfig: async () => null,
     saveConfig,

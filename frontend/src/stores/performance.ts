@@ -76,26 +76,26 @@ export const usePerformanceStore = defineStore('performance', () => {
   const registerWindowActivityListener = () => {
     if (
       removeWindowActivityListener ||
-      typeof window.electronAPI?.onWindowActivityChange !== 'function'
+      typeof window.hostAPI?.onWindowActivityChange !== 'function'
     ) {
       return
     }
 
-    removeWindowActivityListener = window.electronAPI.onWindowActivityChange(activity => {
+    removeWindowActivityListener = window.hostAPI.onWindowActivityChange(activity => {
       windowActivityUpdateVersion += 1
       windowActivity.value = activity === 'background' ? 'background' : 'visible'
     })
   }
 
   const syncWindowActivity = async () => {
-    if (typeof window.electronAPI?.getWindowActivity !== 'function') {
+    if (typeof window.hostAPI?.getWindowActivity !== 'function') {
       return
     }
 
     const updateVersion = windowActivityUpdateVersion
 
     try {
-      const activity = await window.electronAPI.getWindowActivity()
+      const activity = await window.hostAPI.getWindowActivity()
       if (
         updateVersion === windowActivityUpdateVersion &&
         (activity === 'visible' || activity === 'background')

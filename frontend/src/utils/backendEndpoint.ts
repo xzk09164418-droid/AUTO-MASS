@@ -5,7 +5,7 @@
  * 给出与当前运行环境匹配的兜底地址，避免开发版把请求打到正式版占用的端口上。
  */
 
-// 与 main.py、electron/services/instanceConfig.ts 保持一致
+// 与 main.py 保持一致
 const DEFAULT_HTTP_PORT = 36163
 
 // 构建时由 vite.config.ts 注入，取值为当前运行环境对应的后端端口

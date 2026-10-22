@@ -17,7 +17,7 @@ interface AccountOption {
 }
 
 const { t } = useI18n()
-const logger = window.electronAPI.getLogger('Token 获取')
+const logger = window.hostAPI.getLogger('Token 获取')
 const { listAccounts } = useGameSignApi()
 const { loginTaygedo } = useTokenApi()
 const accounts = ref<AccountOption[]>([])

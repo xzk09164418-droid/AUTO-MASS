@@ -44,7 +44,7 @@ const loadChannels = async () => {
   } catch (error) {
     channelsError.value = true
     channels.value = []
-    const logger = window.electronAPI.getLogger('通知设置')
+    const logger = window.hostAPI.getLogger('通知设置')
     logger.error(`加载通知渠道描述失败: ${String(error)}`)
   } finally {
     channelsLoading.value = false

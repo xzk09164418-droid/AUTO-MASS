@@ -49,7 +49,7 @@ import { computed, ref, watch } from 'vue'
 import { useAppLifecycle } from '@/composables/useAppLifecycle'
 
 const { t } = useI18n()
-const logger = window.electronAPI.getLogger('全局电源倒计时')
+const logger = window.hostAPI.getLogger('全局电源倒计时')
 
 // 电源操作显示名
 const POWER_OPERATION_LABEL: Record<string, string> = {

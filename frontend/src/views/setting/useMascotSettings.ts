@@ -15,7 +15,7 @@ export function useMascotSettings() {
   const { activeAppearance } = useTheme()
   const [modal, modalContextHolder] = Modal.useModal()
   const modalOptions = { zIndex: 100, wrapClassName: 'appearance-modal' }
-  const logger = window.electronAPI.getLogger('桌宠设置')
+  const logger = window.hostAPI.getLogger('桌宠设置')
   const mascots = ref<MascotSummary[]>([])
   const selectedId = ref<string | null>(null)
   const enabled = ref(true)
@@ -59,10 +59,7 @@ export function useMascotSettings() {
     const selectionAtStart = selectionRevision
     loading.value = true
     try {
-      const [config, items] = await Promise.all([
-        getConfig(),
-        window.electronAPI.listMascots?.() ?? [],
-      ])
+      const [config, items] = await Promise.all([getConfig(), window.hostAPI.listMascots?.() ?? []])
       if (revision !== refreshRevision) return
       if (selectionAtStart === selectionRevision) {
         selectedId.value = config.desktopMascotId ?? null
@@ -162,17 +159,17 @@ export function useMascotSettings() {
 
   const importMascot = async (): Promise<void> => {
     if (busy.value || selecting.value) return
-    if (!window.electronAPI.importMascot) {
+    if (!window.hostAPI.importMascot) {
       message.error(t('setting.basic.mascotUnsupported'))
       return
     }
     saving.value = true
     try {
-      const paths = await window.electronAPI.selectFile([
+      const paths = await window.hostAPI.selectFile([
         { name: t('setting.basic.importMascot'), extensions: ['zip'] },
       ])
       if (!paths[0]) return
-      let result = await window.electronAPI.importMascot(paths[0])
+      let result = await window.hostAPI.importMascot(paths[0])
       if (result.code === 'DUPLICATE_ID') {
         const confirmed = await new Promise<boolean>(resolve =>
           modal.confirm({
@@ -188,7 +185,7 @@ export function useMascotSettings() {
           })
         )
         if (!confirmed) return
-        result = await window.electronAPI.importMascot(paths[0], true)
+        result = await window.hostAPI.importMascot(paths[0], true)
       }
       if (!result.success || !result.mascot) {
         message.error(
@@ -226,7 +223,7 @@ export function useMascotSettings() {
       onOk: async () => {
         saving.value = true
         try {
-          const result = await window.electronAPI.removeMascot?.(id)
+          const result = await window.hostAPI.removeMascot?.(id)
           if (!result?.success) throw new Error(result?.error ?? '桌宠移除失败')
           await refresh()
         } catch (error) {
@@ -240,7 +237,7 @@ export function useMascotSettings() {
   }
 
   onMounted(() => {
-    unsubscribe = window.electronAPI.onMascotChanged?.(selection => {
+    unsubscribe = window.hostAPI.onMascotChanged?.(selection => {
       if (selection) {
         selectionRevision++
         selectedId.value = selection.id

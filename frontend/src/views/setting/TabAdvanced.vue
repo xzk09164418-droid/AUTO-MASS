@@ -3,7 +3,7 @@ import { useI18n } from 'vue-i18n'
 import { DownOutlined, DownloadOutlined, QuestionCircleOutlined } from '@ant-design/icons-vue'
 import { message } from 'ant-design-vue'
 import { computed, onMounted, ref } from 'vue'
-import type { RuntimeLaunchModeSetting, RuntimeLaunchModeState } from '@/types/electron'
+import type { RuntimeLaunchModeSetting, RuntimeLaunchModeState } from '@/types/host'
 import type { ScriptType } from '@/types/script'
 
 import { useLogExport } from '@/composables/useLogExport'
@@ -30,7 +30,7 @@ const { openDevTools } = defineProps<{
   openDevTools: () => void
 }>()
 
-const logger = window.electronAPI.getLogger('日志管理')
+const logger = window.hostAPI.getLogger('日志管理')
 const { exportingLogs, packageLogs: exportLogsZip } = useLogExport()
 const exportingDataBackup = ref(false)
 const { exporting: exportingMaaEndLogs, exportMaaEndIssueReport } = useMaaEndIssueReport(logger)
@@ -76,7 +76,7 @@ const maafwReportScripts = ref<Array<{ uid: string; name: string; flavor: MaaFWF
 
 const loadMaaFWReportScripts = async () => {
   try {
-    const scripts = await window.electronAPI?.listMaaFWIssueReportScripts?.(
+    const scripts = await window.hostAPI?.listMaaFWIssueReportScripts?.(
       Object.keys(maafwScriptTypes)
     )
     maafwReportScripts.value = (scripts ?? []).map(script => ({
@@ -123,7 +123,7 @@ const effectiveModeLabel = computed(() => {
 
 const loadRuntimeLaunchMode = async () => {
   try {
-    const state = await window.electronAPI?.getRuntimeLaunchMode?.()
+    const state = await window.hostAPI?.getRuntimeLaunchMode?.()
     if (!state) return
     runtimeLaunchModeState.value = state
     runtimeLaunchMode.value = state.persisted
@@ -141,7 +141,7 @@ const handleRuntimeLaunchModeChange = async (value: unknown) => {
   runtimeLaunchMode.value = mode
   runtimeLaunchModeLoading.value = true
   try {
-    const state = await window.electronAPI?.setRuntimeLaunchMode?.(mode)
+    const state = await window.hostAPI?.setRuntimeLaunchMode?.(mode)
     if (state) {
       runtimeLaunchModeState.value = state
       logger.info(
@@ -167,7 +167,7 @@ onMounted(() => {
 const exportDataBackup = async () => {
   exportingDataBackup.value = true
   try {
-    const result = await window.electronAPI?.exportDataBackup?.()
+    const result = await window.hostAPI?.exportDataBackup?.()
     if (!result) {
       message.error(t('setting.toast.backupNoResponse'))
       logger.error('导出数据备份失败: 未收到响应')
@@ -176,7 +176,7 @@ const exportDataBackup = async () => {
     if (result.success) {
       message.success(result.message || t('setting.toast.backupExported'))
       logger.info(`数据备份导出成功: ${result.zipPath || '路径未知'}`)
-      if (result.zipPath) await window.electronAPI?.showItemInFolder?.(result.zipPath)
+      if (result.zipPath) await window.hostAPI?.showItemInFolder?.(result.zipPath)
     } else if (result.error !== '用户取消') {
       const errorMsg = result.error || t('setting.toast.backupExportFailed')
       logger.error(`导出数据备份失败: ${errorMsg}`)

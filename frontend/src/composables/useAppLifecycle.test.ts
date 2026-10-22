@@ -94,7 +94,7 @@ describe('useAppLifecycle 关闭流程', () => {
     killAllProcesses.mockResolvedValue({ success: true })
     appQuit.mockResolvedValue(undefined)
     vi.stubGlobal('window', {
-      electronAPI: {
+      hostAPI: {
         getLogger: () => logger,
         backendStatus,
         stopBackend,

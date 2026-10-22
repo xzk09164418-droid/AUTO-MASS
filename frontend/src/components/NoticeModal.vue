@@ -66,7 +66,7 @@ import { useAudioPlayer } from '@/composables/useAudioPlayer'
 
 const { t } = useI18n()
 
-const logger = window.electronAPI.getLogger('公告模态框')
+const logger = window.hostAPI.getLogger('公告模态框')
 
 interface Props {
   visible: boolean
@@ -139,15 +139,15 @@ const handleLinkClick = async (event: MouseEvent) => {
     const url = target.getAttribute('href')
     if (url) {
       try {
-        // 检查是否在Electron环境中
-        if (window.electronAPI && window.electronAPI.openUrl) {
-          const result = await window.electronAPI.openUrl(url)
+        // 检查是否在Node 宿主环境中
+        if (window.hostAPI && window.hostAPI.openUrl) {
+          const result = await window.hostAPI.openUrl(url)
           if (!result.success) {
             logger.error(`打开链接失败: ${String(result.error)}`)
             message.error(t('comp.couldNotOpenLink'))
           }
         } else {
-          // 如果不在Electron环境中，使用普通的window.open
+          // 如果不在Node 宿主环境中，使用普通的window.open
           window.open(url, '_blank')
         }
       } catch (error) {

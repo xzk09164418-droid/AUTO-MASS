@@ -248,7 +248,7 @@ import { PlanComboxIn } from '@/api/models/PlanComboxIn.ts'
 import { getWeekdayInTimezone } from '@/utils/dateUtils.ts'
 import type { HomeOverviewResponse } from '@/types/home.ts'
 
-const logger = window.electronAPI.getLogger('MAA用户编辑')
+const logger = window.hostAPI.getLogger('MAA用户编辑')
 
 // 导入拆分的组件
 import MAAUserEditHeader from '@/views/MAAUserEdit/MAAUserEditHeader.vue'
@@ -1273,7 +1273,7 @@ const selectAndImportInfrastructureConfig = () =>
 
     try {
       // 选择文件
-      const path = await window.electronAPI?.selectFile([
+      const path = await window.hostAPI?.selectFile([
         { name: t('edit.jsonFiles'), extensions: ['json'] },
         { name: t('edit.allFiles'), extensions: ['*'] },
       ])

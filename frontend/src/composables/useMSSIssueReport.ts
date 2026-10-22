@@ -5,7 +5,7 @@ export function useMSSIssueReport(logger: ReportLogger) {
   const { exporting, exportIssueReport } = useIssueReport(logger, {
     label: 'MSS',
     fallbackName: 'MSS-logs-*.zip',
-    exportFn: () => window.electronAPI?.exportMSSIssueReport?.(),
+    exportFn: () => window.hostAPI?.exportMSSIssueReport?.(),
   })
   return { exporting, exportMSSIssueReport: exportIssueReport }
 }

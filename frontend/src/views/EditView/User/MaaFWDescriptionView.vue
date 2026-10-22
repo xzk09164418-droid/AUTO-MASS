@@ -164,7 +164,7 @@ const handleContentClick = (event: MouseEvent) => {
   if (!link?.href) return
 
   event.preventDefault()
-  window.electronAPI?.openUrl?.(link.href)
+  window.hostAPI?.openUrl?.(link.href)
 }
 </script>
 

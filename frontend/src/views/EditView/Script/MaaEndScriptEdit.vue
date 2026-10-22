@@ -1123,7 +1123,7 @@ const handleEmulatorSelectChange = async (emulatorId: string) => {
 }
 
 const selectMaaEndPath = async () => {
-  const path = await window.electronAPI?.selectFolder()
+  const path = await window.hostAPI?.selectFolder()
   if (!path) return
   maaEndConfig.Info.Path = path
   await handleChange('Info', 'Path', path)
@@ -1131,7 +1131,7 @@ const selectMaaEndPath = async () => {
 }
 
 const selectGamePath = async () => {
-  const paths = await window.electronAPI?.selectFile([
+  const paths = await window.hostAPI?.selectFile([
     {
       name: 'Endfield.exe',
       extensions: ['exe'],

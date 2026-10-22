@@ -11,14 +11,14 @@ import {
   type WSDisplayDetachPromptData,
 } from '@/services/websocket/types'
 
-const logger = window.electronAPI.getLogger('虚拟显示器提示')
+const logger = window.hostAPI.getLogger('虚拟显示器提示')
 
 let subscriptionIds: string[] = []
 
 const showPrompt = async (data: WSDisplayDetachPromptData): Promise<void> => {
   logger.info(`真实显示器已恢复（${data.returned.join(', ')}），有任务在跑，弹窗询问是否拆除虚拟屏`)
   try {
-    await window.electronAPI.showVirtualDisplayPrompt?.(data)
+    await window.hostAPI.showVirtualDisplayPrompt?.(data)
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error)
     logger.warn(`打开虚拟显示器询问弹窗失败: ${errorMsg}`)
@@ -27,7 +27,7 @@ const showPrompt = async (data: WSDisplayDetachPromptData): Promise<void> => {
 
 const closePrompt = async (): Promise<void> => {
   try {
-    await window.electronAPI.closeVirtualDisplayPrompt?.()
+    await window.hostAPI.closeVirtualDisplayPrompt?.()
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error)
     logger.warn(`关闭虚拟显示器询问弹窗失败: ${errorMsg}`)

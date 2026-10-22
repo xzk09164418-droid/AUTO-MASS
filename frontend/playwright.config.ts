@@ -1,8 +1,14 @@
 import { defineConfig } from '@playwright/test'
 import path from 'node:path'
+import { existsSync } from 'node:fs'
 
 const frontendRoot = __dirname
 const repositoryRoot = path.resolve(frontendRoot, '..')
+const localPython = path.join(
+  repositoryRoot,
+  '.venv',
+  process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python'
+)
 const backendPort = Number(process.env.AUTO_MAS_E2E_BACKEND_PORT ?? 36174)
 const frontendPort = Number(process.env.AUTO_MAS_E2E_FRONTEND_PORT ?? 5174)
 const realE2E = process.env.AUTO_MAS_E2E_REAL === '1'
@@ -48,6 +54,7 @@ export default defineConfig({
     ],
   ],
   use: {
+    channel: process.env.AUTO_MAS_E2E_BROWSER_CHANNEL,
     baseURL: `http://127.0.0.1:${frontendPort}`,
     locale: 'en-US',
     screenshot: realE2E ? 'off' : 'only-on-failure',
@@ -58,7 +65,9 @@ export default defineConfig({
   },
   webServer: [
     {
-      command: `uv run --project "${repositoryRoot}" python "${path.join(repositoryRoot, 'main.py')}"`,
+      command: existsSync(localPython)
+        ? `"${localPython}" "${path.join(repositoryRoot, 'main.py')}"`
+        : `uv run --project "${repositoryRoot}" python "${path.join(repositoryRoot, 'main.py')}"`,
       cwd: dataRoot,
       url: `http://127.0.0.1:${backendPort}/api/core/health`,
       timeout: 120_000,

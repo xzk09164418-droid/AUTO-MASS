@@ -15,7 +15,7 @@ import { useAudioPlayer } from '@/composables/useAudioPlayer'
 import { getTaskRuntimeStates } from '@/composables/useTaskRuntimeState'
 import { isScriptConfigLocked } from '@/utils/scriptConfigLock'
 
-const logger = window.electronAPI.getLogger('用户API')
+const logger = window.hostAPI.getLogger('用户API')
 
 interface AddUserOptions {
   showError?: boolean
@@ -257,7 +257,7 @@ export function useUserApi() {
         throw new Error('获取用户配置目录失败')
       }
 
-      const result = await window.electronAPI.openFile(response.path)
+      const result = await window.hostAPI.openFile(response.path)
       if (!result.success) {
         const openError = result.error || '打开用户配置目录失败'
         logger.error(`打开用户配置目录失败: ${openError}`)

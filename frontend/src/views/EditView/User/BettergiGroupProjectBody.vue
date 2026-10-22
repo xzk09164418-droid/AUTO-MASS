@@ -292,7 +292,7 @@ const emit = defineEmits<{
   (e: 'add-script'): void
 }>()
 
-const logger = window.electronAPI.getLogger('BetterGI配置组项目编辑')
+const logger = window.hostAPI.getLogger('BetterGI配置组项目编辑')
 const { configLocked } = useScriptConfigLock(() => props.scriptId)
 
 const loading = ref(false)

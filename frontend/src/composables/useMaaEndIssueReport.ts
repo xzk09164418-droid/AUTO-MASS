@@ -5,7 +5,7 @@ export function useMaaEndIssueReport(logger: ReportLogger) {
   const { exporting, exportIssueReport } = useIssueReport(logger, {
     label: 'MaaEnd',
     fallbackName: 'MaaEnd-logs-*.zip',
-    exportFn: () => window.electronAPI?.exportMaaEndIssueReport?.(),
+    exportFn: () => window.hostAPI?.exportMaaEndIssueReport?.(),
   })
   return { exporting, exportMaaEndIssueReport: exportIssueReport }
 }

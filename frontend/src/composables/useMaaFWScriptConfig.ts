@@ -4,7 +4,7 @@ import { message } from 'ant-design-vue'
 import { Emulator20Service, Service, type ComboBoxItem } from '@/api'
 import type { MaaFWInterfacePreviewData, MaaFWScriptConfig } from '@/types/script'
 
-const logger = window.electronAPI.getLogger('MaaFW脚本编辑')
+const logger = window.hostAPI.getLogger('MaaFW脚本编辑')
 
 export type EmulatorType = 'general' | 'mumu' | 'ldplayer' | 'emulator2'
 
@@ -454,7 +454,7 @@ export function useMaaFWControlConfig(
 
   const selectLaunchPath = async () => {
     try {
-      const paths = await window.electronAPI?.selectFile([
+      const paths = await window.hostAPI?.selectFile([
         {
           name: 'Executable',
           extensions: ['exe'],

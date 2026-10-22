@@ -4,7 +4,7 @@ import { useAppInitialization } from '@/composables/useAppInitialization'
 import { navigateTo } from '@/router'
 import { enterApp } from '@/utils/appEntry'
 
-const logger = window.electronAPI.getLogger('跳过初始化启动')
+const logger = window.hostAPI.getLogger('跳过初始化启动')
 
 let startupPromise: Promise<void> | null = null
 
@@ -17,7 +17,7 @@ export function startSkippedInitializationStartup(): Promise<void> {
   beginBootstrap()
 
   startupPromise = (async () => {
-    const api = window.electronAPI
+    const api = window.hostAPI
 
     try {
       if (!import.meta.env.DEV) {

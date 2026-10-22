@@ -33,7 +33,7 @@ export type QrLoginStatus =
 const t = translate
 
 type QrApiResponse = QrCreateOut & QrCheckOut & OutBase & { scan_code?: string }
-type QrLogger = ReturnType<typeof window.electronAPI.getLogger>
+type QrLogger = ReturnType<typeof window.hostAPI.getLogger>
 
 const QR_RESPONSE_INVALID_MESSAGE = t('gamesign.qr.responseInvalid')
 

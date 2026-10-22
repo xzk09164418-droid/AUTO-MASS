@@ -933,7 +933,7 @@ import { validateRegexPattern } from './logRegex'
 
 const { t } = useI18n()
 
-const logger = window.electronAPI.getLogger('通用脚本编辑')
+const logger = window.hostAPI.getLogger('通用脚本编辑')
 
 const {
   error: shareError,
@@ -1478,9 +1478,9 @@ watch(
 
 onMounted(async () => {
   // 获取 AppData 路径
-  if (window.electronAPI) {
+  if (window.hostAPI) {
     try {
-      appDataPath.value = await window.electronAPI.getAppPath('appData')
+      appDataPath.value = await window.hostAPI.getAppPath('appData')
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error)
       logger.error(`获取 AppData 路径失败: ${errorMsg}`)
@@ -1669,12 +1669,12 @@ const handleGameTypeChange = async (gameType: string) => {
 
 const selectRootPath = async () => {
   try {
-    if (!window.electronAPI) {
+    if (!window.hostAPI) {
       message.error(t('edit.filePickingUnavailableRun'))
       return
     }
 
-    const path = await window.electronAPI.selectFolder()
+    const path = await window.hostAPI.selectFolder()
     if (path) {
       // 保存当前根目录，用于比较
       const oldRootPath = generalConfig.Info.RootPath
@@ -1731,12 +1731,12 @@ const selectRootPath = async () => {
 
 const selectGamePath = async () => {
   try {
-    if (!window.electronAPI) {
+    if (!window.hostAPI) {
       message.error(t('edit.filePickingUnavailableRun'))
       return
     }
 
-    const paths = await window.electronAPI.selectFile([
+    const paths = await window.hostAPI.selectFile([
       { name: t('edit.executables'), extensions: ['exe'] },
       { name: t('edit.allFiles'), extensions: ['*'] },
     ])
@@ -1755,12 +1755,12 @@ const selectGamePath = async () => {
 
 const selectScriptPath = async () => {
   try {
-    if (!window.electronAPI) {
+    if (!window.hostAPI) {
       message.error(t('edit.filePickingUnavailableRun'))
       return
     }
 
-    const paths = await window.electronAPI.selectFile([
+    const paths = await window.hostAPI.selectFile([
       { name: t('edit.executables'), extensions: ['exe', 'bat'] },
       { name: t('edit.allFiles'), extensions: ['*'] },
     ])
@@ -1786,12 +1786,12 @@ const selectScriptPath = async () => {
 
 const selectTrackProcessExe = async () => {
   try {
-    if (!window.electronAPI) {
+    if (!window.hostAPI) {
       message.error(t('edit.filePickingUnavailableRun'))
       return
     }
 
-    const paths = await window.electronAPI.selectFile([
+    const paths = await window.hostAPI.selectFile([
       { name: t('edit.executables'), extensions: ['exe'] },
       { name: t('edit.allFiles'), extensions: ['*'] },
     ])
@@ -1822,12 +1822,12 @@ const clearTrackProcessExe = async () => {
 
 const selectLogPath = async () => {
   try {
-    if (!window.electronAPI) {
+    if (!window.hostAPI) {
       message.error(t('edit.filePickingUnavailableRun'))
       return
     }
 
-    const paths = await window.electronAPI.selectFile()
+    const paths = await window.hostAPI.selectFile()
     if (paths && paths.length > 0) {
       const path = paths[0]
       // 验证路径是否在根目录下

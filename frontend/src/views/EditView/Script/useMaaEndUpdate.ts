@@ -29,7 +29,7 @@ const MAAEND_UPDATE_IDLE_MS = 15 * 60 * 1000
  */
 export function useMaaEndUpdate(getScriptId: () => string) {
   const { t } = useI18n()
-  const logger = window.electronAPI.getLogger('MaaEnd脚本更新')
+  const logger = window.hostAPI.getLogger('MaaEnd脚本更新')
   const { subscribe, unsubscribe } = useWebSocket()
 
   const updateModal = reactive({

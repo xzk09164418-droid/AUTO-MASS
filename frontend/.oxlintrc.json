@@ -52,7 +52,7 @@
       }
     },
     {
-      "files": ["electron/**/*.ts"],
+      "files": ["node/**/*.ts"],
       "rules": {
         "no-undef": "off"
       }
@@ -71,8 +71,8 @@
         "src/router/index.ts",
         "src/utils/planTypeRegistry.ts",
         "src/types/script.ts",
-        "src/types/electron.d.ts",
-        "electron/**/*.ts"
+        "src/types/host.d.ts",
+        "node/**/*.ts"
       ],
       "rules": {
         "typescript/no-explicit-any": "error"
@@ -87,7 +87,6 @@
   ],
   "ignorePatterns": [
     "dist",
-    "dist-electron",
     "out",
     "build",
     "node_modules",

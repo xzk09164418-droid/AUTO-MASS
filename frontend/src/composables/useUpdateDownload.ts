@@ -17,7 +17,7 @@ import { formatBytes, formatSpeed } from '@/utils/byteFormat'
 import { updateDownloadApi, type UpdateDownloadSnapshot } from '@/services/updateDownloadApi'
 import type { ChangelogData } from '@/utils/changelog'
 
-const logger = window.electronAPI.getLogger('更新下载状态')
+const logger = window.hostAPI.getLogger('更新下载状态')
 
 const DOWNLOAD_TIMEOUT_MS = 2 * 60 * 60 * 1000
 

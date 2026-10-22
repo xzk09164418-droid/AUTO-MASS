@@ -76,7 +76,7 @@ export function useMaaEndLauncher(options: {
 
   const selectFile = async () => {
     try {
-      const paths = await window.electronAPI.selectFile([
+      const paths = await window.hostAPI.selectFile([
         { name: t('edit.maaEndLauncherPath'), extensions: ['exe'] },
       ])
       const selected = paths?.[0]

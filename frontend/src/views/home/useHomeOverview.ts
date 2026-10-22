@@ -3,7 +3,7 @@ import { translate as t } from '@/i18n'
 import { Service } from '@/api/services/Service'
 import type { ActivityItem, HomeOverviewResponse, ProxyInfo, ResourceItem } from '@/types/home'
 
-const logger = window.electronAPI.getLogger('首页')
+const logger = window.hostAPI.getLogger('首页')
 
 /** 最近一次成功的首页概览快照：启动时先渲染上次数据，后台刷新完成后再覆盖 */
 const OVERVIEW_CACHE_KEY = 'auto-mas.home.overview-cache'

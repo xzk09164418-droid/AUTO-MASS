@@ -52,7 +52,7 @@ defineOptions({
   name: 'TestRouterView',
 })
 
-const logger = window.electronAPI.getLogger('测试路由')
+const logger = window.hostAPI.getLogger('测试路由')
 const lastResult = ref<boolean | null>(null)
 
 // Modal ״̬

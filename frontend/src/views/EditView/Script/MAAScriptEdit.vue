@@ -460,7 +460,7 @@ import {
 
 const { t } = useI18n()
 
-const logger = window.electronAPI.getLogger('MAA脚本编辑')
+const logger = window.hostAPI.getLogger('MAA脚本编辑')
 
 const route = useRoute()
 const router = useRouter()
@@ -684,12 +684,12 @@ const handleEmulatorSelectChange = async (emulatorId: string) => {
 // 文件选择方法
 const selectMAAPath = async () => {
   try {
-    if (!window.electronAPI) {
+    if (!window.hostAPI) {
       message.error(t('edit.filePickingUnavailableRun'))
       return
     }
 
-    const path = await window.electronAPI.selectFolder()
+    const path = await window.hostAPI.selectFolder()
     if (path) {
       maaConfig.Info.Path = path
       // 选择路径后立即保存

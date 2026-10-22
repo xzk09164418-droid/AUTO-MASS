@@ -1,6 +1,6 @@
 import { computed, ref } from 'vue'
 
-const logger = window.electronAPI.getLogger('应用初始化')
+const logger = window.hostAPI.getLogger('应用初始化')
 
 const isInitialized = ref(false)
 const isBootstrapping = ref(false)

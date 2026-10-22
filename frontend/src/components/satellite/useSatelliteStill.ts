@@ -24,7 +24,7 @@ interface SatelliteStillOptions {
  * 页面上只留这张图，不跑动画、不占着 WebGL；状态、主题、尺寸变了再重拍一张。
  */
 export function useSatelliteStill(options: SatelliteStillOptions) {
-  const logger = window.electronAPI.getLogger('卫星动画')
+  const logger = window.hostAPI.getLogger('卫星动画')
   const image = ref<string | null>(null)
   let token = 0
   let timer: number | null = null

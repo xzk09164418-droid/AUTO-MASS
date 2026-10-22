@@ -46,7 +46,7 @@ import {
   type WSPowerCountdownData,
 } from '@/services/websocket/types'
 
-const logger = window.electronAPI.getLogger('应用生命周期')
+const logger = window.hostAPI.getLogger('应用生命周期')
 
 // ==================== 常量 ====================
 
@@ -163,7 +163,7 @@ const handleCloseRequested = (restart = false): void => {
   closeRequestedByBackend = true
   if (isClosing()) {
     // 已经在收尾了：重不重启只差主进程那个标记，补上即可，不必再跑一遍关闭流程
-    if (restart) void window.electronAPI?.appRestartOnQuit?.()
+    if (restart) void window.hostAPI?.appRestartOnQuit?.()
     return
   }
   closePromise = runBackendRequestedClose(restart).catch(error => {
@@ -174,7 +174,7 @@ const handleCloseRequested = (restart = false): void => {
     disposeAppLifecycle()
     // 仍走退出：标记是在收尾最开始就交给主进程的，设上了就一定会被重新拉起；
     // 若是连那一步都没送到，这里也没什么可补的
-    return window.electronAPI?.appQuit?.()
+    return window.hostAPI?.appQuit?.()
   })
 }
 
@@ -202,7 +202,7 @@ const armPowerCountdownStaleTimer = (): void => {
 const raisePowerWarning = (): void => {
   if (powerWarningRaised) return
   powerWarningRaised = true
-  const request = window.electronAPI?.powerWarningStart?.()
+  const request = window.hostAPI?.powerWarningStart?.()
   void request?.catch(error => {
     const errorMsg = error instanceof Error ? error.message : String(error)
     logger.warn(`请求窗口置顶失败: ${errorMsg}`)
@@ -213,7 +213,7 @@ const raisePowerWarning = (): void => {
 const dismissPowerWarning = (): void => {
   if (!powerWarningRaised) return
   powerWarningRaised = false
-  const request = window.electronAPI?.powerWarningEnd?.()
+  const request = window.hostAPI?.powerWarningEnd?.()
   void request?.catch(error => {
     const errorMsg = error instanceof Error ? error.message : String(error)
     logger.warn(`撤回窗口置顶失败: ${errorMsg}`)
@@ -317,7 +317,7 @@ const waitForShutdownReady = (timeoutMs: number): Promise<boolean> => {
 
 const queryBackendRunning = async (): Promise<boolean | null> => {
   try {
-    const status = await window.electronAPI?.backendStatus?.()
+    const status = await window.hostAPI?.backendStatus?.()
     if (typeof status?.isRunning === 'boolean') {
       return status.isRunning
     }
@@ -343,7 +343,7 @@ const waitForBackendExit = async (timeoutMs: number): Promise<boolean> => {
 /** 向主进程查询本次生命周期是否走 Runtime 监督链路；IPC 失败按旧链路处理。 */
 const queryRuntimeSupervised = async (): Promise<boolean> => {
   try {
-    const status = await window.electronAPI?.backendStatus?.()
+    const status = await window.hostAPI?.backendStatus?.()
     return status?.runtimeSupervised === true
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error)
@@ -353,15 +353,15 @@ const queryRuntimeSupervised = async (): Promise<boolean> => {
 }
 
 /**
- * Runtime 链路的停止：只请求 Electron 经 Runtime stdin 发 shutdown。
+ * Runtime 链路的停止：只请求 Node 宿主 经 Runtime stdin 发 shutdown。
  * 渲染进程自己 POST /close 会让后端被 Runtime 当作异常退出并自动重启，绝不能走那条路。
  *
- * @returns Electron 是否确认后端已关闭
+ * @returns Node 宿主 是否确认后端已关闭
  */
 const stopBackendViaRuntime = async (): Promise<boolean> => {
-  logger.info('Runtime 链路：请求 Electron 经 Runtime 关闭后端')
+  logger.info('Runtime 链路：请求 Node 宿主 经 Runtime 关闭后端')
   try {
-    const result = await window.electronAPI?.stopBackend?.()
+    const result = await window.hostAPI?.stopBackend?.()
     if (result?.success) {
       logger.info('Runtime 已确认后端关闭')
       return true
@@ -386,7 +386,7 @@ const killBackend = async (): Promise<void> => {
   }
   logger.warn('执行 taskkill 强制关闭后端')
   try {
-    const result = await window.electronAPI?.killAllProcesses?.()
+    const result = await window.hostAPI?.killAllProcesses?.()
     if (!result?.success) {
       logger.error(`taskkill 执行失败: ${result?.error ?? '进程管理 IPC 不可用'}`)
     }
@@ -396,7 +396,7 @@ const killBackend = async (): Promise<void> => {
   }
 }
 
-/** 释放所有常驻订阅、连接事件和 Electron 生命周期监听器（幂等）。 */
+/** 释放所有常驻订阅、连接事件和 Node 宿主 生命周期监听器（幂等）。 */
 export function disposeAppLifecycle(): void {
   if (!initialized && lifecycleDisposers.length === 0 && residentSubscriptionIds.length === 0) {
     return
@@ -435,20 +435,20 @@ export function disposeAppLifecycle(): void {
  *
  * 后端由 Runtime 监督，渲染进程请求 /close 只会让它被当作异常退出并自动重启；
  * 主进程的 backendStatus 在 Runtime 存活期间恒为运行中，等它消失只会白等超时。
- * 停止只经 Electron → Runtime stdin shutdown 完成，Runtime 给出终态后再关闭前端。
+ * 停止只经 Node 宿主 → Runtime stdin shutdown 完成，Runtime 给出终态后再关闭前端。
  */
 const runRuntimeSupervisedClose = async (): Promise<void> => {
-  logger.info('Runtime 链路：后端由 Electron 经 Runtime 关闭，前端不再请求 /close')
+  logger.info('Runtime 链路：后端由 Node 宿主 经 Runtime 关闭，前端不再请求 /close')
   // 先收掉主连接：后端关闭期间的断开不再触发任何重连或恢复判断
   shutdownConnection('应用关闭')
   const stopped = await stopBackendViaRuntime()
   disposeAppLifecycle()
   if (!stopped) {
-    logger.error('Runtime 未能确认后端关闭，等待 Electron 主进程最终兜底')
+    logger.error('Runtime 未能确认后端关闭，等待 Node 宿主 主进程最终兜底')
     return
   }
   logger.info('后端已退出，关闭前端')
-  await window.electronAPI?.appQuit?.()
+  await window.hostAPI?.appQuit?.()
 }
 
 const runCloseFlow = async (): Promise<void> => {
@@ -519,11 +519,11 @@ const runCloseFlow = async (): Promise<void> => {
   shutdownConnection('应用关闭')
   disposeAppLifecycle()
   if (!backendExitConfirmed) {
-    logger.error('taskkill 后仍无法确认后端退出，等待 Electron 主进程最终兜底')
+    logger.error('taskkill 后仍无法确认后端退出，等待 Node 宿主 主进程最终兜底')
     return
   }
   logger.info('后端已退出，关闭前端')
-  await window.electronAPI?.appQuit?.()
+  await window.hostAPI?.appQuit?.()
 }
 
 const runBackendRequestedClose = async (restart = false): Promise<void> => {
@@ -536,19 +536,19 @@ const runBackendRequestedClose = async (restart = false): Promise<void> => {
   if (restart) {
     // 先把「退出后重新拉起」交给主进程，之后无论走哪条退出路径都会被重新拉起；
     // 退出本身不作特殊处理，与「退出软件」共用同一条已协调好的流程
-    await window.electronAPI?.appRestartOnQuit?.()
+    await window.hostAPI?.appRestartOnQuit?.()
   }
   if (await queryRuntimeSupervised()) {
-    // Runtime 链路：后端自行退出会被 Runtime 当作异常并重启，必须让 Electron 经 Runtime 收口
+    // Runtime 链路：后端自行退出会被 Runtime 当作异常并重启，必须让 Node 宿主 经 Runtime 收口
     const stopped = await stopBackendViaRuntime()
     if (!stopped) {
       disposeAppLifecycle()
-      logger.error('Runtime 未能确认后端关闭，等待 Electron 主进程最终兜底')
+      logger.error('Runtime 未能确认后端关闭，等待 Node 宿主 主进程最终兜底')
       return
     }
   }
   disposeAppLifecycle()
-  await window.electronAPI?.appQuit?.()
+  await window.hostAPI?.appQuit?.()
 }
 
 /**
@@ -562,10 +562,10 @@ export function closeApp(): Promise<void> {
     let preparationToken: number | null | undefined
     try {
       // 保存期间的超时只能撤销退出，保存完成后再启动后端关闭的强制清理兜底。
-      preparationToken = await window.electronAPI?.appPrepareQuit?.()
+      preparationToken = await window.hostAPI?.appPrepareQuit?.()
       if (preparationToken !== null) prepared = await prepareAppClose()
       if (prepared && preparationToken !== undefined && preparationToken !== null) {
-        prepared = (await window.electronAPI?.appConfirmQuit?.(preparationToken)) === true
+        prepared = (await window.hostAPI?.appConfirmQuit?.(preparationToken)) === true
         if (!prepared) notification.warning({ message: t('comp.closePreparationTimedOut') })
       }
     } catch (error) {
@@ -578,7 +578,7 @@ export function closeApp(): Promise<void> {
       // 主进程可能已隐藏窗口并启动兜底计时；取消退出必须同时撤销它们。
       try {
         cancelAppClose()
-        await window.electronAPI?.appCancelQuit?.(preparationToken ?? undefined)
+        await window.hostAPI?.appCancelQuit?.(preparationToken ?? undefined)
       } catch (error) {
         logger.error(`取消退出失败: ${error instanceof Error ? error.message : String(error)}`)
       } finally {
@@ -589,20 +589,20 @@ export function closeApp(): Promise<void> {
     await runCloseFlow()
   })().catch(async error => {
     // 关闭流程异常时只在确认后端已退出后通知主进程结束；否则保留遮罩，
-    // 由 Electron 主进程的最终超时兜底再次执行串行 taskkill。
+    // 由 Node 宿主 主进程的最终超时兜底再次执行串行 taskkill。
     const errorMsg = error instanceof Error ? error.message : String(error)
     logger.error(`关闭流程异常: ${errorMsg}`)
     stopReconnect()
     if (closeViaRuntime) {
-      // Runtime 链路没有 taskkill 与进程消失可等：只能再请求一次 Electron 经 Runtime 关闭
+      // Runtime 链路没有 taskkill 与进程消失可等：只能再请求一次 Node 宿主 经 Runtime 关闭
       const stopped = await stopBackendViaRuntime()
       shutdownConnection('关闭流程异常')
       disposeAppLifecycle()
       if (!stopped) {
-        logger.error('异常关闭兜底仍无法确认后端退出，等待 Electron 主进程最终兜底')
+        logger.error('异常关闭兜底仍无法确认后端退出，等待 Node 宿主 主进程最终兜底')
         return
       }
-      await window.electronAPI?.appQuit?.()
+      await window.hostAPI?.appQuit?.()
       return
     }
     const devMode = isBackendDevMode()
@@ -611,10 +611,10 @@ export function closeApp(): Promise<void> {
     shutdownConnection('关闭流程异常')
     disposeAppLifecycle()
     if (!backendExitConfirmed) {
-      logger.error('异常关闭兜底仍无法确认后端退出，等待 Electron 主进程最终兜底')
+      logger.error('异常关闭兜底仍无法确认后端退出，等待 Node 宿主 主进程最终兜底')
       return
     }
-    await window.electronAPI?.appQuit?.()
+    await window.hostAPI?.appQuit?.()
   })
   return closePromise
 }
@@ -636,10 +636,10 @@ const showRestartFailureModal = (): void => {
       const { showClosingOverlay } = useAppClosing()
       showClosingOverlay()
 
-      if (window.electronAPI?.appRestart) {
-        window.electronAPI.appRestart()
-      } else if (window.electronAPI?.windowClose) {
-        window.electronAPI.windowClose()
+      if (window.hostAPI?.appRestart) {
+        window.hostAPI.appRestart()
+      } else if (window.hostAPI?.windowClose) {
+        window.hostAPI.windowClose()
       } else {
         window.location.reload()
       }
@@ -692,12 +692,12 @@ const restartBackendFlow = (allowDevMode: boolean = false): Promise<void> => {
 
     try {
       let result: { success: boolean; error?: string; logs?: string } | undefined
-      if (window.electronAPI?.backendRestart) {
-        result = await window.electronAPI.backendRestart()
+      if (window.hostAPI?.backendRestart) {
+        result = await window.hostAPI.backendRestart()
       } else {
-        await window.electronAPI?.stopBackend?.()
+        await window.hostAPI?.stopBackend?.()
         if (isClosing()) return
-        result = await window.electronAPI?.startBackend?.()
+        result = await window.hostAPI?.startBackend?.()
       }
       if (isClosing()) return
 
@@ -779,7 +779,7 @@ export function endIntentionalBackendRestart(reason: string): void {
 }
 
 // ==================== 断开提示 ====================
-// 断开先只给右上角非阻塞通知：后端偶发抖动或 Electron 主动重启后端时几秒即恢复，
+// 断开先只给右上角非阻塞通知：后端偶发抖动或 Node 宿主 主动重启后端时几秒即恢复，
 // 一断开就弹阻塞式模态框只是噪音。生产模式仅在整轮重连失败后才升级为模态框；
 // 开发模式后端由开发者手动重启，属于常规操作，始终不弹模态框。
 
@@ -972,25 +972,25 @@ export function initializeAppLifecycle(): void {
     }),
   ]
 
-  const disposeSystemResume = window.electronAPI?.onSystemResume?.(() => {
+  const disposeSystemResume = window.hostAPI?.onSystemResume?.(() => {
     void handleSystemResume()
   })
   if (disposeSystemResume) lifecycleDisposers.push(disposeSystemResume)
 
-  const disposeCloseRequested = window.electronAPI?.onAppCloseRequested?.(confirmRunningTasks => {
+  const disposeCloseRequested = window.hostAPI?.onAppCloseRequested?.(confirmRunningTasks => {
     void (async () => {
       if (confirmRunningTasks && hasRunningTasks()) {
-        if (!(await window.electronAPI?.appWaitForQuitConfirmation?.())) return
-        await window.electronAPI?.windowFocus?.()
+        if (!(await window.hostAPI?.appWaitForQuitConfirmation?.())) return
+        await window.hostAPI?.windowFocus?.()
         if (!(await confirmCloseIfRunningTasks())) {
-          await window.electronAPI?.appCancelQuit?.()
+          await window.hostAPI?.appCancelQuit?.()
           return
         }
       }
       await closeApp()
     })().catch(async error => {
       logger.error(`处理关闭请求失败: ${error instanceof Error ? error.message : String(error)}`)
-      await window.electronAPI?.appCancelQuit?.()
+      await window.hostAPI?.appCancelQuit?.()
     })
   })
   if (disposeCloseRequested) lifecycleDisposers.push(disposeCloseRequested)

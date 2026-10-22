@@ -19,12 +19,12 @@ export const SLOW_LAUNCH_THRESHOLD_MS = 20_000
  */
 export async function openLaunchLogWindow(scope: string): Promise<void> {
   try {
-    const result = await window.electronAPI.openLogWindow?.('frontend')
+    const result = await window.hostAPI.openLogWindow?.('frontend')
     if (result?.success === false) {
-      window.electronAPI.getLogger(scope).error(`打开日志窗口失败: ${result.error ?? '未知原因'}`)
+      window.hostAPI.getLogger(scope).error(`打开日志窗口失败: ${result.error ?? '未知原因'}`)
     }
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error)
-    window.electronAPI.getLogger(scope).error(`打开日志窗口失败: ${errorMessage}`)
+    window.hostAPI.getLogger(scope).error(`打开日志窗口失败: ${errorMessage}`)
   }
 }

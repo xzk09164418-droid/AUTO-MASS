@@ -16,7 +16,7 @@ import {
 } from '@/services/websocket/types'
 import { FAILED_TASK_STATUSES, scriptHasStatus } from '@/utils/taskFailures'
 
-const logger = window.electronAPI.getLogger('任务运行状态')
+const logger = window.hostAPI.getLogger('任务运行状态')
 
 const COMPLETED_STATE_RETENTION_MS = 5 * 60 * 1000
 const COMPLETED_STATE_CLEANUP_INTERVAL_MS = 30 * 1000

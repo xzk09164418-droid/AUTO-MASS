@@ -16,7 +16,7 @@ const ERROR_KEYS: Record<string, string> = {
 /** 剪贴板只传公开目标文本，转换接口不写配置；保存由编辑页的队列负责。 */
 export function useMaaCultivateImportApi() {
   const { t } = useI18n()
-  const logger = window.electronAPI.getLogger('MAA养成导入')
+  const logger = window.hostAPI.getLogger('MAA养成导入')
   const formatImportError = (error: Pick<MaaCultivateImportOut, 'error' | 'index' | 'name'>) => {
     const reason = t(ERROR_KEYS[error.error ?? ''] ?? 'edit.maaCultivateImportFailed')
     return error.index

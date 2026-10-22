@@ -38,8 +38,8 @@ export function localizeDocUrl(url: string, locale: AppLocale): string {
  */
 export async function openExternalUrl(url: string): Promise<boolean> {
   try {
-    if (window.electronAPI && window.electronAPI.openUrl) {
-      const result = await window.electronAPI.openUrl(url)
+    if (window.hostAPI && window.hostAPI.openUrl) {
+      const result = await window.hostAPI.openUrl(url)
       return result.success
     } else {
       // 如果不在Electron环境中，使用普通的window.open
@@ -47,7 +47,7 @@ export async function openExternalUrl(url: string): Promise<boolean> {
       return true
     }
   } catch (error) {
-    window.electronAPI?.getLogger('外部链接').error(`打开链接失败: ${String(error)}`)
+    window.hostAPI?.getLogger('外部链接').error(`打开链接失败: ${String(error)}`)
     return false
   }
 }

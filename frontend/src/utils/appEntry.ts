@@ -6,7 +6,7 @@ import { startTitlebarVersionCheck } from '@/composables/useVersionService'
 import { readUpdatePauseState, useUpdateChecker } from '@/composables/useUpdateChecker'
 import { markAsInitialized } from '@/composables/useAppInitialization'
 
-const logger = window.electronAPI.getLogger('应用入口')
+const logger = window.hostAPI.getLogger('应用入口')
 
 // 标记版本服务是否已启动，避免重复启动
 let versionServicesStarted = false

@@ -111,13 +111,13 @@ const runSaveReplay = async () => {
 
 const openReplayDirectory = async () => {
   try {
-    if (!window.electronAPI?.openFile) {
+    if (!window.hostAPI?.openFile) {
       message.error(t('history.replays.openDirectoryUnsupported'))
       return
     }
     const directory = checkResult.value?.directory || (await listObsReplays()).directory
     if (!directory) throw new Error(t('setting.replay.directoryUnavailable'))
-    const result = await window.electronAPI.openFile(directory)
+    const result = await window.hostAPI.openFile(directory)
     if (!result.success) message.error(result.error || t('setting.replay.openDirectoryFailed'))
   } catch (error) {
     message.error(error instanceof Error ? error.message : t('setting.replay.openDirectoryFailed'))

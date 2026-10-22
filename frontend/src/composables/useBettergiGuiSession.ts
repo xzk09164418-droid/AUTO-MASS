@@ -7,7 +7,7 @@ import { TaskCreateIn } from '@/api/models/TaskCreateIn'
 import { useWebSocket } from '@/composables/useWebSocket'
 import { WS_TASK_COMPLETED, WS_TASK_NOTICE } from '@/services/websocket/types'
 
-const logger = window.electronAPI.getLogger('BetterGI配置会话')
+const logger = window.hostAPI.getLogger('BetterGI配置会话')
 
 /**
  * BetterGI 原生设置会话：打开 BetterGI 原生界面并遮罩等待，保存快照后结束会话。

@@ -185,8 +185,8 @@ import { useWebSocket } from '@/composables/useWebSocket'
 import { useAppLifecycle } from '@/composables/useAppLifecycle'
 import { subscriptionCount } from '@/services/websocket/subscriptions'
 
-// 临时的类型断言，确保能访问到完整的electronAPI
-const electronAPI = window.electronAPI
+// 临时的类型断言，确保能访问到完整的hostAPI
+const hostAPI = window.hostAPI
 
 // WebSocket相关（连接层）
 const { state, getConnectionInfo } = useWebSocket()
@@ -299,7 +299,7 @@ const startBackend = async () => {
   addLog('正在启动后端服务...', 'info')
 
   try {
-    const result = await electronAPI.startBackend()
+    const result = await hostAPI.startBackend()
 
     if (result.success) {
       lastResult.value = { success: true, message: '后端服务启动成功' }
@@ -346,8 +346,8 @@ const stopBackend = async () => {
 
   try {
     // 检查stopBackend方法是否存在
-    if (electronAPI.stopBackend) {
-      const result = await electronAPI.stopBackend()
+    if (hostAPI.stopBackend) {
+      const result = await hostAPI.stopBackend()
 
       if (result.success) {
         lastResult.value = { success: true, message: '后端服务已停止' }
@@ -396,7 +396,7 @@ const forceKillProcesses = async () => {
   addLog('正在强制结束所有相关进程...', 'info')
 
   try {
-    const result = await electronAPI.killAllProcesses()
+    const result = await hostAPI.killAllProcesses()
 
     if (result.success) {
       lastResult.value = { success: true, message: '所有相关进程已强制结束' }
@@ -437,7 +437,7 @@ const refreshStatus = async () => {
 
       // 尝试获取进程ID
       try {
-        const processes = await electronAPI.getRelatedProcesses()
+        const processes = await hostAPI.getRelatedProcesses()
         const backendProcess = processes.find(
           (proc: any) => proc.command && proc.command.includes('main.py')
         )

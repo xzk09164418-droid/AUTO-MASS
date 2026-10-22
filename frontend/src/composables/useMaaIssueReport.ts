@@ -13,7 +13,7 @@ export function useMaaIssueReport(logger: ReportLogger) {
     label: 'MAA',
     fallbackName: 'MAA-logs-*.zip',
     exportFn: async () => {
-      const result = await window.electronAPI?.exportMaaIssueReport?.({
+      const result = await window.hostAPI?.exportMaaIssueReport?.({
         title: t('setting.advanced.exportMaa'),
         zipFilterName: t('misc.zipArchive'),
       })

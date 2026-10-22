@@ -1,9 +1,9 @@
 import type { DesktopMascotTaskHostAPI } from '@/types/desktopMascot'
-import type { ElectronAPI } from '@/types/electron'
+import type { HostAPI } from '@/types/host'
 import { getDefaultHttpEndpoint, getDefaultWebSocketEndpoint } from '@/utils/backendEndpoint'
 
 type BrowserDevWindow = Window & { __AUTO_MAS_BROWSER_DEV_MODE__?: boolean }
-type Logger = ReturnType<ElectronAPI['getLogger']>
+type Logger = ReturnType<HostAPI['getLogger']>
 
 const BACKEND_HTTP_ENDPOINT = getDefaultHttpEndpoint()
 const BACKEND_WS_ENDPOINT = getDefaultWebSocketEndpoint()
@@ -52,7 +52,7 @@ const desktopMascotTaskBridge = {
   setDesktopMascotTaskActionResult: async () => undefined,
 } satisfies DesktopMascotTaskHostAPI
 
-const browserDevElectronAPI = {
+const browserPreviewAPI = {
   ...desktopMascotTaskBridge,
   getLogger,
   getApiEndpoint: async (key: string) =>
@@ -107,9 +107,9 @@ const browserDevElectronAPI = {
   onAppearanceChanged: () => () => undefined,
   onThemeConfigChanged: () => () => undefined,
   backendStatus: async () => ({ isRunning: true, runtimeSupervised: false }),
-} as unknown as ElectronAPI
+} as unknown as HostAPI
 
-if (import.meta.env.DEV && !window.electronAPI) {
+if (import.meta.env.DEV && !window.hostAPI) {
   ;(window as BrowserDevWindow).__AUTO_MAS_BROWSER_DEV_MODE__ = true
-  window.electronAPI = browserDevElectronAPI
+  window.hostAPI = browserPreviewAPI
 }

@@ -430,7 +430,7 @@ const getCurrentDate = (): string => {
   return `${yyyy}-${mm}-${dd}`
 }
 
-const logger = window.electronAPI.getLogger('HSR 用户编辑')
+const logger = window.hostAPI.getLogger('HSR 用户编辑')
 
 const route = useRoute()
 const router = useRouter()

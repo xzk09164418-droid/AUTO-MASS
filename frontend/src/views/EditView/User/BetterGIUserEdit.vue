@@ -1358,7 +1358,7 @@ import BettergiTeamSettings from './BettergiTeamSettings.vue'
 import { useBetterGIUpdate } from './useBetterGIUpdate'
 
 const { t } = useI18n()
-const logger = window.electronAPI.getLogger('BetterGI用户编辑')
+const logger = window.hostAPI.getLogger('BetterGI用户编辑')
 const route = useRoute()
 const router = useRouter()
 const {
@@ -1700,7 +1700,7 @@ const handleGamePathSaved = async () => {
 
 /** 弹出文件选择并校验为原神主程序，取消/选错返回 null */
 const pickGenshinExe = async (): Promise<string | null> => {
-  const paths = await window.electronAPI?.selectFile([
+  const paths = await window.hostAPI?.selectFile([
     {
       name: 'YuanShen.exe / GenshinImpact.exe',
       extensions: ['exe'],
@@ -4278,7 +4278,7 @@ const openBettergiDir = async (
     return
   }
   try {
-    await window.electronAPI.openFile(target)
+    await window.hostAPI.openFile(target)
   } catch (e) {
     logger.error(e instanceof Error ? e.message : String(e))
   }
@@ -4298,7 +4298,7 @@ const openBettergiScheduler = async () => {
     return
   }
   try {
-    await window.electronAPI.openFile(exe)
+    await window.hostAPI.openFile(exe)
   } catch (e) {
     logger.error(e instanceof Error ? e.message : String(e))
   }

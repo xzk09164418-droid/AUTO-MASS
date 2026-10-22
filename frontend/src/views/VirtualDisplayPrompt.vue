@@ -8,11 +8,11 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { DesktopOutlined } from '@ant-design/icons-vue'
 import { ActionService } from '@/api'
-import type { VirtualDisplayPromptPayload } from '@/types/electron'
+import type { VirtualDisplayPromptPayload } from '@/types/host'
 
 defineOptions({ name: 'VirtualDisplayPrompt' })
 
-const logger = window.electronAPI.getLogger('虚拟显示器询问弹窗')
+const logger = window.hostAPI.getLogger('虚拟显示器询问弹窗')
 const { t } = useI18n()
 
 const payload = ref<VirtualDisplayPromptPayload | null>(null)
@@ -24,13 +24,13 @@ const devices = computed(() => payload.value?.returned.join(', ') ?? '')
 let disposeData: (() => void) | undefined
 
 onMounted(async () => {
-  disposeData = window.electronAPI.onVirtualDisplayPromptData?.(data => {
+  disposeData = window.hostAPI.onVirtualDisplayPromptData?.(data => {
     payload.value = data
     errorText.value = ''
   })
   try {
     // 主进程在页面加载完成时推送会早于这里注册监听，所以挂载后自己取一次
-    payload.value = (await window.electronAPI.getVirtualDisplayPrompt?.()) ?? null
+    payload.value = (await window.hostAPI.getVirtualDisplayPrompt?.()) ?? null
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error)
     logger.warn(`读取询问数据失败: ${errorMsg}`)
@@ -43,7 +43,7 @@ onUnmounted(() => {
 
 const close = async () => {
   try {
-    await window.electronAPI.closeVirtualDisplayPrompt?.()
+    await window.hostAPI.closeVirtualDisplayPrompt?.()
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error)
     logger.warn(`关闭弹窗失败: ${errorMsg}`)

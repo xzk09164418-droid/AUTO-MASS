@@ -164,7 +164,7 @@ const { t } = useI18n()
 // 用于 keep-alive 识别
 defineOptions({ name: 'SchedulerPage' })
 
-const logger = window.electronAPI.getLogger('调度中心')
+const logger = window.hostAPI.getLogger('调度中心')
 
 const statusLabel = useStatusLabel()
 

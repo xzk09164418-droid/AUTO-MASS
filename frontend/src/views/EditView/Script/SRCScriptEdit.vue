@@ -376,7 +376,7 @@ import {
 
 const { t } = useI18n()
 
-const logger = window.electronAPI.getLogger('SRC脚本编辑')
+const logger = window.hostAPI.getLogger('SRC脚本编辑')
 
 const route = useRoute()
 const router = useRouter()
@@ -591,12 +591,12 @@ const handleEmulatorSelectChange = async (emulatorId: string) => {
 // 文件选择方法
 const selectSRCPath = async () => {
   try {
-    if (!window.electronAPI) {
+    if (!window.hostAPI) {
       message.error(t('edit.filePickingUnavailableRun'))
       return
     }
 
-    const path = await window.electronAPI.selectFolder()
+    const path = await window.hostAPI.selectFolder()
     if (path) {
       if (!srcConfig.Info) {
         srcConfig.Info = { Name: '', Path: '' }

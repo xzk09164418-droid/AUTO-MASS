@@ -22,7 +22,7 @@ export function useMaaFWGamePackage({
   resolveResourceName,
   handleResourceChange,
 }: MaaFWGamePackageOptions) {
-  const logger = window.electronAPI.getLogger('MaaFW 脚本编辑')
+  const logger = window.hostAPI.getLogger('MaaFW 脚本编辑')
 
   const syncGamePackageName = async (overwrite: boolean) => {
     const path = maafwConfig.Info.Path.trim()

@@ -70,7 +70,7 @@ import { isWaitingWithoutUsers } from './taskTreePresentation'
 
 const { t } = useI18n()
 
-const logger = window.electronAPI.getLogger('任务树组件')
+const logger = window.hostAPI.getLogger('任务树组件')
 
 const statusLabel = useStatusLabel()
 

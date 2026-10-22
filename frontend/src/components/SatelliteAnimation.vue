@@ -60,7 +60,7 @@ import { usePressSound } from './satellite/usePressSound'
 /** 主 WS 没开着时，按这个间隔拉运行快照兜底 */
 const STATUS_POLL_INTERVAL = 10000
 
-const logger = window.electronAPI.getLogger('卫星动画')
+const logger = window.hostAPI.getLogger('卫星动画')
 const { isDark } = useTheme()
 const { getScripts } = useScriptApi()
 const performanceStore = usePerformanceStore()

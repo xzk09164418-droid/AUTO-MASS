@@ -20,7 +20,7 @@ const getOnlineAppearanceCover =
   >()
 
 vi.stubGlobal('window', {
-  electronAPI: {
+  hostAPI: {
     getLogger: () => ({ debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }),
     listOnlineAppearances,
     getOnlineAppearance,

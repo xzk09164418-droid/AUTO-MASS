@@ -31,7 +31,7 @@ const appearanceId = ref<string | null>(null)
 const activeAppearance = ref<InstalledAppearance | null>(null)
 const appearances = ref<InstalledAppearance[]>([])
 const isDark = ref(false)
-const logger = window.electronAPI.getLogger('主题')
+const logger = window.hostAPI.getLogger('主题')
 const applyAppearanceBackground = createAppearanceBackgroundApplier({ logger })
 let appearanceListenerInitialized = false
 let themeConfigListenerInitialized = false
@@ -587,7 +587,7 @@ export function useTheme() {
     let list: InstalledAppearance[] = []
     let listFailed = false
     try {
-      list = (await window.electronAPI.listAppearances?.()) ?? []
+      list = (await window.hostAPI.listAppearances?.()) ?? []
     } catch (error) {
       listFailed = true
       logger.warn(
@@ -610,11 +610,11 @@ export function useTheme() {
         updateTheme()
         const savedConfigRevision = configRevision
         try {
-          const result = await window.electronAPI.clearInvalidAppearance?.(expectedId)
+          const result = await window.hostAPI.clearInvalidAppearance?.(expectedId)
           if (result?.success && result.appearanceId !== undefined) {
             const currentAppearance = result.appearanceId
               ? (appearances.value.find(item => item.id === result.appearanceId) ??
-                (await window.electronAPI.getAppearance?.(result.appearanceId)))
+                (await window.hostAPI.getAppearance?.(result.appearanceId)))
               : null
             if (
               loadRevision !== appearanceLoadRevision ||
@@ -670,8 +670,7 @@ export function useTheme() {
         return
       }
       const appearance =
-        appearances.value.find(item => item.id === id) ??
-        (await window.electronAPI.getAppearance?.(id))
+        appearances.value.find(item => item.id === id) ?? (await window.hostAPI.getAppearance?.(id))
       if (!appearance) throw new Error('外观不存在或已损坏')
       if (revision !== themeRevision) return
       activeAppearance.value = appearance
@@ -701,7 +700,7 @@ export function useTheme() {
     zipPath: string,
     replace = false
   ): Promise<import('@/types/appearance').AppearanceImportResult> => {
-    const result = await window.electronAPI.importAppearance?.(zipPath, replace)
+    const result = await window.hostAPI.importAppearance?.(zipPath, replace)
     if (!result) {
       return {
         success: false,
@@ -718,7 +717,7 @@ export function useTheme() {
     token: string,
     replace = false
   ): Promise<OnlineAppearanceInstallResult> => {
-    const result = await window.electronAPI.installOnlineAppearance?.(token, replace)
+    const result = await window.hostAPI.installOnlineAppearance?.(token, replace)
     if (!result) {
       return {
         success: false,
@@ -731,7 +730,7 @@ export function useTheme() {
   }
 
   const removeAppearance = async (id: string): Promise<{ success: boolean; error?: string }> => {
-    const result = await window.electronAPI.removeAppearance?.(id)
+    const result = await window.hostAPI.removeAppearance?.(id)
     if (!result) return { success: false, error: '当前环境不支持移除外观包' }
     if (result.success) {
       appearances.value = appearances.value.filter(item => item.id !== id)
@@ -744,7 +743,7 @@ export function useTheme() {
   const initAppearanceChangedListener = () => {
     if (appearanceListenerInitialized) return
     appearanceListenerInitialized = true
-    const dispose = window.electronAPI.onAppearanceChanged?.(() => {
+    const dispose = window.hostAPI.onAppearanceChanged?.(() => {
       void loadAppearances()
     })
     return dispose
@@ -753,7 +752,7 @@ export function useTheme() {
   const initThemeConfigListener = () => {
     if (themeConfigListenerInitialized) return
     themeConfigListenerInitialized = true
-    window.electronAPI.onThemeConfigChanged?.(rawConfig => {
+    window.hostAPI.onThemeConfigChanged?.(rawConfig => {
       if (rawConfig === null || typeof rawConfig !== 'object') return
       themeRevision += 1
       configRevision += 1

@@ -1,4 +1,4 @@
-// 托盘菜单项类型（与 frontend/electron/main.ts 保持一致）
+// 托盘菜单项类型（与 res/Launcher/AutoMasLauncher.cs 保持一致）
 export type TrayAction = 'show' | 'hide' | 'startTask' | 'stopAll' | 'restartApp' | 'quit'
 
 export interface TrayMenuItem {

@@ -258,7 +258,7 @@ export const useBlueArchiveActivitySource = () => {
     cn: false,
   })
   const selectedServer = ref<BlueArchiveServerKey>(readSelectedServer())
-  const logger = window.electronAPI.getLogger('碧蓝档案活动')
+  const logger = window.hostAPI.getLogger('碧蓝档案活动')
   let selectionChanged = false
 
   const saveSelectedServer = async (server: BlueArchiveServerKey, { reportError = false } = {}) => {

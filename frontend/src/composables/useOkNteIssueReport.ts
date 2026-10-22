@@ -5,7 +5,7 @@ export function useOkNteIssueReport(logger: ReportLogger) {
   const { exporting, exportIssueReport } = useIssueReport(logger, {
     label: 'OK-NTE',
     fallbackName: 'OK-NTE-logs-*.zip',
-    exportFn: () => window.electronAPI?.exportOkNteIssueReport?.(),
+    exportFn: () => window.hostAPI?.exportOkNteIssueReport?.(),
   })
   return { exporting, exportOkNteIssueReport: exportIssueReport }
 }

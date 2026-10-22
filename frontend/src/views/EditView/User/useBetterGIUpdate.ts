@@ -35,7 +35,7 @@ const UPDATE_IDLE_MS = 5 * 60 * 1000
  */
 export function useBetterGIUpdate(getUserId: () => string) {
   const { t } = useI18n()
-  const logger = window.electronAPI.getLogger('BetterGI用户更新')
+  const logger = window.hostAPI.getLogger('BetterGI用户更新')
   const { subscribe, unsubscribe } = useWebSocket()
 
   const updateModal = reactive({

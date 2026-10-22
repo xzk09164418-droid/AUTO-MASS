@@ -180,7 +180,7 @@ import GuiSessionMask from '@/components/GuiSessionMask.vue'
 import ConfigRestoreSection from '@/views/EditView/User/components/ConfigRestoreSection.vue'
 import { buildRestoreConfirm } from '@/utils/configRestoreMode'
 
-const logger = window.electronAPI.getLogger('SRC用户编辑')
+const logger = window.hostAPI.getLogger('SRC用户编辑')
 
 // 导入拆分的组件
 import SRCUserEditHeader from '@/views/SRCUserEdit/SRCUserEditHeader.vue'

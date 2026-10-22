@@ -41,7 +41,7 @@ export function useNativeGuiSession(options: {
   const { subscribe, unsubscribe } = useWebSocket()
   const keys = options.keys
 
-  const logger = window.electronAPI.getLogger(options.loggerName)
+  const logger = window.hostAPI.getLogger(options.loggerName)
 
   const configLoading = ref(false)
   const subscriptionIds = ref<string[]>([])

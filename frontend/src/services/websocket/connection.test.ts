@@ -65,7 +65,7 @@ describe('websocket connection 状态机', () => {
     vi.clearAllMocks()
     vi.stubGlobal('WebSocket', FakeWebSocket)
     vi.stubGlobal('window', {
-      electronAPI: { getLogger: () => logger },
+      hostAPI: { getLogger: () => logger },
       location: { hostname: 'localhost' },
       setTimeout: (fn: () => void, ms?: number) => setTimeout(fn, ms),
       clearTimeout: (id: number) => clearTimeout(id),
@@ -319,7 +319,7 @@ describe('devMode 协商', () => {
     vi.stubGlobal('WebSocket', FakeWebSocket)
     // hostname 为 localhost 时本地回退值是 devMode=true，正是 Runtime 链路下页面先于后端起来的情形。
     vi.stubGlobal('window', {
-      electronAPI: { getLogger: () => logger },
+      hostAPI: { getLogger: () => logger },
       location: { hostname: 'localhost' },
       setTimeout: (fn: () => void, ms?: number) => setTimeout(fn, ms),
       clearTimeout: (id: number) => clearTimeout(id),

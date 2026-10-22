@@ -52,7 +52,7 @@ export function useIssueReport<Args extends unknown[] = []>(
         else message.success(successMessage)
         logger.info(`导出 ${options.label} 问题包成功: ${result.zipPath || '路径未知'}`)
         if (result.zipPath) {
-          await window.electronAPI?.showItemInFolder?.(result.zipPath)
+          await window.hostAPI?.showItemInFolder?.(result.zipPath)
         }
         showIssueReportGuide(result.zipPath, options.fallbackName)
         return

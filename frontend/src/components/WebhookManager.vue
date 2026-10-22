@@ -239,7 +239,7 @@ import { Service } from '@/api/services/Service'
 
 const { t } = useI18n()
 
-const logger = window.electronAPI.getLogger('Webhook管理器')
+const logger = window.hostAPI.getLogger('Webhook管理器')
 
 // update/test 接口的载荷形状：开关切换、提交保存、测试三处写入共用
 const toWebhookPayload = (

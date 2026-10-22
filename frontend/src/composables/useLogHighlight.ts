@@ -1,7 +1,7 @@
 import { computed, ref, type Ref } from 'vue'
 import { useTheme } from './useTheme'
 
-const logger = window.electronAPI.getLogger('日志高亮')
+const logger = window.hostAPI.getLogger('日志高亮')
 
 // 日志高亮颜色配置接口
 export interface LogHighlightColors {

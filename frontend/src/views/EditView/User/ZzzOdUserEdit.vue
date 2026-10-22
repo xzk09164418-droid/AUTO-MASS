@@ -1303,7 +1303,7 @@ import UserNotifyConfig from '@/components/UserNotifyConfig.vue'
 import ExtraScriptSection from '@/components/ExtraScriptSection.vue'
 
 const { t } = useI18n()
-const logger = window.electronAPI.getLogger('ZZZ-OD用户编辑')
+const logger = window.hostAPI.getLogger('ZZZ-OD用户编辑')
 const route = useRoute()
 const router = useRouter()
 const {
@@ -2186,7 +2186,7 @@ const saveNativeAccount = () =>
 
 /** 弹出文件选择并校验为 ZenlessZoneZero.exe，取消/选错返回 null（两处共用） */
 const pickZzzGameExe = async (): Promise<string | null> => {
-  const paths = await window.electronAPI?.selectFile([
+  const paths = await window.hostAPI?.selectFile([
     {
       name: 'ZenlessZoneZero.exe',
       extensions: ['exe'],

@@ -10,7 +10,7 @@ import type {
   WSSubscriptionKey,
 } from './types'
 
-const logger = window.electronAPI.getLogger('WS订阅')
+const logger = window.hostAPI.getLogger('WS订阅')
 
 interface SubscriptionRecord {
   subscriptionId: string

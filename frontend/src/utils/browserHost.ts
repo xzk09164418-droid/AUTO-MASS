@@ -1,4 +1,4 @@
-import type { ElectronAPI } from '@/types/electron'
+import type { HostAPI } from '@/types/host'
 import { invokeBrowserHost } from '@/composables/useBrowserHost'
 import { chooseLocalPath } from './browserFilePicker'
 
@@ -11,7 +11,7 @@ function download(blob: Blob, filename: string) {
   setTimeout(() => URL.revokeObjectURL(url), 30000)
 }
 
-if (!window.electronAPI) {
+if (!window.hostAPI) {
   window.__AUTO_MAS_BROWSER_HOST__ = true
   document.documentElement.classList.add('browser-host')
   const listeners = new Map<string, Set<(value: unknown) => void>>()
@@ -43,6 +43,13 @@ if (!window.electronAPI) {
     return result
   }
   const browserMethods: Record<string, unknown> = {
+    // 断线恢复只确保后端存在；不会先停止仍在执行任务的独立后端。
+    backendRestart: () => invoke('backendStart', []),
+    startBackend: () => invoke('backendStart', []),
+    appQuit: async () => {
+      await invoke('frontendStop', [])
+      window.close()
+    },
     isMacOS: false,
     getLogger: (name: string) =>
       Object.fromEntries(
@@ -102,7 +109,7 @@ if (!window.electronAPI) {
     },
   }
   // 保留原版页面的接口类型；这里是 HTTP 浏览器适配器，不导入或启动 Electron。
-  window.electronAPI = new Proxy(browserMethods, {
+  window.hostAPI = new Proxy(browserMethods, {
     get(target, key: string) {
       if (key in target) return target[key]
       // 原生窗口事件在浏览器中由浏览器管理，不注册桌面窗口或托盘。
@@ -129,5 +136,5 @@ if (!window.electronAPI) {
         }
       return (...args: unknown[]) => invoke(key, args)
     },
-  }) as unknown as ElectronAPI
+  }) as unknown as HostAPI
 }

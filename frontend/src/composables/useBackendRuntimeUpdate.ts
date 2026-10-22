@@ -16,7 +16,7 @@ import type {
   RuntimeUpdateOutcome,
   RuntimeUpdateRetryAction,
   RuntimeUpdateStage,
-} from '@/types/electron'
+} from '@/types/host'
 import { reconnectNow } from '@/services/websocket/connection'
 import {
   beginIntentionalBackendRestart,
@@ -24,7 +24,7 @@ import {
 } from '@/composables/useAppLifecycle'
 import { getBackendVersion } from './useVersionService'
 
-const logger = window.electronAPI.getLogger('后端更新')
+const logger = window.hostAPI.getLogger('后端更新')
 
 /**
  * 进度条的段序。
@@ -65,7 +65,7 @@ async function ensureLaunchMode(): Promise<RuntimeLaunchMode> {
   if (launchMode.value) return launchMode.value
   try {
     // 灰度开关升级为三级来源后返回的是 {persisted, mode, source}，这里只关心生效值。
-    launchMode.value = (await window.electronAPI.getRuntimeLaunchMode()).mode
+    launchMode.value = (await window.hostAPI.getRuntimeLaunchMode()).mode
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error)
     logger.warn(`获取 Runtime 启动模式失败，按 off 处理: ${errorMsg}`)
@@ -76,7 +76,7 @@ async function ensureLaunchMode(): Promise<RuntimeLaunchMode> {
 
 function attachProgressListener(): void {
   if (progressListenerAttached) return
-  window.electronAPI.onBackendUpdateProgress(progress => {
+  window.hostAPI.onBackendUpdateProgress(progress => {
     currentStage.value = progress.stage
     currentMessage.value = progress.message
     if (progress.status === 'completed' && !completedStages.value.includes(progress.stage)) {
@@ -88,7 +88,7 @@ function attachProgressListener(): void {
 
 function detachProgressListener(): void {
   if (!progressListenerAttached) return
-  window.electronAPI.removeBackendUpdateProgressListener?.()
+  window.hostAPI.removeBackendUpdateProgressListener?.()
   progressListenerAttached = false
 }
 
@@ -150,7 +150,7 @@ export function useBackendRuntimeUpdate() {
 
     logger.info(`开始经 Runtime 更新后端到 ${version}`)
     try {
-      await settle(await window.electronAPI.updateBackendViaRuntime(version))
+      await settle(await window.hostAPI.updateBackendViaRuntime(version))
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error)
       logger.error(`Runtime 更新后端失败: ${errorMsg}`)
@@ -171,7 +171,7 @@ export function useBackendRuntimeUpdate() {
 
     logger.info(`重试后端更新: ${action}`)
     try {
-      await settle(await window.electronAPI.retryBackendUpdate(action))
+      await settle(await window.hostAPI.retryBackendUpdate(action))
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error)
       logger.error(`重试后端更新失败: ${errorMsg}`)
@@ -183,7 +183,7 @@ export function useBackendRuntimeUpdate() {
     if (!running.value) return
     cancelling.value = true
     try {
-      await window.electronAPI.cancelBackendUpdate()
+      await window.hostAPI.cancelBackendUpdate()
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error)
       logger.warn(`取消后端更新失败: ${errorMsg}`)
@@ -195,7 +195,7 @@ export function useBackendRuntimeUpdate() {
   async function restartBackend(): Promise<void> {
     restartingBackend.value = true
     try {
-      const result = await window.electronAPI.backendStart()
+      const result = await window.hostAPI.backendStart()
       if (result.success) {
         outcome.value = { success: true }
         await refreshAfterUpdate()

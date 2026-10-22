@@ -48,7 +48,8 @@ AUTO-MAS Vue 页面，使用相同的 Ant Design Vue 组件、主题与业务 AP
 同步移除，保留启动参数、日志、超时、账号、通知和前后置脚本配置。
 
 `web/services.ts` 只复用原项目中的纯 Node 工具函数；构建器禁止其导入 Electron。
-原页面的 `window.electronAPI` 名称仅作为兼容接口，通过 HTTP 接入 Node.js 服务。
+页面通过 `window.hostAPI` 调用本机 HTTP 宿主，不保留预加载桥或桌面运行时。
+纯 Node 服务源码位于 `node/`，浏览器运行时与构建依赖均已移除 Electron。
 窗口和浏览器开发工具由本机浏览器管理。
 启动器使用独立的 `data/browser-profile/` 浏览器配置目录并在该窗口禁用扩展，
 避免 Power Automate 等扩展打开额外命令窗口；不修改用户日常浏览器的扩展设置。

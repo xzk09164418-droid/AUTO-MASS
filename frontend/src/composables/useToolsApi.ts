@@ -5,7 +5,7 @@ import { Service, type ToolsConfig } from '@/api'
 
 export function useToolsApi() {
   const loading = ref(false)
-  const logger = window.electronAPI.getLogger('工具API')
+  const logger = window.hostAPI.getLogger('工具API')
 
   /**
    * 获取工具

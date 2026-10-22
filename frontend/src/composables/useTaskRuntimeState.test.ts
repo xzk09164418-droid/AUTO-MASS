@@ -59,7 +59,7 @@ describe('useTaskRuntimeState 快照对账', () => {
     vi.clearAllMocks()
     connectionStateRef.value = 'idle'
     vi.stubGlobal('window', {
-      electronAPI: { getLogger: () => logger },
+      hostAPI: { getLogger: () => logger },
       setTimeout: (fn: () => void, ms?: number) => setTimeout(fn, ms),
       clearTimeout: (id: number) => clearTimeout(id),
       setInterval: (fn: () => void, ms?: number) => setInterval(fn, ms),
@@ -157,7 +157,7 @@ describe('useTaskRuntimeState 快照对账', () => {
 
 describe('collectScriptStatuses 按键汇总', () => {
   beforeEach(() => {
-    vi.stubGlobal('window', { electronAPI: { getLogger: () => logger } })
+    vi.stubGlobal('window', { hostAPI: { getLogger: () => logger } })
   })
 
   afterEach(() => {

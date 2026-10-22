@@ -51,7 +51,7 @@ export function useMaaFWSetupWizard({
   isPageUnmounted,
 }: MaaFWSetupWizardOptions) {
   const { t } = useI18n()
-  const logger = window.electronAPI.getLogger('MaaFW 脚本编辑')
+  const logger = window.hostAPI.getLogger('MaaFW 脚本编辑')
   const route = useRoute()
   const router = useRouter()
   const { listShellInstances, importShellInstances } = useMaaFWShellInstanceApi()

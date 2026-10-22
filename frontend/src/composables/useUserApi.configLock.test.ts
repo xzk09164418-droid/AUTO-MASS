@@ -58,7 +58,7 @@ describe('useUserApi runtime config lock', () => {
     vi.clearAllMocks()
     mocks.states.mockReturnValue([runningTask])
     vi.stubGlobal('window', {
-      electronAPI: {
+      hostAPI: {
         getLogger: () => ({ debug: vi.fn(), warn: vi.fn(), error: vi.fn() }),
       },
     })

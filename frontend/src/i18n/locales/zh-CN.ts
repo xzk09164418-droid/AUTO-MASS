@@ -1123,7 +1123,7 @@ export default {
     maaEndGroupEnabled: '已启用 {n} / {m} 项任务',
     maaEndEnableGroup: '整组启用',
     couldNotCreateUser: '创建账号失败',
-    filePickingUnavailableRun: '文件选择功能不可用，请在 Electron 环境中运行',
+    filePickingUnavailableRun: '文件选择功能不可用，请检查本机 Node 服务是否运行',
     scriptDoesNotExist: '托管不存在或加载失败',
     scriptName: '托管名称',
     enterScriptName: '请输入托管名称',

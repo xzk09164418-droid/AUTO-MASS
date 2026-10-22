@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vite-plus/test'
 const mocks = vi.hoisted(() => {
   const logger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} }
   ;(globalThis as { window?: unknown }).window = {
-    electronAPI: { getLogger: () => logger },
+    hostAPI: { getLogger: () => logger },
     addEventListener: () => {},
     removeEventListener: () => {},
   }

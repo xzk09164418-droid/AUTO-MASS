@@ -8,7 +8,7 @@ import { VueMonacoEditor } from '@guolao/vue-monaco-editor'
 import { useLogHighlight } from '@/composables/useLogHighlight'
 import { useLogExport } from '@/composables/useLogExport'
 import { invokeBrowserHost } from '@/composables/useBrowserHost'
-const logger = window.electronAPI.getLogger('日志查看')
+const logger = window.hostAPI.getLogger('日志查看')
 const route = useRoute()
 const { t } = useI18n()
 const { registerLogLanguage, editorTheme } = useLogHighlight()
@@ -158,7 +158,7 @@ const loadLogs = async (silent = false) => {
           startedAt: string
         }>('getRuntimeLogs', selectedLogFile.value, logOffset, sourceId)
       : undefined
-    const result = runtimeResult ?? (await window.electronAPI.getLogs?.(0, fileName, logOffset))
+    const result = runtimeResult ?? (await window.hostAPI.getLogs?.(0, fileName, logOffset))
     if (seq !== loadSeq) {
       return
     }
@@ -278,7 +278,7 @@ onMounted(() => {
   }
   document.addEventListener('visibilitychange', handleVisibilityChange)
   // 窗口已经开着时主进程不会重新载入，靠这条推送换文件
-  window.electronAPI.onLogSelectFile?.(file => {
+  window.hostAPI.onLogSelectFile?.(file => {
     selectedLogFile.value = file
     void loadLogs()
   })
@@ -287,7 +287,7 @@ onMounted(() => {
 onUnmounted(() => {
   stopRealTimeRefresh()
   document.removeEventListener('visibilitychange', handleVisibilityChange)
-  window.electronAPI.removeLogSelectFileListener?.()
+  window.hostAPI.removeLogSelectFileListener?.()
 })
 </script>
 

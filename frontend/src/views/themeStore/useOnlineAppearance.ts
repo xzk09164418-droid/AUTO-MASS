@@ -93,8 +93,8 @@ export function useOnlineAppearance(options: {
   install: (token: string, category?: AppearanceCategory) => Promise<OnlineAppearanceInstallOutcome>
   categoryKey?: AppearanceFilter
 }) {
-  const logger = window.electronAPI.getLogger('在线外观')
-  const api = () => window.electronAPI
+  const logger = window.hostAPI.getLogger('在线外观')
+  const api = () => window.hostAPI
   const categoryArgs = (category?: AppearanceCategory): [] | [AppearanceCategory] => {
     if (category) return [category]
     return options.categoryKey && options.categoryKey !== 'all' ? [options.categoryKey] : []

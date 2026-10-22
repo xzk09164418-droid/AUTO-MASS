@@ -4,7 +4,6 @@ import path from 'node:path'
 
 export default defineConfig(async env => {
   const config = mergeConfig(await baseConfig(env), {
-    resolve: { alias: { '@sentry/electron/renderer': '@sentry/vue' } },
     build: {
       outDir: 'dist-browser',
       rollupOptions: { input: { main: path.resolve(__dirname, '../browser.html') } },

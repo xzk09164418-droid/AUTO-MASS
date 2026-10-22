@@ -379,7 +379,7 @@ import { useSaveQueue } from '@/composables/useSaveQueue'
 
 const { t } = useI18n()
 
-const logger = window.electronAPI.getLogger('OK-NTE脚本编辑')
+const logger = window.hostAPI.getLogger('OK-NTE脚本编辑')
 const route = useRoute()
 const router = useRouter()
 const { getScript, updateScript } = useScriptApi()
@@ -616,7 +616,7 @@ const loadScript = async () => {
         const installRoot = gamePath.substring(0, clientIdx)
         for (const exe of NTE_LAUNCHER_EXES) {
           const candidate = `${installRoot}/${NTE_LAUNCHER_DIR}/${exe}`
-          if (await window.electronAPI.fileExists(candidate)) {
+          if (await window.hostAPI.fileExists(candidate)) {
             oknteConfig.Game.Path = candidate
             break
           }
@@ -632,11 +632,11 @@ const loadScript = async () => {
 }
 
 const selectRootPath = async () => {
-  const picked = await window.electronAPI.selectFolder()
+  const picked = await window.hostAPI.selectFolder()
   if (!picked) return
   const normalized = picked.replace(/\\/g, '/')
   const exePath = normalized + '/ok-nte.exe'
-  if (!(await window.electronAPI.fileExists(exePath))) {
+  if (!(await window.hostAPI.fileExists(exePath))) {
     showPathRejectModal(
       '所选目录无效',
       '所选目录下未找到 ok-nte.exe，请选择包含 ok-nte.exe 的 OK-NTE 脚本根目录。'
@@ -649,7 +649,7 @@ const selectRootPath = async () => {
 
 const selectGameRootPath = async () => {
   if (!oknteConfig.Game.Enabled) return
-  const picked = await window.electronAPI.selectFolder()
+  const picked = await window.hostAPI.selectFolder()
   if (!picked) return
 
   const normalized = picked.replace(/\\/g, '/')
@@ -672,7 +672,7 @@ const selectGameRootPath = async () => {
 
   let candidateLauncher: string | null = null
   for (const candidate of launcherCandidates) {
-    if (await window.electronAPI.fileExists(candidate)) {
+    if (await window.hostAPI.fileExists(candidate)) {
       candidateLauncher = candidate
       break
     }

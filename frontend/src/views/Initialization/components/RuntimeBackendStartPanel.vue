@@ -31,7 +31,7 @@ import { connectWithRetry, initializeAppLifecycle } from '@/composables/useAppLi
 import { useUpdateChecker } from '@/composables/useUpdateChecker'
 import { SLOW_LAUNCH_THRESHOLD_MS, openLaunchLogWindow } from '@/utils/launch'
 import LaunchFailure from './LaunchFailure.vue'
-import type { RuntimeFailureFields, RuntimeInitMode } from '@/types/electron'
+import type { RuntimeFailureFields, RuntimeInitMode } from '@/types/host'
 import type { FailureAction, FailureActionKind } from '@/utils/initializationDecision'
 
 defineOptions({ name: 'RuntimeBackendStartPanel' })
@@ -58,7 +58,7 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n()
-const logger = window.electronAPI.getLogger('后端启动步骤')
+const logger = window.hostAPI.getLogger('后端启动步骤')
 const { startPolling } = useUpdateChecker()
 
 // 后端启动失败可重试或单独更新 Runtime，换源和重建环境都轮不到这一段。
@@ -101,7 +101,7 @@ function restartSlowTimer() {
 
 async function handleOpenDocumentation() {
   try {
-    const result = await window.electronAPI.openUrl(BACKEND_START_FAILURE_DOC_URL)
+    const result = await window.hostAPI.openUrl(BACKEND_START_FAILURE_DOC_URL)
     if (!result.success) logger.error(`打开后端启动失败文档失败: ${String(result.error)}`)
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
@@ -120,7 +120,7 @@ async function startBackend() {
   let pollingStarted = false
 
   try {
-    const result = await window.electronAPI.backendStart()
+    const result = await window.hostAPI.backendStart()
 
     if (!result.success) {
       failure = result
@@ -128,7 +128,7 @@ async function startBackend() {
       throw new Error(result.error || t('init.backend.failedTitle'))
     }
 
-    const backendStatus = await window.electronAPI.backendStatus()
+    const backendStatus = await window.hostAPI.backendStatus()
     status.value = 'running'
     emit('update:status', 'running')
 
@@ -143,7 +143,7 @@ async function startBackend() {
     pollingStarted = true
 
     try {
-      const finalStatus = await window.electronAPI.backendStatus()
+      const finalStatus = await window.hostAPI.backendStatus()
       if (!finalStatus.isRunning) throw new Error(t('init.backend.notRunning'))
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
@@ -178,7 +178,7 @@ async function handleFailureAction(kind: FailureActionKind) {
 }
 
 onMounted(() => {
-  window.electronAPI.onBackendStatus?.(backendStatus => {
+  window.hostAPI.onBackendStatus?.(backendStatus => {
     logger.debug(`收到后端状态: ${JSON.stringify(backendStatus)}`)
   })
 
@@ -191,6 +191,6 @@ onUnmounted(() => {
   if (startTimer) clearTimeout(startTimer)
   if (completeTimer) clearTimeout(completeTimer)
   clearSlowTimer()
-  window.electronAPI.removeBackendStatusListener?.()
+  window.hostAPI.removeBackendStatusListener?.()
 })
 </script>

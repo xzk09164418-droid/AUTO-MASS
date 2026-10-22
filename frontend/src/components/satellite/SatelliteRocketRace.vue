@@ -89,7 +89,7 @@ interface RaceState {
 }
 
 const { t } = useI18n()
-const logger = window.electronAPI.getLogger('卫星动画')
+const logger = window.hostAPI.getLogger('卫星动画')
 
 const state = ref<RaceState | null>(null)
 const stage = ref<HTMLDivElement | null>(null)

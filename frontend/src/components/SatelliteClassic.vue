@@ -45,7 +45,7 @@ const STATUS_POLL_INTERVAL = 10000
 const MAX_STAR_BURSTS = 12
 
 const { t } = useI18n()
-const logger = window.electronAPI.getLogger('卫星动画')
+const logger = window.hostAPI.getLogger('卫星动画')
 const { isDark } = useTheme()
 const { getScripts } = useScriptApi()
 const performanceStore = usePerformanceStore()

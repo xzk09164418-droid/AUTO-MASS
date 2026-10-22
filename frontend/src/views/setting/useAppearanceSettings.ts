@@ -22,7 +22,7 @@ export function useAppearanceSettings() {
   const { t } = useI18n()
   const [modal, modalContextHolder] = Modal.useModal()
   const modalOptions = { zIndex: 100, wrapClassName: 'appearance-modal' }
-  const logger = window.electronAPI.getLogger('外观设置')
+  const logger = window.hostAPI.getLogger('外观设置')
   const {
     themeMode,
     themeColor,
@@ -201,7 +201,7 @@ export function useAppearanceSettings() {
       return await runAppearanceInstall(
         replace =>
           category === 'mascot'
-            ? (window.electronAPI.installOnlineAppearance?.(token, replace, category) ??
+            ? (window.hostAPI.installOnlineAppearance?.(token, replace, category) ??
               Promise.resolve({ success: false, code: 'UNSUPPORTED' as const }))
             : installOnlineAppearance(token, replace),
         result => describeOnlineAppearanceError(result, 'themeStore.installFailed', category),
@@ -218,7 +218,7 @@ export function useAppearanceSettings() {
 
   const handleAppearanceImport = async (): Promise<void> => {
     try {
-      const paths = await window.electronAPI.selectFile([
+      const paths = await window.hostAPI.selectFile([
         { name: t('setting.basic.importAppearance'), extensions: ['zip'] },
       ])
       if (!paths[0]) return

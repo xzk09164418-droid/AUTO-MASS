@@ -14,7 +14,7 @@ import type { ChangelogData } from '@/utils/changelog'
 import { MAS_QQ_GROUP_URL, handleExternalLink } from '@/utils/openExternal'
 import { formatPauseUntil, getPauseDisabledDate, isUpdatePaused } from '@/composables/updatePause'
 
-const logger = window.electronAPI.getLogger('设置-其他')
+const logger = window.hostAPI.getLogger('设置-其他')
 
 const { t } = useI18n()
 const isBrowserHost = window.__AUTO_MAS_BROWSER_HOST__ === true
@@ -55,7 +55,7 @@ const handlePauseUntilChange = (value: string | null) => {
   void handleSettingChange('Update', 'PauseUntil', value ?? '')
 }
 
-// 当前版本的更新日志在编译期从 res/version.json 注入（res/ 不进 Electron 产物）
+// 当前版本的更新日志在编译期从 res/version.json 注入（res/ 不进 Node 宿主 产物）
 const changelogVisible = ref(false)
 const unreleasedChangelog = import.meta.env.VITE_APP_CHANGELOG_UNRELEASED ?? {}
 const currentChangelog: ChangelogData = {
@@ -103,7 +103,9 @@ const copyAllInfo = async () => {
   <div class="tab-content">
     <div class="form-section">
       <div class="section-header">
-        <h3>{{ t(isBrowserHost ? 'setting.others.networkSection' : 'setting.others.updateSection') }}</h3>
+        <h3>
+          {{ t(isBrowserHost ? 'setting.others.networkSection' : 'setting.others.updateSection') }}
+        </h3>
         <a-button
           v-if="!isBrowserHost"
           type="primary"

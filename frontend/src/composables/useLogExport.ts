@@ -16,10 +16,10 @@ export function useLogExport() {
   async function packageLogs() {
     if (exportingLogs.value) return
 
-    const logger = window.electronAPI.getLogger('日志导出')
+    const logger = window.hostAPI.getLogger('日志导出')
     exportingLogs.value = true
     try {
-      const result = await window.electronAPI.exportLogs?.({
+      const result = await window.hostAPI.exportLogs?.({
         title: t('logs.package'),
         zipFilterName: t('misc.zipArchive'),
       })
@@ -47,7 +47,7 @@ export function useLogExport() {
       logger.info(`日志打包成功: ${result.zipPath}`)
       if (result.zipPath) {
         try {
-          await window.electronAPI.showItemInFolder?.(result.zipPath)
+          await window.hostAPI.showItemInFolder?.(result.zipPath)
         } catch (error) {
           logger.error(`打开压缩包所在文件夹失败: ${String(error)}`)
           message.error(t('logs.toast.openFolderFailed'))

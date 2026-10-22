@@ -42,7 +42,7 @@ export const WS_TASK_CREATED = 'task.created'
 // 应用生命周期与电源（id=Main）
 export const WS_BACKEND_SHUTDOWN_READY = 'backend.shutdown.ready'
 export const WS_FRONTEND_CLOSE_REQUESTED = 'frontend.close.requested'
-// 与上一条同理，只是收尾后由 Electron 重新拉起：队列的「完成后操作」选了重启软件
+// 与上一条同理，只是收尾后由 Node 宿主 重新拉起：队列的「完成后操作」选了重启软件
 export const WS_FRONTEND_RESTART_REQUESTED = 'frontend.restart.requested'
 export const WS_POWER_COUNTDOWN_UPDATED = 'power.countdown.updated'
 export const WS_POWER_COUNTDOWN_CANCELLED = 'power.countdown.cancelled'

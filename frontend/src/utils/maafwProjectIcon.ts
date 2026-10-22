@@ -1,5 +1,5 @@
 // 通用 MaaFW 脚本的项目图标（interface 顶层 icon）。放在 utils 而不是 useMaaFWApi：
-// 那边模块顶层就取 window.electronAPI 的 logger，新建对话框的分节测试（SSR、无 window）引不进去。
+// 那边模块顶层就取 window.hostAPI 的 logger，新建对话框的分节测试（SSR、无 window）引不进去。
 import { OpenAPI } from '@/api'
 
 /**

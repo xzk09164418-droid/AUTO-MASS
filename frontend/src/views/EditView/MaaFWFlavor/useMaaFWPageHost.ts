@@ -36,7 +36,7 @@ export const MAAFW_DEFAULT_PAGES: Record<MaaFWPagePart, MaaFWLazyComponent> = {
 export function useMaaFWPageHost(
   pages: Record<MaaFWPagePart, MaaFWLazyComponent> = MAAFW_DEFAULT_PAGES
 ) {
-  const logger = window.electronAPI.getLogger('MaaFW 页面宿主')
+  const logger = window.hostAPI.getLogger('MaaFW 页面宿主')
   const route = useRoute()
   const router = useRouter()
   const { getScript } = useScriptApi()

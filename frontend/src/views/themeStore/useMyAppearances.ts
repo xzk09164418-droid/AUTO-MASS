@@ -20,7 +20,7 @@ export function useMyAppearances(
     categoryKey?: AppearanceFilter
   } = {}
 ) {
-  const logger = window.electronAPI.getLogger('主题商店')
+  const logger = window.hostAPI.getLogger('主题商店')
   const { listMyAppearances, getMyAppearanceCover, updateMyAppearanceDescription } = useShareApi()
 
   const items = ref<MyAppearanceItem[]>([])

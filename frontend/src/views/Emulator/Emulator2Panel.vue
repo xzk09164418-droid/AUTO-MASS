@@ -77,7 +77,7 @@ const props = withDefaults(defineProps<{ emulatorId: string; active?: boolean }>
 })
 
 const { t } = useI18n()
-const logger = window.electronAPI.getLogger('Emulator2')
+const logger = window.hostAPI.getLogger('Emulator2')
 const performanceStore = usePerformanceStore()
 
 /** 首次加载：还没有任何行可以显示，表格位置转圈 */

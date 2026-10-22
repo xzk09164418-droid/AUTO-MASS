@@ -137,7 +137,7 @@ import { Service } from '@/api'
 import dayjs from 'dayjs'
 
 const { t } = useI18n()
-const logger = window.electronAPI.getLogger('定时项管理')
+const logger = window.hostAPI.getLogger('定时项管理')
 
 // Props
 interface Props {

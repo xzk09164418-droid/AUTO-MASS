@@ -19,12 +19,12 @@ import {
   reduceNetworkActivity,
 } from './networkActivity'
 import type {
-  ElectronMirrorSource,
+  HostMirrorSource,
   InstallStageResult,
   RuntimeDoctorCheck,
   RuntimeFailureFields,
   RuntimeInitMode,
-} from '@/types/electron'
+} from '@/types/host'
 import type { LaunchStep } from '@/types/launch'
 import type { MirrorConfig } from '@/types/mirror'
 import type {
@@ -41,7 +41,7 @@ import type {
 
 export function useInitializationFlow() {
   const { t } = useI18n()
-  const logger = window.electronAPI.getLogger('初始化流程')
+  const logger = window.hostAPI.getLogger('初始化流程')
 
   interface StepDefinition {
     key: InitializationStepKey
@@ -351,7 +351,7 @@ export function useInitializationFlow() {
 
   async function executeRuntimeInitialization(): Promise<boolean> {
     try {
-      const result = await window.electronAPI.initialize(targetBranch.value, false)
+      const result = await window.hostAPI.initialize(targetBranch.value, false)
 
       if (!result.success) {
         const failedStep = steps.find(
@@ -401,7 +401,7 @@ export function useInitializationFlow() {
     let failure: RuntimeFailureFields = {}
 
     try {
-      const api = window.electronAPI
+      const api = window.hostAPI
       let result: InstallStageResult
 
       switch (stepKey) {
@@ -536,7 +536,7 @@ export function useInitializationFlow() {
     state.message = ''
 
     message.success(t('init.msg.initDone'))
-    await window.electronAPI.setInitializedVersion?.(version)
+    await window.hostAPI.setInitializedVersion?.(version)
     await getBackendVersion()
     await handleLocalEnterApp()
   }
@@ -595,7 +595,7 @@ export function useInitializationFlow() {
     }
 
     try {
-      const result = await window.electronAPI.openFile(target)
+      const result = await window.hostAPI.openFile(target)
       if (!result.success) {
         message.error(
           t('init.failure.openLogFailed', { error: result.error ?? t('init.msg.execFailed') })
@@ -610,7 +610,7 @@ export function useInitializationFlow() {
   async function runRuntimeDoctor(state: StepState) {
     state.doctorRunning = true
     try {
-      const result = await window.electronAPI.checkCriticalFiles()
+      const result = await window.hostAPI.checkCriticalFiles()
       state.doctorChecks = result.runtimeChecks ?? []
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error)
@@ -630,7 +630,7 @@ export function useInitializationFlow() {
     }
   }
 
-  function convertMirror(mirror: ElectronMirrorSource): MirrorConfig {
+  function convertMirror(mirror: HostMirrorSource): MirrorConfig {
     return {
       key: mirror.name,
       name: mirror.name,
@@ -642,7 +642,7 @@ export function useInitializationFlow() {
   }
 
   async function loadMirrorConfigs() {
-    const api = window.electronAPI
+    const api = window.hostAPI
     try {
       await api.initMirrors()
       const [pythonMirrors, getPipMirrors, gitMirrors, repoMirrors, pipMirrors] = await Promise.all(
@@ -673,7 +673,7 @@ export function useInitializationFlow() {
   }
 
   async function resolveStartIndex(): Promise<number> {
-    const api = window.electronAPI
+    const api = window.hostAPI
     const forceBackendUpdate = sessionStorage.getItem('forceBackendUpdate') === 'true'
     if (forceBackendUpdate) {
       sessionStorage.removeItem('forceBackendUpdate')
@@ -714,7 +714,7 @@ export function useInitializationFlow() {
       return
     }
 
-    const api = window.electronAPI
+    const api = window.hostAPI
     try {
       const context = await api.getRuntimeInitContext?.()
       if (context) {
@@ -757,7 +757,7 @@ export function useInitializationFlow() {
   onUnmounted(() => {
     if (initializationTimer) clearTimeout(initializationTimer)
 
-    const api = window.electronAPI
+    const api = window.hostAPI
     api.removePythonProgressListener?.()
     api.removePipProgressListener?.()
     api.removeGitProgressListener?.()

@@ -67,7 +67,7 @@ import { computed, getCurrentInstance, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { message, Modal } from 'ant-design-vue'
 
-const logger = window.electronAPI.getLogger('快速导航页面')
+const logger = window.hostAPI.getLogger('快速导航页面')
 
 const route = useRoute()
 const router = useRouter()
@@ -115,8 +115,8 @@ const navigateToManualPath = () => {
 
 const openDevtool = () => {
   try {
-    if ((window as any).electronAPI?.openDevTools) {
-      ;(window as any).electronAPI.openDevTools()
+    if ((window as any).hostAPI?.openDevTools) {
+      ;(window as any).hostAPI.openDevTools()
       logger.info('开发者工具已打开')
     } else {
       logger.warn('开发者工具API不可用')

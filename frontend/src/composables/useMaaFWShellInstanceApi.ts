@@ -33,10 +33,10 @@ export function useMaaFWShellInstanceApi() {
   const pickShellInstanceDirectory = async (
     scriptId: string
   ): Promise<{ dir: string; instances: MaaFWShellInstanceItem[] } | null> => {
-    if (!window.electronAPI?.selectFolder) {
+    if (!window.hostAPI?.selectFolder) {
       throw new Error(t('edit.filePickingUnavailableRun'))
     }
-    const dir = await window.electronAPI.selectFolder()
+    const dir = await window.hostAPI.selectFolder()
     if (!dir) return null
     return { dir, instances: await listShellInstances(scriptId, dir) }
   }

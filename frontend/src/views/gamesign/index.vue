@@ -18,7 +18,7 @@ const { t } = useI18n()
 
 defineOptions({ name: 'GameSignPage' })
 
-const logger = window.electronAPI.getLogger('游戏社区')
+const logger = window.hostAPI.getLogger('游戏社区')
 const route = useRoute()
 const router = useRouter()
 

@@ -5,7 +5,7 @@ export function useWhimboxIssueReport(logger: ReportLogger) {
   const { exporting, exportIssueReport } = useIssueReport(logger, {
     label: 'Whimbox',
     fallbackName: 'Whimbox-logs-*.zip',
-    exportFn: () => window.electronAPI?.exportWhimboxIssueReport?.(),
+    exportFn: () => window.hostAPI?.exportWhimboxIssueReport?.(),
   })
   return { exporting, exportWhimboxIssueReport: exportIssueReport }
 }

@@ -22,7 +22,7 @@ const props = defineProps<{ emulatorId: string; initialRoot?: string; addedRoots
 const emit = defineEmits<{ added: [] }>()
 
 const { t } = useI18n()
-const logger = window.electronAPI.getLogger('Emulator2')
+const logger = window.hostAPI.getLogger('Emulator2')
 const api = useAvdApi()
 
 const root = ref('')
@@ -62,8 +62,8 @@ const check = async (refresh = false) => {
 }
 
 const pickRoot = async () => {
-  if (!window.electronAPI?.selectFolder) return
-  const picked = await window.electronAPI.selectFolder()
+  if (!window.hostAPI?.selectFolder) return
+  const picked = await window.hostAPI.selectFolder()
   if (!picked) return
   root.value = picked
   await check(true)

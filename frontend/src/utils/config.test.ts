@@ -30,7 +30,7 @@ beforeEach(() => {
   })
   getItem.mockImplementation((key: string) => legacy.get(key) ?? null)
   vi.stubGlobal('window', {
-    electronAPI: {
+    hostAPI: {
       loadConfig,
       saveConfig,
       resetConfig,

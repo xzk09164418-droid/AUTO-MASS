@@ -118,7 +118,7 @@ import { QuestionCircleOutlined } from '@ant-design/icons-vue'
 
 const { t } = useI18n()
 
-const logger = window.electronAPI.getLogger('日志时间戳选择器')
+const logger = window.hostAPI.getLogger('日志时间戳选择器')
 
 interface Props {
   logFilePath?: string
@@ -286,10 +286,10 @@ const loadLogFile = async () => {
   try {
     loadingPreview.value = true
 
-    // 使用Electron API读取文件
-    if (window.electronAPI) {
-      // 使用Electron API读取文件
-      const content = await window.electronAPI.readFile(targetPath)
+    // 使用Node 宿主 API读取文件
+    if (window.hostAPI) {
+      // 使用Node 宿主 API读取文件
+      const content = await window.hostAPI.readFile(targetPath)
 
       if (!content) {
         message.warning(t('comp.logFileEmptyCould'))
@@ -302,7 +302,7 @@ const loadLogFile = async () => {
       // 过滤掉空行，但保留原索引映射
       logLines.value = logLines.value.filter(line => line.trim() !== '').slice(0, 50) // 进一步过滤并限制行数
     } else {
-      // 如果没有Electron API可用，显示错误信息
+      // 如果没有Node 宿主 API可用，显示错误信息
       message.error(t('comp.fileSystemUnavailableUse'))
       return
     }

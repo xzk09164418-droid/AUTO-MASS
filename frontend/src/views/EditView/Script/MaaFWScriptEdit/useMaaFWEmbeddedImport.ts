@@ -37,7 +37,7 @@ export function useMaaFWEmbeddedImport({
   isPageUnmounted,
 }: MaaFWEmbeddedImportOptions) {
   const { t } = useI18n()
-  const logger = window.electronAPI.getLogger('MaaFW 脚本编辑')
+  const logger = window.hostAPI.getLogger('MaaFW 脚本编辑')
   const { getEmbeddedStatus, reimportEmbedded, syncEmbedded } = useMaaFWEmbeddedApi()
   const { ensureEnvSubscription } = channel
 
@@ -91,11 +91,11 @@ export function useMaaFWEmbeddedImport({
 
   const selectMaaFWPath = async () => {
     try {
-      if (!window.electronAPI) {
+      if (!window.hostAPI) {
         message.error(t('edit.filePickingUnavailableRun'))
         return
       }
-      const path = await window.electronAPI.selectFolder()
+      const path = await window.hostAPI.selectFolder()
       if (!path) return
       // 选目录 = 导入：第一次建副本，之后是换来源并重新导入。Info.Path 由后端在
       // 导入成功后写入，失败时旧副本与旧来源都原样不动，这里也就不动本地草稿。

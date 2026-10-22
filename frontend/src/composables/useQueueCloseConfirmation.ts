@@ -1,7 +1,7 @@
 import { Modal } from 'ant-design-vue'
 import { translate as t } from '@/i18n'
 
-const logger = window.electronAPI.getLogger('窗口关闭确认')
+const logger = window.hostAPI.getLogger('窗口关闭确认')
 
 export const hasRunningTasks = (): boolean => {
   try {

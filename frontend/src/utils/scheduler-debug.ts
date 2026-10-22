@@ -2,7 +2,7 @@
 import { useWebSocket } from '@/composables/useWebSocket'
 import { subscriptionCount } from '@/services/websocket/subscriptions'
 
-const logger = window.electronAPI.getLogger('调度器调试')
+const logger = window.hostAPI.getLogger('调度器调试')
 
 export function debugScheduler() {
   logger.info('=== 调度中心调试信息 ===')

@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vite-plus/test'
 // ==================== 全局桩 ====================
 
 const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }
-vi.stubGlobal('window', { electronAPI: { getLogger: () => logger } })
+vi.stubGlobal('window', { hostAPI: { getLogger: () => logger } })
 
 const getSettingsMock = vi.fn()
 vi.mock('@/api', () => ({

@@ -3,7 +3,7 @@ import { ref } from 'vue'
 import { message } from 'ant-design-vue'
 import { useSettingsApi } from '@/composables/useSettingsApi'
 import { OpenAPI, type GlobalConfig } from '@/api'
-const logger = window.electronAPI.getLogger('音频播放器')
+const logger = window.hostAPI.getLogger('音频播放器')
 
 type VoiceSettings = NonNullable<GlobalConfig['Voice']>
 

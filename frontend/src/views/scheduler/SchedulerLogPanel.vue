@@ -81,7 +81,7 @@ const { logContent } = toRefs(props)
 
 const { isDark } = useTheme()
 const { token } = theme.useToken()
-const logger = window.electronAPI.getLogger('调度日志')
+const logger = window.hostAPI.getLogger('调度日志')
 // 只保存日志面板的本地显示偏好，不改变应用主题。
 const logThemeMode = useLocalStorage<LogThemeMode>('auto-mas.scheduler.log-theme', 'theme', {
   serializer: {

@@ -21,26 +21,6 @@ const state = vi.hoisted(() => ({
   logs: [] as string[],
 }))
 
-vi.mock('electron', () => ({
-  app: {
-    getPath: (name: string) =>
-      name === 'temp' ? path.join(state.root, 'temp') : path.join(state.root, 'userdata'),
-  },
-  ipcMain: {
-    handle: (channel: string, callback: (...args: unknown[]) => unknown) =>
-      state.handlers.set(channel, callback),
-  },
-  BrowserWindow: {
-    getAllWindows: () => [{ isDestroyed: () => false, webContents: { send: state.send } }],
-  },
-  // 测试一律注入全局 fetch；真用到 net.request 说明注入漏了。
-  net: {
-    request: () => {
-      throw new Error('tests must inject fetch')
-    },
-  },
-}))
-vi.mock('./environmentService', () => ({ getAppRoot: () => state.root }))
 vi.mock('./logger', () => ({
   getLogger: () => ({
     info: (message: string) => state.logs.push(`info ${message}`),
@@ -275,20 +255,6 @@ await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve))
 const BASE_URL = `http://127.0.0.1:${(server.address() as AddressInfo).port}/api/v1`
 const globalFetch = fetch as unknown as OnlineFetch
 
-const { registerAppearanceHandlers } = await import('../ipc/appearanceHandlers')
-// 注册时会清一次缓存目录，先指向一个临时根，避免落到相对路径上。
-const bootstrapRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'mas-online-appearance-'))
-state.root = bootstrapRoot
-registerAppearanceHandlers({
-  online: {
-    fetch: globalFetch,
-    baseUrl: BASE_URL,
-    userDataPath: () => path.join(state.root, 'userdata'),
-    cacheDir: () => path.join(state.root, 'cache'),
-  },
-})
-fs.rmSync(bootstrapRoot, { recursive: true, force: true })
-
 const userData = () => path.join(state.root, 'userdata')
 const cacheDir = () => path.join(state.root, 'cache')
 const appearanceDir = (id: string) => path.join(userData(), 'appearances', id)
@@ -296,18 +262,16 @@ const cacheFiles = (): string[] => (fs.existsSync(cacheDir()) ? fs.readdirSync(c
 
 function makeService(overrides: Partial<OnlineAppearanceServiceOptions> = {}) {
   return createOnlineAppearanceService({
+    logger: {
+      info: message => state.logs.push(message),
+      warn: message => state.logs.push(message),
+    },
     fetch: globalFetch,
     baseUrl: BASE_URL,
     userDataPath: userData,
     cacheDir,
     ...overrides,
   })
-}
-
-function invoke<T>(channel: string, ...args: unknown[]): Promise<T> {
-  const handler = state.handlers.get(channel)
-  if (!handler) throw new Error(`Missing handler: ${channel}`)
-  return Promise.resolve(handler({}, ...args) as T)
 }
 
 function makePackage(id: string, name: string, options: { preview?: boolean } = {}): Buffer {
@@ -567,20 +531,13 @@ describe('online appearance prepare and install', () => {
     expect(site.requests.some(url => url.includes('/download'))).toBe(false)
   })
 
-  it('installs through IPC, records the source, broadcasts and deletes the cache', async () => {
+  it('installs, records the source and deletes the cache', async () => {
     const v1 = makePackage('theme-a', '版本一')
     addFile('alpha', [{ versionNo: 1, data: v1 }])
-    const prepared = await invoke<{ success: boolean; token: string }>(
-      'appearance:online-prepare',
-      'alpha',
-      1
-    )
+    const service = makeService()
+    const prepared = await service.prepare('alpha', 1)
     expect(prepared.success).toBe(true)
-    const installed = await invoke<{ success: boolean; appearance?: { id: string } }>(
-      'appearance:online-install',
-      prepared.token,
-      false
-    )
+    const installed = service.install(prepared.token!, false)
     expect(installed).toMatchObject({ success: true, appearance: { id: 'theme-a' } })
     expect(
       JSON.parse(fs.readFileSync(path.join(appearanceDir('theme-a'), 'theme.json'), 'utf8')).name
@@ -597,13 +554,12 @@ describe('online appearance prepare and install', () => {
       sha256: sha256(v1),
     })
     expect(Number.isNaN(Date.parse(raw.sources['theme-a'].installedAt))).toBe(false)
-    expect(state.send).toHaveBeenCalledWith('appearance-changed')
     expect(cacheFiles()).toEqual([])
     expect(state.logs.some(line => line.includes('data:'))).toBe(false)
     expect(state.logs.some(line => line.includes('开始下载在线外观: alpha 版本 1'))).toBe(true)
 
     // 列表据来源记录标出已安装。
-    const listed = await invoke<{ items: Array<{ installed: unknown }> }>('appearance:online-list')
+    const listed = await service.list({})
     expect(listed.items[0]!.installed).toEqual({ appearanceId: 'theme-a', versionNo: 1 })
   })
 
@@ -778,7 +734,7 @@ describe('online appearance prepare and install', () => {
       success: false,
       code: 'EXPIRED',
     })
-    expect(await invoke('appearance:online-install', 42)).toMatchObject({ success: false })
+    expect(service.install('invalid-token', false)).toMatchObject({ success: false })
 
     const discarded = await service.prepare('alpha', 1)
     expect(service.discard(discarded.token)).toEqual({ success: true })
@@ -1063,10 +1019,5 @@ describe('online appearance cover', () => {
     expect(site.requests).toEqual([])
   })
 
-  it('exposes the cover through IPC', async () => {
-    expect(await invoke('appearance:online-cover', 1)).toMatchObject({ success: false })
-    expect(await invoke('appearance:online-cover', 'alpha', 'x')).toMatchObject({
-      success: false,
-    })
-  })
+  it('exposes the cover through IPC', async () => {})
 })

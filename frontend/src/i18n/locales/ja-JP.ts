@@ -1021,7 +1021,8 @@ export default {
     important: '重要',
     basicInfo: '基本情報',
     couldNotCreateUser: 'アカウントを作成できませんでした',
-    filePickingUnavailableRun: 'ファイル選択機能は利用できません。Electron 環境で実行してください',
+    filePickingUnavailableRun:
+      'ファイル選択機能は利用できません。ローカル Node サービスを確認してください',
     scriptDoesNotExist: 'マネージドスクリプトが存在しないか、読み込みに失敗しました',
     scriptName: 'マネージドスクリプト名',
     enterScriptName: 'マネージドスクリプト名を入力してください',

@@ -17,7 +17,7 @@ import {
   type WSJsonObject,
 } from './types'
 
-const logger = window.electronAPI.getLogger('WebSocket连接')
+const logger = window.hostAPI.getLogger('WebSocket连接')
 
 // ==================== 配置 ====================
 
@@ -121,16 +121,16 @@ const negotiateWebSocketUrl = async (): Promise<string> => {
   let websocketBase = toWebSocketBase(httpBase)
   let wsPath = DEFAULT_WS_PATH
 
-  if (window.electronAPI?.getApiEndpoint) {
+  if (window.hostAPI?.getApiEndpoint) {
     try {
-      httpBase = await window.electronAPI.getApiEndpoint('local')
+      httpBase = await window.hostAPI.getApiEndpoint('local')
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error)
       logger.warn(`获取 HTTP 端点失败，继续使用当前 OpenAPI.BASE: ${errorMsg}`)
     }
 
     try {
-      const endpoint = await window.electronAPI.getApiEndpoint('websocket')
+      const endpoint = await window.hostAPI.getApiEndpoint('websocket')
       websocketBase = toWebSocketBase(endpoint)
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error)

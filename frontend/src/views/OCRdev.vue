@@ -486,7 +486,7 @@ import type { OCRScreenshotIn } from '@/api/models/OCRScreenshotIn'
 import type { OCRScreenshotOut } from '@/api/models/OCRScreenshotOut'
 import type { ADBScreenshotIn } from '@/api/models/ADBScreenshotIn'
 import type { ADBScreenshotOut } from '@/api/models/ADBScreenshotOut'
-const logger = window.electronAPI.getLogger('OCR调试')
+const logger = window.hostAPI.getLogger('OCR调试')
 
 // 当前激活的标签页
 const activeTab = ref('screenshot')

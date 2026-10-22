@@ -29,7 +29,7 @@ export function useMaaFWUpdatePanel({
   handleChange,
   runPreview,
 }: MaaFWUpdatePanelOptions) {
-  const logger = window.electronAPI.getLogger('MaaFW 脚本编辑')
+  const logger = window.hostAPI.getLogger('MaaFW 脚本编辑')
   const { checkMaaFWUpdate, applyMaaFWUpdate } = useMaaFWUpdateApi()
 
   // 与后端 can_check_project_update 同一口径：没声明 version 判断不了新旧；没有

@@ -305,7 +305,7 @@ import { useEmulatorDeviceOptions } from '@/composables/useEmulatorDeviceOptions
 import { Service, type ComboBoxItem } from '@/api'
 
 const { t } = useI18n()
-const logger = window.electronAPI.getLogger('BAAH脚本编辑')
+const logger = window.hostAPI.getLogger('BAAH脚本编辑')
 const route = useRoute()
 const router = useRouter()
 const { getScript, updateScript } = useScriptApi()
@@ -449,7 +449,7 @@ const loadScript = async () => {
 const handleCancel = () => router.push('/scripts')
 
 const selectBaahPath = async () => {
-  const paths = await window.electronAPI?.selectFile([
+  const paths = await window.hostAPI?.selectFile([
     { name: 'BAAH.exe', extensions: ['exe'] },
     { name: t('edit.allFiles'), extensions: ['*'] },
   ])

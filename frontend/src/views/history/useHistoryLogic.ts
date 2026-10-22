@@ -6,7 +6,7 @@ import { message } from 'ant-design-vue'
 import dayjs from 'dayjs'
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 
-const logger = window.electronAPI.getLogger('历史记录')
+const logger = window.hostAPI.getLogger('历史记录')
 
 // 历史记录日期分组接口
 export interface HistoryDateGroup {
@@ -237,8 +237,8 @@ export function useHistoryLogic({ searchOnMount = true } = {}) {
 
     try {
       const logFilePath = currentJsonFile.value.replace(/\.json$/, '.log')
-      if (window.electronAPI && window.electronAPI.openFile) {
-        const result = await window.electronAPI.openFile(logFilePath)
+      if (window.hostAPI && window.hostAPI.openFile) {
+        const result = await window.hostAPI.openFile(logFilePath)
         if (result.success) {
           message.success(t('history.toast.logOpened'))
         } else {
@@ -264,8 +264,8 @@ export function useHistoryLogic({ searchOnMount = true } = {}) {
 
     try {
       const logFilePath = currentJsonFile.value.replace(/\.json$/, '.log')
-      if (window.electronAPI && window.electronAPI.showItemInFolder) {
-        await window.electronAPI.showItemInFolder(logFilePath)
+      if (window.hostAPI && window.hostAPI.showItemInFolder) {
+        await window.hostAPI.showItemInFolder(logFilePath)
         message.success(t('history.toast.dirOpened'))
       } else {
         message.error(t('history.toast.openDirUnsupported'))

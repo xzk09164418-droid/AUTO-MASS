@@ -16,7 +16,7 @@ interface ToolsStatusPollingOptions {
   enabled?: () => boolean
   /** 后端返回体无效时的提示文案 */
   invalidMessage: () => string
-  logger: ReturnType<typeof window.electronAPI.getLogger>
+  logger: ReturnType<typeof window.hostAPI.getLogger>
 }
 
 /**

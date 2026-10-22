@@ -27,7 +27,7 @@ const items = ref<TrayMenuItem[]>([])
 const actionOptions = TRAY_ACTION_OPTIONS
 // 可启动的任务列表（队列 + 未锁定的脚本），供「启动任务」动作选择
 const taskOptions = ref<TaskOption[]>([])
-const logger = window.electronAPI?.getLogger?.('托盘菜单')
+const logger = window.hostAPI?.getLogger?.('托盘菜单')
 
 const columns = computed<TableColumnsType>(() => [
   { title: t('setting.tray.colLabel'), key: 'label', width: '35%' },
@@ -94,7 +94,7 @@ const onTaskChange = (item: TrayMenuItem) => {
 
 const load = async () => {
   try {
-    const config = await window.electronAPI?.loadConfig()
+    const config = await window.hostAPI?.loadConfig()
     const saved = config?.UI?.TrayItems
     items.value =
       Array.isArray(saved) && saved.length ? saved.map(normalizeTrayItem) : [...DEFAULT_TRAY_ITEMS]
@@ -129,7 +129,7 @@ const save = async () => {
       action: item.action,
       taskId: item.taskId,
     }))
-    const ok = await window.electronAPI?.updateTrayConfig(payload)
+    const ok = await window.hostAPI?.updateTrayConfig(payload)
     if (!ok) {
       message.error(t('setting.toast.trayMenuSaveFailed'))
     }

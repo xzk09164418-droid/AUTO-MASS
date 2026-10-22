@@ -19,7 +19,7 @@ import {
 const logError = vi.fn()
 
 beforeEach(() => {
-  vi.stubGlobal('window', { electronAPI: { getLogger: () => ({ error: logError }) } })
+  vi.stubGlobal('window', { hostAPI: { getLogger: () => ({ error: logError }) } })
 })
 
 afterEach(() => {

@@ -12,7 +12,7 @@ import BilibiliAgreement from './BilibiliAgreement.vue'
 const { t } = useI18n()
 const route = useRoute()
 const store = useMysteryStore()
-const logger = window.electronAPI.getLogger('神秘入口')
+const logger = window.hostAPI.getLogger('神秘入口')
 const form = reactive({ accessCode: '' })
 const error = ref('')
 const loadFailed = ref(false)

@@ -100,7 +100,7 @@ export function useLogPatternDebug(options: UseLogPatternDebugOptions = {}) {
     }
     try {
       loadingLog.value = true
-      const content = await window.electronAPI.readFile(logPath)
+      const content = await window.hostAPI.readFile(logPath)
       if (!content) {
         message.warning(t('edit.logFileEmptyCould'))
         return

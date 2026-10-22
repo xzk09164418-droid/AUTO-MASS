@@ -12,6 +12,7 @@ function createBrowserHost(root, backendPort, lifecycle = {}) {
     ['theme', 'mascot'].map(kind => [
       kind,
       services.createOnlineAppearanceService({
+        logger: services.getLogger('在线外观'),
         fetch: (url, init) => fetch(url, { ...init, redirect: 'manual' }),
         userDataPath: () => userData,
         cacheDir: () => path.join(userData, 'cache', kind),

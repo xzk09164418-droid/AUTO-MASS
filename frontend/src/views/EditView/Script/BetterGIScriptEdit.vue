@@ -296,7 +296,7 @@ import { useScriptApi } from '@/composables/useScriptApi'
 import { useSaveQueue } from '@/composables/useSaveQueue'
 
 const { t } = useI18n()
-const logger = window.electronAPI.getLogger('BetterGI脚本编辑')
+const logger = window.hostAPI.getLogger('BetterGI脚本编辑')
 const route = useRoute()
 const router = useRouter()
 const { getScript, updateScript } = useScriptApi()
@@ -448,11 +448,11 @@ const loadScript = async () => {
 }
 
 const selectRootPath = async () => {
-  const picked = await window.electronAPI.selectFolder()
+  const picked = await window.hostAPI.selectFolder()
   if (!picked) return
   const normalized = picked.replace(/\\/g, '/')
   const exePath = `${normalized}/${BGI_EXE_NAME}`
-  const exists = await window.electronAPI.fileExists(exePath)
+  const exists = await window.hostAPI.fileExists(exePath)
   if (!exists) {
     Modal.error({
       title: t('edit.bettergiInvalidDirectory'),

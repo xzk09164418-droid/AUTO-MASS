@@ -25,7 +25,7 @@ export const loadMSSPlanComboxItems = async (): Promise<void> => {
     mssPlanComboxItems.value = response.data
   } catch (error) {
     // 取不到计划表时只留「固定」一项，其它设置照常能改
-    window.electronAPI
+    window.hostAPI
       .getLogger('MaaFW用户编辑')
       .error(`加载计划表选项失败: ${error instanceof Error ? error.message : String(error)}`)
   }

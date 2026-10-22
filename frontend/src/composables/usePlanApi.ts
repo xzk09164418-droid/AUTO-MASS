@@ -6,7 +6,7 @@ import { Service } from '@/api'
 import { useAudioPlayer } from '@/composables/useAudioPlayer'
 import { getPlanCreateType, type PlanConfigType } from '@/utils/planTypeRegistry'
 
-const logger = window.electronAPI.getLogger('计划API')
+const logger = window.hostAPI.getLogger('计划API')
 
 export function usePlanApi() {
   const loading = ref(false)

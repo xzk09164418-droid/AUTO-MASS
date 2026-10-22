@@ -93,11 +93,11 @@ const loadReplays = async () => {
 }
 
 const openFile = async (filePath: string) => {
-  if (!window.electronAPI?.openFile) {
+  if (!window.hostAPI?.openFile) {
     message.error(t('history.replays.openFileUnsupported'))
     return
   }
-  const result = await window.electronAPI.openFile(filePath)
+  const result = await window.hostAPI.openFile(filePath)
   if (!result.success) {
     message.error(result.error || t('history.replays.openFileFailed'))
   }
@@ -116,11 +116,11 @@ const playReplay = async (replay: ReplayRecord) => {
 }
 
 const locatePath = async (path: string) => {
-  if (!window.electronAPI?.showItemInFolder) {
+  if (!window.hostAPI?.showItemInFolder) {
     message.error(t('history.replays.openDirectoryUnsupported'))
     return
   }
-  await window.electronAPI.showItemInFolder(path)
+  await window.hostAPI.showItemInFolder(path)
   message.success(t('history.replays.directoryOpened'))
 }
 

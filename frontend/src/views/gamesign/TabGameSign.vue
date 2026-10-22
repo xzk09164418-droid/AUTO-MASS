@@ -40,7 +40,7 @@ const {
   onRefreshConfig?: () => Promise<void>
 }>()
 
-const logger = window.electronAPI.getLogger('游戏社区')
+const logger = window.hostAPI.getLogger('游戏社区')
 const signLoading = ref(false)
 const notifySaving = ref(false)
 const credentialToolDescription = computed(() => t('gamesign.section.toolDesc'))

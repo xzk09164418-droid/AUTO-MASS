@@ -136,7 +136,6 @@
       </a-form>
     </a-card>
   </ConfigLockPanel>
-
 </template>
 
 <script setup lang="ts">
@@ -156,7 +155,7 @@ import UserNotifyConfig from '@/components/UserNotifyConfig.vue'
 
 const { t } = useI18n()
 
-const logger = window.electronAPI.getLogger('通用用户编辑')
+const logger = window.hostAPI.getLogger('通用用户编辑')
 
 const router = useRouter()
 const route = useRoute()
@@ -406,7 +405,6 @@ onMounted(async () => {
 
   await loadScriptInfo()
 })
-
 </script>
 
 <style scoped>
@@ -566,5 +564,4 @@ onMounted(async () => {
     max-width: 100%;
   }
 }
-
 </style>

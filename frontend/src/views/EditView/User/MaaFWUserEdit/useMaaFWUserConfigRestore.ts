@@ -30,7 +30,7 @@ export function useMaaFWUserConfigRestore({
   reloadInterface,
 }: MaaFWUserConfigRestoreOptions) {
   const { t } = useI18n()
-  const logger = window.electronAPI.getLogger('MaaFW用户编辑')
+  const logger = window.hostAPI.getLogger('MaaFW用户编辑')
 
   // ══ 配置恢复（通用组件 props 供给：双目标 MAS 在前脚本在后）══
   // 专项统一名（文案参数化用）：MaaFW 统一叫「maafw」

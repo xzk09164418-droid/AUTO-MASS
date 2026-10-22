@@ -10,7 +10,7 @@ vi.mock('@/utils/config', () => ({
   saveConfig: vi.fn(),
 }))
 
-// useTaskRuntimeState 在模块加载时就摸 window.electronAPI 建 logger，node 测试环境没有；
+// useTaskRuntimeState 在模块加载时就摸 window.hostAPI 建 logger，node 测试环境没有；
 // 整条斩掉，换成手动驱动的状态表，顺便覆盖 store 里的运行态派生逻辑
 vi.mock('@/composables/useTaskRuntimeState', async () => {
   const { ref } = await import('vue')
@@ -28,7 +28,7 @@ const mockedSaveConfig = vi.mocked(saveConfig)
 
 describe('performance store', () => {
   beforeEach(() => {
-    vi.stubGlobal('window', { electronAPI: {} })
+    vi.stubGlobal('window', { hostAPI: {} })
     setActivePinia(createPinia())
     vi.clearAllMocks()
     mockedGetConfig.mockResolvedValue({ lowPerformanceMode: false } as Awaited<
@@ -78,7 +78,7 @@ describe('performance store', () => {
     const removeWindowActivityListener = vi.fn()
     const onWindowActivityChange = vi.fn(() => removeWindowActivityListener)
     vi.stubGlobal('window', {
-      electronAPI: { onWindowActivityChange },
+      hostAPI: { onWindowActivityChange },
     })
 
     const store = usePerformanceStore()

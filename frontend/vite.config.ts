@@ -38,11 +38,11 @@ const sentryUploadPlugin = sentryAuthToken
     })
   : undefined
 
-// 后端端口与 main.py、electron/services/instanceConfig.ts 保持一致：
+// 后端端口与 main.py 保持一致：
 // dev server 对应开发环境后端，构建产物对应正式版后端
 const DEFAULT_HTTP_PORT = 36163
 const DEV_HTTP_PORT = 36164
-// 与 package.json 中 electron-dev 的 VITE_DEV_SERVER_URL 对齐，需要错开时用 vite --port 覆盖
+// 与 本机 Node 宿主的开发入口 对齐，需要错开时用 vite --port 覆盖
 const DEV_SERVER_PORT = 5173
 
 const parsePort = (value: string | undefined): number | undefined => {
@@ -87,7 +87,7 @@ export default defineConfig(({ command }) => {
     // 开发服务器配置
     server: {
       // 钉死 IPv4：localhost 解析随环境漂移（本机 vite 曾只绑 ::1，而 wait-on 经 Node 访问
-      // IPv6 回环被拒），host 需与 electron-dev 的 wait-on/VITE_DEV_SERVER_URL 同为 127.0.0.1
+      // IPv6 回环被拒），host 需与本机宿主同为 127.0.0.1
       host: '127.0.0.1',
       port: DEV_SERVER_PORT,
       // 端口被占用时直接失败，避免静默换端口后 Electron 仍加载另一实例的页面
@@ -97,19 +97,17 @@ export default defineConfig(({ command }) => {
       headers: { 'Cache-Control': 'no-store' },
       watch: {
         // E2E 临时目录由 runner 放在 frontend 外；这里仅排除构建产物。
-        ignored: ['**/node_modules/**', '**/dist/**', '**/dist-electron/**'],
+        ignored: ['**/node_modules/**', '**/dist/**'],
       },
     },
     build: {
       rollupOptions: {
         input: {
-          main: path.resolve(__dirname, 'index.html'),
-          mascot: path.resolve(__dirname, 'mascot.html'),
-          mascotMenu: path.resolve(__dirname, 'mascot-menu.html'),
+          main: path.resolve(__dirname, 'browser.html'),
         },
       },
       // 优化构建性能
-      chunkSizeWarningLimit: 5000, // 提高到 5MB，适合 Electron 应用
+      chunkSizeWarningLimit: 5000, // 提高到 5MB，适合本机浏览器控制台
       sourcemap: 'hidden', // 生成供 Sentry 上传的 sourcemap，但不在生产 JS 中暴露引用
     },
     test: {
@@ -118,9 +116,7 @@ export default defineConfig(({ command }) => {
       // https://viteplus.dev/guide/vitest-v5#remove-unneeded-compatibility-settings
       // https://vitest.dev/guide/migration/#clearmocks-is-enabled-by-default
       clearMocks: false,
-      // dist-electron 是 Electron 主进程的 CJS 编译产物（源测试在 electron/），
-      // 编译后的 require('vite-plus/test') 无法运行，不排除会让 yarn test 随构建必然失败
-      exclude: [...configDefaults.exclude, '**/dist-electron/**'],
+      exclude: [...configDefaults.exclude],
     },
   }
 })

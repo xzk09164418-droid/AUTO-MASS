@@ -16,7 +16,7 @@ import { Service, type ZzzOdRecycleEntryOut, type ZzzOdSlotOut } from '@/api'
  */
 export function useZzzOdSlotManage(scriptId: () => string) {
   const { t } = useI18n()
-  const logger = window.electronAPI.getLogger('ZZZ-OD脚本编辑')
+  const logger = window.hostAPI.getLogger('ZZZ-OD脚本编辑')
 
   const panelKeys = ref<string[]>([])
   const slotLoaded = ref(false)
@@ -189,8 +189,8 @@ export function useZzzOdSlotManage(scriptId: () => string) {
   /** 在文件管理器里打开回收条目的归档目录（便于核对或手动找回文件） */
   const openRecycleFolder = async (entry: ZzzOdRecycleEntryOut) => {
     try {
-      if (!window.electronAPI?.openFile) return
-      const result = await window.electronAPI.openFile(entry.path)
+      if (!window.hostAPI?.openFile) return
+      const result = await window.hostAPI.openFile(entry.path)
       if (result && !result.success) {
         message.error(result.error || t('edit.zzzodRecycleOpenFailed'))
       }

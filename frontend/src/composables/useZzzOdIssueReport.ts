@@ -5,7 +5,7 @@ export function useZzzOdIssueReport(logger: ReportLogger) {
   const { exporting, exportIssueReport } = useIssueReport(logger, {
     label: 'ZZZ-OD',
     fallbackName: 'ZZZ-OD-logs-*.zip',
-    exportFn: () => window.electronAPI?.exportZzzOdIssueReport?.(),
+    exportFn: () => window.hostAPI?.exportZzzOdIssueReport?.(),
   })
   return { exporting, exportZzzOdIssueReport: exportIssueReport }
 }

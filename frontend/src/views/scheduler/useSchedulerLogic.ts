@@ -62,7 +62,7 @@ const runtimeModeLabel = (mode: string | null): string | null => {
   return option ? t(option.labelKey) : mode
 }
 
-const logger = window.electronAPI.getLogger('调度台逻辑')
+const logger = window.hostAPI.getLogger('调度台逻辑')
 const taskApi = useTaskApi()
 
 // 使用 sessionStorage 存储调度台状态，支持页面刷新时保留数据

@@ -6,7 +6,7 @@ const mocks = vi.hoisted(() => {
   const calls: string[] = []
   const logger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} }
   ;(globalThis as { window?: unknown }).window = {
-    electronAPI: { getLogger: () => logger },
+    hostAPI: { getLogger: () => logger },
   }
   return {
     calls,
@@ -259,9 +259,8 @@ describe('useMaaFWScriptPage 加载顺序', () => {
 
   it('选目录导入：先挂订阅再发请求，导入成功后重新拉脚本类型；作用域销毁时退订', async () => {
     const { scope, page } = mountPage()
-    ;(
-      globalThis.window as unknown as { electronAPI: Record<string, unknown> }
-    ).electronAPI.selectFolder = async () => 'D:/other'
+    ;(globalThis.window as unknown as { hostAPI: Record<string, unknown> }).hostAPI.selectFolder =
+      async () => 'D:/other'
     mocks.subscribe.mockImplementation(() => {
       mocks.calls.push('subscribe')
       return 'sub_1'
@@ -280,9 +279,8 @@ describe('useMaaFWScriptPage 加载顺序', () => {
 
   it('导入后类型变成有自己页面的特调、页面宿主已换掉本页：旧实例不再读 interface、不回写路径', async () => {
     const { scope, page } = mountPage()
-    ;(
-      globalThis.window as unknown as { electronAPI: Record<string, unknown> }
-    ).electronAPI.selectFolder = async () => 'D:/other'
+    ;(globalThis.window as unknown as { hostAPI: Record<string, unknown> }).hostAPI.selectFolder =
+      async () => 'D:/other'
     mocks.reimportEmbedded.mockImplementation(async () => {
       mocks.calls.push('reimport')
       return { status: { copyPath: 'copy', copyHealthy: true }, message: '' }

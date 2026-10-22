@@ -7,7 +7,7 @@ import { useAudioPlayer } from '@/composables/useAudioPlayer'
 import type { ChangelogData } from '@/utils/changelog'
 import { isUpdatePaused } from '@/composables/updatePause'
 
-const logger = window.electronAPI.getLogger('更新检查器')
+const logger = window.hostAPI.getLogger('更新检查器')
 
 // 获取版本号，优先使用环境变量，否则使用一个测试版本
 const version = import.meta.env.VITE_APP_VERSION || '1.0.0'

@@ -137,7 +137,7 @@ beforeEach(() => {
   killAllProcesses.mockResolvedValue({ success: true })
   appQuit.mockResolvedValue(undefined)
   vi.stubGlobal('window', {
-    electronAPI: {
+    hostAPI: {
       getLogger: () => logger,
       backendStatus,
       backendRestart,

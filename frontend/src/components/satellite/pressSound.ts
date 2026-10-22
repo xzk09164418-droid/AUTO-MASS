@@ -23,7 +23,7 @@ let pendingRelease: (() => void) | null = null
 let preparingPress: Promise<void> = Promise.resolve()
 let pressRequest = 0
 
-const logger = window.electronAPI.getLogger('按压音效')
+const logger = window.hostAPI.getLogger('按压音效')
 
 function builtinUrl(file: string): string {
   // base 是 './'：dev 下解析成 http://127.0.0.1:5173/sounds/x.mp3，打包后解析成相对 index.html 的路径
@@ -58,10 +58,7 @@ async function resolveCustomUrl(filePath: string): Promise<string | null> {
   try {
     // 渲染进程读不到磁盘音频，交给主进程读成 base64 再当 data URL 用；
     // 上限一并交给它挡在前面，读的时候就不会有超大文件进内存
-    const { base64, size } = await window.electronAPI.readFileBase64(
-      filePath,
-      MAX_PRESS_SOUND_BYTES
-    )
+    const { base64, size } = await window.hostAPI.readFileBase64(filePath, MAX_PRESS_SOUND_BYTES)
     if (!base64 || size > MAX_PRESS_SOUND_BYTES) {
       return null
     }

@@ -547,11 +547,11 @@ import {
   type WSTaskLogUpdatedData,
   type WSTaskNoticeData,
 } from '@/services/websocket/types'
-import type { PathDiscoveryCandidate } from '@/types/electron'
+import type { PathDiscoveryCandidate } from '@/types/host'
 
 const { t } = useI18n()
 
-const logger = window.electronAPI.getLogger('ok-ww脚本编辑')
+const logger = window.hostAPI.getLogger('ok-ww脚本编辑')
 const route = useRoute()
 const router = useRouter()
 const { getScript, updateScript } = useScriptApi()
@@ -887,7 +887,7 @@ const validateGamePath = async (launcherPath: string) => {
 
   let exists = false
   try {
-    exists = await window.electronAPI.fileExists(normalized)
+    exists = await window.hostAPI.fileExists(normalized)
   } catch {
     gamePathValidation.status = 'invalid'
     gamePathValidation.message = '当前游戏路径不合法：无法完成启动器文件校验'
@@ -1003,14 +1003,12 @@ const loadScript = async () => {
 }
 
 const selectRootPath = async () => {
-  const picked = await window.electronAPI.selectFolder()
+  const picked = await window.hostAPI.selectFolder()
   if (!picked) return
   const normalized = picked.replace(/\\/g, '/')
   const sentinelPaths = [OKWW_EXE_NAME, OKWW_APP_JSON_PATH]
   const exists = await Promise.all(
-    sentinelPaths.map(relativePath =>
-      window.electronAPI.fileExists(`${normalized}/${relativePath}`)
-    )
+    sentinelPaths.map(relativePath => window.hostAPI.fileExists(`${normalized}/${relativePath}`))
   )
   const missingPath = sentinelPaths.find((_, index) => !exists[index])
   if (missingPath) {
@@ -1028,7 +1026,7 @@ const discoverRootPath = async () => {
   if (isDiscoveringOkww.value) return
   isDiscoveringOkww.value = true
   try {
-    const result = await window.electronAPI.discoverOkwwPath()
+    const result = await window.hostAPI.discoverOkwwPath()
     const candidates = result.candidates || (result.path ? [{ path: result.path }] : [])
     if (!result.success || candidates.length === 0) {
       showPathRejectModal('未找到 ok-ww', result.error || '未找到有效的 ok-ww 安装目录')
@@ -1062,7 +1060,7 @@ const discoverGamePath = async () => {
   if (!okwwConfig.Game.Enabled || isDiscoveringGame.value) return
   isDiscoveringGame.value = true
   try {
-    const result = await window.electronAPI.discoverWutheringWavesPath()
+    const result = await window.hostAPI.discoverWutheringWavesPath()
     const candidates =
       result.candidates || (result.path ? [{ path: result.path, channel: result.channel }] : [])
     if (!result.success || candidates.length === 0) {
@@ -1108,13 +1106,13 @@ const confirmCandidateSelection = async () => {
 
 const selectGameRootPath = async () => {
   if (!okwwConfig.Game.Enabled) return
-  const picked = await window.electronAPI.selectFolder()
+  const picked = await window.hostAPI.selectFolder()
   if (!picked) return
 
   const normalized = picked.replace(/\\/g, '/')
 
   const candidateExe = normalized + '/' + WUWA_LAUNCHER_EXECUTABLE
-  if (await window.electronAPI.fileExists(candidateExe)) {
+  if (await window.hostAPI.fileExists(candidateExe)) {
     await saveGamePath(candidateExe, '鸣潮启动器路径已保存')
     return
   }
@@ -1203,7 +1201,7 @@ const saveClientPath = async (clientPath: string) => {
 
 const selectClientPath = async () => {
   if (!okwwConfig.Game.Enabled) return
-  const paths = await window.electronAPI.selectFile([
+  const paths = await window.hostAPI.selectFile([
     { name: '可执行文件', extensions: ['exe'] },
     { name: '所有文件', extensions: ['*'] },
   ])

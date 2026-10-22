@@ -8,7 +8,7 @@
 import { ref } from 'vue'
 import { Service, type UpdateCheckOut, type VersionOut } from '@/api'
 import { readUpdatePauseState, requestUpdateCheck } from './useUpdateChecker'
-const logger = window.electronAPI.getLogger('版本服务')
+const logger = window.hostAPI.getLogger('版本服务')
 
 // ========== 标题栏版本信息相关 ==========
 export const updateInfo = ref<UpdateCheckOut | null>(null)
@@ -49,7 +49,7 @@ export const getBackendVersion = async () => {
 
 export const checkRuntimeBackendUpdate = async () => {
   try {
-    const result = await window.electronAPI.checkRuntimeBackendUpdate?.()
+    const result = await window.hostAPI.checkRuntimeBackendUpdate?.()
     if (result?.staged === true) {
       runtimeBackendUpdateAvailable.value = true
       runtimeBackendUpdateCommitMessage.value = result.commitMessage ?? ''

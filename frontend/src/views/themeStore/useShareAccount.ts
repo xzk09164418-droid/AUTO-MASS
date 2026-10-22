@@ -14,7 +14,7 @@ export function useShareAccount(
     onError?: (message: string) => void
   } = {}
 ) {
-  const logger = window.electronAPI.getLogger('主题商店')
+  const logger = window.hostAPI.getLogger('主题商店')
   const { error, getShareAuthStatus, startShareAuth, pollShareAuth, cancelShareAuth } =
     useShareApi()
 

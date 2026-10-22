@@ -5,7 +5,7 @@ import { Service } from '@/api/services/Service'
 import { useAudioPlayer } from '@/composables/useAudioPlayer'
 
 export const useHomeNotice = () => {
-  const logger = window.electronAPI.getLogger('首页')
+  const logger = window.hostAPI.getLogger('首页')
   const { playSound } = useAudioPlayer()
 
   const noticeVisible = ref(false)

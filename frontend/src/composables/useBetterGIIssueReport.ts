@@ -5,7 +5,7 @@ export function useBetterGIIssueReport(logger: ReportLogger) {
   const { exporting, exportIssueReport } = useIssueReport(logger, {
     label: 'BetterGI',
     fallbackName: 'BetterGI-logs-*.zip',
-    exportFn: () => window.electronAPI?.exportBetterGIIssueReport?.(),
+    exportFn: () => window.hostAPI?.exportBetterGIIssueReport?.(),
   })
   return { exporting, exportBetterGIIssueReport: exportIssueReport }
 }

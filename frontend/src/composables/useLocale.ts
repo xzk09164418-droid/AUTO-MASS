@@ -14,7 +14,7 @@ import { computed, ref, watch } from 'vue'
 import { i18n, normalizeLocale, t, type AppLocale } from '@/i18n'
 import { getConfig, saveConfig, type FrontendConfig } from '@/utils/config'
 
-const logger = window.electronAPI.getLogger('语言设置')
+const logger = window.hostAPI.getLogger('语言设置')
 
 const DAYJS_LOCALE: Record<AppLocale, string> = {
   'zh-CN': 'zh-cn',

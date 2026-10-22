@@ -105,7 +105,7 @@ import { FileOutlined, QuestionCircleOutlined } from '@ant-design/icons-vue'
 
 const { t } = useI18n()
 
-const logger = window.electronAPI.getLogger('额外脚本配置')
+const logger = window.hostAPI.getLogger('额外脚本配置')
 
 const formData = defineModel<any>('formData', { required: true })
 const props = defineProps<{
@@ -125,7 +125,7 @@ const emitSave = (key: string, value: any) => {
 
 const selectScriptBeforeTask = async () => {
   try {
-    const path = await window.electronAPI?.selectFile([
+    const path = await window.hostAPI?.selectFile([
       { name: t('comp.executables'), extensions: ['exe', 'bat', 'cmd', 'ps1'] },
       { name: t('comp.scriptFiles'), extensions: ['py', 'js', 'sh'] },
       { name: t('comp.allFiles'), extensions: ['*'] },
@@ -147,7 +147,7 @@ const selectScriptBeforeTask = async () => {
 
 const selectScriptAfterTask = async () => {
   try {
-    const path = await window.electronAPI?.selectFile([
+    const path = await window.hostAPI?.selectFile([
       { name: t('comp.executables'), extensions: ['exe', 'bat', 'cmd', 'ps1'] },
       { name: t('comp.scriptFiles'), extensions: ['py', 'js', 'sh'] },
       { name: t('comp.allFiles'), extensions: ['*'] },

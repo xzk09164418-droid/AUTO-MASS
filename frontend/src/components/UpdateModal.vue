@@ -37,7 +37,7 @@ import { useUpdateDownload } from '@/composables/useUpdateDownload'
 import type { ChangelogData } from '@/utils/changelog'
 
 const { t } = useI18n()
-const logger = window.electronAPI.getLogger('更新模态框')
+const logger = window.hostAPI.getLogger('更新模态框')
 
 // Props 定义
 interface Props {

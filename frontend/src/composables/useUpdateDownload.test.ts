@@ -43,7 +43,7 @@ const logger = {
 }
 
 vi.stubGlobal('window', {
-  electronAPI: {
+  hostAPI: {
     getLogger: () => logger,
   },
 })

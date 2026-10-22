@@ -178,7 +178,7 @@ const { t } = useI18n()
 
 defineOptions({ name: 'ScriptsPage' })
 
-const logger = window.electronAPI.getLogger('脚本管理')
+const logger = window.hostAPI.getLogger('脚本管理')
 
 const router = useRouter()
 const { addScript, deleteScript, getScriptsWithUsers } = useScriptApi()
