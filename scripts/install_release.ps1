@@ -94,7 +94,8 @@ if ($CscExe) {
         "/r:System.dll",
         "/r:System.Core.dll",
         "/r:System.Drawing.dll",
-        "/r:System.Windows.Forms.dll"
+        "/r:System.Windows.Forms.dll",
+        "/r:System.Web.Extensions.dll"
     )
     if ($IconArg) { $LauncherArgs += $IconArg }
     $LauncherArgs += $LauncherCs

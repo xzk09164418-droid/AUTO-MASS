@@ -143,7 +143,8 @@ async def _shutdown_backend() -> None:
 
     # 开发模式：后端保持存活以复用（定时器等服务不拆除），
     # 只做轻量任务清理后即通知前端可退出
-    if is_backend_dev_mode():
+    # 浏览器部署的显式“完全退出”需要真正关闭后端；保留普通源码开发的复用行为。
+    if is_backend_dev_mode() and os.getenv("AUTO_MAS_BROWSER_HOST") != "1":
         try:
             await TaskManager.stop_task("ALL")
             with suppress(RuntimeError):

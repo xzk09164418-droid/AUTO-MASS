@@ -3425,6 +3425,8 @@ export default {
   },
   history: {
     title: '历史记录',
+    localLogs: '本机日志',
+    runRecords: '运行记录',
     dateList: '日期列表',
     noData: '无数据',
     empty: '暂无数据',
@@ -4202,6 +4204,8 @@ export default {
   },
   logs: {
     pageTitle: '日志查看',
+    loadFailed: '读取日志失败',
+    retry: '重试',
     backendLog: '后端日志',
     frontendLog: '前端日志',
     followLatest: '保持最新',

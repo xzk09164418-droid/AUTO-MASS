@@ -144,7 +144,9 @@ const devMenuItems = computed(() => [
 const bottomMenuItems = computed(() => [
   { key: '/gamesign', label: t('comp.checkIns'), icon: icon('gameSign', CarryOutOutlined) },
   { key: '/history', label: t('comp.history'), icon: icon('history', HistoryOutlined) },
-  { key: '/theme-store', label: t('comp.themeStore'), icon: icon('themeStore', SkinOutlined) },
+  ...(!window.__AUTO_MAS_BROWSER_HOST__
+    ? [{ key: '/theme-store', label: t('comp.themeStore'), icon: icon('themeStore', SkinOutlined) }]
+    : []),
   { key: '/settings', label: t('comp.settings'), icon: icon('settings', SettingOutlined) },
 ])
 

@@ -59,6 +59,10 @@ function createBrowserHost(root, backendPort, lifecycle = {}) {
       child.once('spawn', () => resolve({ success: true }))
     })
   const api = {
+    frontendStop: () => {
+      if (!lifecycle.stopFrontend) throw new Error('当前宿主未配置前端停止能力')
+      return lifecycle.stopFrontend()
+    },
     backendStart: async () => {
       if (!lifecycle.startBackend) throw new Error('当前宿主未配置后端启动能力')
       return lifecycle.startBackend()
@@ -181,11 +185,15 @@ function createBrowserHost(root, backendPort, lifecycle = {}) {
     },
     openFile: file => openLocalPath(file),
     showItemInFolder: file => openLocalPath(file, true),
-    getLogs(lines, file, offset) {
-      const log = path.join(root, 'debug', file === 'frontend.log' ? 'frontend.log' : 'app.log')
-      return offset === undefined
-        ? services.readLogContent(log, lines)
-        : services.readLogIncrement(log, offset)
+    getLogs(lines = 0, fileName = 'app.log', fromOffset) {
+      if (!['app.log', 'frontend.log'].includes(fileName)) throw new Error('无效的日志文件')
+      if (fromOffset !== undefined && (!Number.isSafeInteger(fromOffset) || fromOffset < 0))
+        throw new Error('无效的日志读取位置')
+      const candidates = ['logs', 'debug'].map(directory => path.join(root, directory, fileName))
+      const logPath = candidates.find(file => fs.existsSync(file)) || candidates[0]
+      return typeof fromOffset === 'number'
+        ? services.readLogIncrement(logPath, fromOffset)
+        : services.readLogContent(logPath, lines)
     },
     discoverOkwwPath: services.discoverOkwwPath,
     discoverWutheringWavesPath: services.discoverWutheringWavesPath,
@@ -242,6 +250,8 @@ function createBrowserHost(root, backendPort, lifecycle = {}) {
         const AdmZip = require('adm-zip')
         const zip = new AdmZip()
         const state = { zip, entries: [], archiveBytes: 0 }
+        if (fs.existsSync(path.join(root, 'logs')))
+          services.addDirectory(state, path.join(root, 'logs'), 'logs')
         services.addDirectory(state, path.join(root, 'debug'), 'debug')
         zip.writeZip(output)
         return { success: true }

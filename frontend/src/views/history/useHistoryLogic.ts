@@ -67,7 +67,7 @@ export const timePresets = [
   },
 ]
 
-export function useHistoryLogic() {
+export function useHistoryLogic({ searchOnMount = true } = {}) {
   const { t } = useI18n()
 
   // 响应式数据
@@ -132,6 +132,11 @@ export function useHistoryLogic() {
             ),
           }))
           .sort((a, b) => b.date.localeCompare(a.date))
+
+        // 默认展开最近的日期，让用户直接看到账号与任务记录。
+        if (!activeKeys.value.some(key => historyData.value.some(group => group.date === key))) {
+          activeKeys.value = historyData.value.length ? [historyData.value[0].date] : []
+        }
 
         const { useAudioPlayer } = await import('@/composables/useAudioPlayer')
         const { playSound } = useAudioPlayer()
@@ -297,7 +302,7 @@ export function useHistoryLogic() {
 
   // 页面加载时自动搜索
   onMounted(() => {
-    handleSearch()
+    if (searchOnMount) handleSearch()
   })
 
   onUnmounted(() => {

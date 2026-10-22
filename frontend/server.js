@@ -5,8 +5,8 @@
  * 功能特性：
  * 1. 前后端分离架构：独立监听前端端口（默认 36162），承载与 Auto-MAS 一致的 Web UI，
  *    并将 /api/* HTTP 请求与 /api/core/ws WebSocket 实时流透明反向代理至 Python 后端（默认 36163）。
- * 2. 自动守护与拉起后端：若检测到 Python 后端尚未运行，自动以无黑框模式 (windowsHide: true)
- *    后台拉起 Python 后端服务（远程桌面默认最小化在系统托盘运行，避免打扰主桌面）。
+ * 2. 按需独立拉起后端：若 Python 后端尚未运行，以无黑框模式后台启动；
+ *    前端退出不结束后端，后端输出独立写入 debug/backend-launcher.log。
  * 3. 调用系统浏览器：后端健康检查就绪后，通过 Node.js 自动调用系统默认浏览器打开前端控制台。
  * 4. 支持启动参数直接无窗口运行：
  *    - `node frontend/server.js`                    -> 启动后端 + 前端服务并自动调用系统浏览器打开 UI
@@ -154,34 +154,45 @@ async function ensureBackendStarted(opts) {
     }
 
     console.log(`[AUTO-MAS] 正在后台启动 Python 后端: ${pyExe} ${pyArgs.join(' ')}`);
-    const backendProc = spawn(pyExe, pyArgs, {
-      cwd: ROOT_DIR,
-      windowsHide: true,
-      stdio: ['ignore', 'pipe', 'pipe'],
-      env: {
-        ...process.env,
-        AUTO_MAS_HTTP_PORT: String(opts.backendPort),
-        AUTO_MAS_DEV: '1',
-      },
-    });
-
-    backendProc.stdout.on('data', (data) => {
-      process.stdout.write(`[Backend] ${data}`);
-    });
-    backendProc.stderr.on('data', (data) => {
-      process.stderr.write(`[Backend] ${data}`);
-    });
+    const logDir = path.join(ROOT_DIR, 'debug');
+    fs.mkdirSync(logDir, { recursive: true });
+    const logFd = fs.openSync(path.join(logDir, 'backend-launcher.log'), 'a');
+    let backendProc;
+    try {
+      // 后端及其远程桌面桥接独立于 Node，不能继承随前端关闭的输出管道。
+      backendProc = spawn(pyExe, pyArgs, {
+        cwd: ROOT_DIR,
+        detached: true,
+        windowsHide: true,
+        stdio: ['ignore', logFd, logFd],
+        env: {
+          ...process.env,
+          AUTO_MAS_HTTP_PORT: String(opts.backendPort),
+          AUTO_MAS_DEV: '1',
+          AUTO_MAS_BROWSER_HOST: '1',
+        },
+      });
+    } finally {
+      fs.closeSync(logFd);
+    }
+    let launchError;
+    backendProc.on('error', (error) => { launchError = error; });
+    backendProc.unref();
 
     for (let attempt = 0; attempt < 90; attempt++) {
+      if (launchError) throw launchError;
+      if (backendProc.exitCode !== null) {
+        throw new Error(`Python 后端已退出 (${backendProc.exitCode})，请查看 debug/backend-launcher.log`);
+      }
       const ok = await checkBackendHealth(opts.backendHost, opts.backendPort, 1000);
       if (ok) {
         console.log(`[AUTO-MAS] Python 后端已就绪 (http://${opts.backendHost}:${opts.backendPort})`);
-        return backendProc;
+        return;
       }
       await new Promise((r) => setTimeout(r, 400));
     }
     console.warn('[AUTO-MAS] 警告：等待后端健康检查超时，前端服务仍将继续启动');
-    return backendProc;
+    return;
   }
 
   return null;
@@ -243,12 +254,16 @@ function resolveStaticFile(requestPath) {
   return null;
 }
 
-function startFrontendServer(opts, backendProc) {
+function startFrontendServer(opts) {
   const handleHost = createBrowserHost(ROOT_DIR, opts.backendPort, {
+    stopFrontend() {
+      // 先返回托盘请求，再关闭 HTTP 与 WebSocket；不触碰 Python 后端。
+      setTimeout(() => process.exit(0), 250);
+      return { success: true };
+    },
     async startBackend() {
       try {
-        const started = await ensureBackendStarted(opts);
-        if (started) backendProc = started;
+        await ensureBackendStarted(opts);
         return { success: true };
       } catch (error) { return { success: false, error: error.message }; }
     },
@@ -364,7 +379,6 @@ function startFrontendServer(opts, backendProc) {
       return;
     }
     console.error('[AUTO-MAS] 控制台监听失败:', error);
-    if (backendProc && !backendProc.killed) backendProc.kill();
     process.exitCode = 1;
   });
 
@@ -383,11 +397,6 @@ function startFrontendServer(opts, backendProc) {
     try {
       server.close();
     } catch (_) {}
-    if (backendProc && !backendProc.killed) {
-      try {
-        backendProc.kill();
-      } catch (_) {}
-    }
     process.exit(0);
   };
 
@@ -397,8 +406,8 @@ function startFrontendServer(opts, backendProc) {
 
 async function main() {
   const opts = parseArgs(process.argv);
-  const backendProc = await ensureBackendStarted(opts);
-  startFrontendServer(opts, backendProc);
+  await ensureBackendStarted(opts);
+  startFrontendServer(opts);
 }
 
 main().catch((err) => {

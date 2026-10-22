@@ -13,6 +13,7 @@ const { t } = useI18n()
 const { registerLogLanguage, editorTheme } = useLogHighlight()
 
 defineOptions({ name: 'LogViewer' })
+defineProps<{ embedded?: boolean }>()
 
 // 日志显示模式类型
 type LogMode = 'follow' | 'browse'
@@ -20,6 +21,7 @@ type LogMode = 'follow' | 'browse'
 const logs = ref<string>('')
 // 首次 loadLogs 之前就先算加载中，否则空日志的提示会在挂载那一帧闪一下
 const loading = ref(true)
+const loadError = ref('')
 const logMode = ref<LogMode>('follow')
 // 主进程用 `#/logs?file=frontend` 指定落地时选中哪一份；启动路径要的是前端日志，
 // 那时后端还没起来，app.log 打开就是空的。没带参数时维持原来的默认。
@@ -148,6 +150,7 @@ const loadLogs = async (silent = false) => {
       replaceLogs('')
       return
     }
+    loadError.value = ''
     logOffset = result.size
     if (!silent || result.reset || !logs.value) {
       replaceLogs(result.content)
@@ -155,10 +158,12 @@ const loadLogs = async (silent = false) => {
       appendLogs(result.content)
     }
   } catch (error) {
+    if (seq !== loadSeq) return
+    const errorMsg = error instanceof Error ? error.message : String(error)
+    loadError.value = errorMsg
     if (!silent) {
-      const errorMsg = error instanceof Error ? error.message : String(error)
       logger.error(`加载日志失败: ${errorMsg}`)
-      message.error('加载日志失败')
+      message.error(t('logs.loadFailed'))
     }
   } finally {
     if (!silent && seq === loadSeq) {
@@ -245,9 +250,9 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="logs-container">
+  <div class="logs-container" :class="{ 'logs-embedded': embedded }">
     <div class="logs-header">
-      <h1 class="page-title">{{ t('logs.pageTitle') }}</h1>
+      <h1 v-if="!embedded" class="page-title">{{ t('logs.pageTitle') }}</h1>
       <div class="header-actions">
         <a-space :size="12" wrap>
           <a-radio-group
@@ -280,6 +285,17 @@ onUnmounted(() => {
       </div>
     </div>
 
+    <a-alert
+      v-if="loadError"
+      :message="t('logs.loadFailed')"
+      :description="loadError"
+      type="error"
+      show-icon
+    >
+      <template #action
+        ><a-button size="small" @click="loadLogs()">{{ t('logs.retry') }}</a-button></template
+      >
+    </a-alert>
     <div class="logs-content">
       <a-spin :spinning="loading" tip="加载日志中...">
         <div class="editor-container" :class="{ 'log-locked': logMode === 'follow' }">
@@ -316,6 +332,14 @@ onUnmounted(() => {
   align-items: center;
   margin-bottom: 16px;
   flex-shrink: 0;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+.logs-embedded {
+  flex: 1;
+  height: auto;
+  min-height: 0;
+  padding: 0;
 }
 
 .page-title {

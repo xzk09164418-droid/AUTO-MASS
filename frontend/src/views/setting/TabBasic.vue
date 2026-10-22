@@ -165,7 +165,11 @@ const handleLocaleChange = (value: unknown): void => {
                 <template #icon><UploadOutlined /></template>
                 {{ t('setting.basic.importAppearance') }}
               </a-button>
-              <a-button :disabled="appearanceBusy" @click="navigateTo('/theme-store')">
+              <a-button
+                v-if="!isBrowserHost"
+                :disabled="appearanceBusy"
+                @click="navigateTo('/theme-store')"
+              >
                 <template #icon><SkinOutlined /></template>
                 {{ t('setting.basic.themeStore') }}
               </a-button>

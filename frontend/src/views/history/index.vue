@@ -3,64 +3,76 @@
     <!-- 页面头部 -->
     <div class="page-header">
       <h1 class="page-title">{{ t('history.title') }}</h1>
-      <a-button class="replay-entry-button" @click="replayModalOpen = true">
+      <a-button v-if="showRunHistory" class="replay-entry-button" @click="replayModalOpen = true">
         <template #icon><PlayCircleOutlined /></template>
         {{ t('history.replays.openList') }}
       </a-button>
     </div>
 
-    <!-- 搜索筛选区域 -->
-    <HistorySearchPanel
-      :mode="searchForm.mode"
-      :start-date="searchForm.startDate"
-      :end-date="searchForm.endDate"
-      :current-preset="currentPreset"
-      :loading="searchLoading"
-      @update:mode="handleModeUpdate"
-      @update:start-date="searchForm.startDate = $event"
-      @update:end-date="searchForm.endDate = $event"
-      @quick-select="handleQuickTimeSelect"
-      @search="handleSearch"
-      @reset="handleReset"
-      @date-change="handleDateChange"
-    />
+    <a-tabs
+      v-if="isBrowserHost"
+      v-model:active-key="activeTab"
+      class="history-tabs"
+      @change="handleTabChange"
+    >
+      <a-tab-pane key="logs" :tab="t('history.localLogs')" />
+      <a-tab-pane key="runs" :tab="t('history.runRecords')" />
+    </a-tabs>
+    <Logs v-if="!showRunHistory" embedded />
+    <template v-else>
+      <!-- 搜索筛选区域 -->
+      <HistorySearchPanel
+        :mode="searchForm.mode"
+        :start-date="searchForm.startDate"
+        :end-date="searchForm.endDate"
+        :current-preset="currentPreset"
+        :loading="searchLoading"
+        @update:mode="handleModeUpdate"
+        @update:start-date="searchForm.startDate = $event"
+        @update:end-date="searchForm.endDate = $event"
+        @quick-select="handleQuickTimeSelect"
+        @search="handleSearch"
+        @reset="handleReset"
+        @date-change="handleDateChange"
+      />
 
-    <!-- 主内容区域 -->
-    <div class="main-content">
-      <a-spin :spinning="searchLoading">
-        <!-- 空状态 -->
-        <div v-if="historyData.length === 0 && !searchLoading" class="empty-state">
-          <img src="@/assets/NoData.png" :alt="t('history.noData')" class="empty-image" />
-          <span class="empty-text">{{ t('history.emptyHistory') }}</span>
-          <span class="empty-hint">{{ t('history.emptyHint') }}</span>
-        </div>
+      <!-- 主内容区域 -->
+      <div class="main-content">
+        <a-spin :spinning="searchLoading">
+          <!-- 空状态 -->
+          <div v-if="historyData.length === 0 && !searchLoading" class="empty-state">
+            <img src="@/assets/NoData.png" :alt="t('history.noData')" class="empty-image" />
+            <span class="empty-text">{{ t('history.emptyHistory') }}</span>
+            <span class="empty-hint">{{ t('history.emptyHint') }}</span>
+          </div>
 
-        <!-- 数据展示 -->
-        <div v-else class="content-layout">
-          <!-- 左侧日期列表 -->
-          <HistoryDateSidebar
-            :history-data="historyData"
-            :active-keys="activeKeys"
-            :selected-user="selectedUser"
-            @update:active-keys="activeKeys = $event"
-            @select-user="handleSelectUser"
-          />
+          <!-- 数据展示 -->
+          <div v-else class="content-layout">
+            <!-- 左侧日期列表 -->
+            <HistoryDateSidebar
+              :history-data="historyData"
+              :active-keys="activeKeys"
+              :selected-user="selectedUser"
+              @update:active-keys="activeKeys = $event"
+              @select-user="handleSelectUser"
+            />
 
-          <!-- 右侧详情区域 -->
-          <HistoryDetailPanel
-            :has-user-selected="!!selectedUserData"
-            :records="selectedUserData?.index || []"
-            :selected-record-index="selectedRecordIndex"
-            :error-info="selectedUserData?.error_info || null"
-            :recruit-statistics="selectedUserData?.recruit_statistics || null"
-            :drop-statistics="selectedUserData?.drop_statistics || null"
-            :matrix-statistics="getMatrixStatistics(selectedUserData)"
-            :pull-count-statistics="getPullCountStatistics(selectedUserData)"
-            @select-record="handleSelectRecord"
-          />
-        </div>
-      </a-spin>
-    </div>
+            <!-- 右侧详情区域 -->
+            <HistoryDetailPanel
+              :has-user-selected="!!selectedUserData"
+              :records="selectedUserData?.index || []"
+              :selected-record-index="selectedRecordIndex"
+              :error-info="selectedUserData?.error_info || null"
+              :recruit-statistics="selectedUserData?.recruit_statistics || null"
+              :drop-statistics="selectedUserData?.drop_statistics || null"
+              :matrix-statistics="getMatrixStatistics(selectedUserData)"
+              :pull-count-statistics="getPullCountStatistics(selectedUserData)"
+              @select-record="handleSelectRecord"
+            />
+          </div>
+        </a-spin>
+      </div>
+    </template>
 
     <!-- 日志弹窗 -->
     <HistoryLogModal
@@ -93,7 +105,7 @@
 
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { PlayCircleOutlined } from '@ant-design/icons-vue'
 import type { HistoryData } from '@/api'
 import HistoryDateSidebar from './components/HistoryDateSidebar.vue'
@@ -105,8 +117,12 @@ import { useHistoryLogic } from './useHistoryLogic'
 import { formatBackendDateTime } from '@/utils/dateDisplay'
 import type { PullCountStatistics } from '@/types/history'
 import type { ReplayRecord } from '@/types/replay'
+import Logs from '@/views/Logs.vue'
 
 const { t } = useI18n()
+const isBrowserHost = window.__AUTO_MAS_BROWSER_HOST__ === true
+const activeTab = ref('logs')
+const showRunHistory = computed(() => !isBrowserHost || activeTab.value === 'runs')
 
 defineOptions({
   name: 'HistoryPage',
@@ -143,7 +159,11 @@ const {
   handleOpenLogDirectory,
   registerLogLanguage,
   setEditorConfig,
-} = useHistoryLogic()
+} = useHistoryLogic({ searchOnMount: !isBrowserHost })
+
+function handleTabChange(key: string | number) {
+  if (key === 'runs' && !historyData.value.length) void handleSearch()
+}
 
 // 弹窗状态
 const logModalOpen = ref(false)
@@ -192,6 +212,9 @@ const handleSelectRecord = async (index: number, record: any) => {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+.history-tabs {
+  flex-shrink: 0;
 }
 
 .page-header {
