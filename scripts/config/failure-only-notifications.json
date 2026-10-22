@@ -1,0 +1,17 @@
+{
+  "setting": {
+    "Notify": {
+      "SendTaskResultTime": "仅失败时",
+      "IfSendStatistic": false,
+      "IfSendSixStar": false
+    }
+  },
+  "tools": {
+    "GameSign": {
+      "NotifyEnabled": false
+    }
+  },
+  "userNotify": {
+    "IfSendStatistic": false
+  }
+}

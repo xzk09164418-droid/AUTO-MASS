@@ -1,5 +1,20 @@
 # 本地打包
 
+浏览器部署的仅失败通知配置记录在 `config/failure-only-notifications.json`。
+将 `setting`、`tools` 分别作为 `data` 增量提交给后端的
+`POST /api/setting/update`、`POST /api/tools/update`；对已有用户，将
+`userNotify` 作为 `data.Notify` 提交给 `POST /api/scripts/user/update`
+（同时携带该用户的 `scriptId`、`userId`）。新建用户也应关闭独立统计推送。
+这些配置保留原有通知渠道与绑定信息，任务结果仅在失败时推送。
+社区签到没有单独的仅失败选项，因此关闭其独立通知，签到执行保持启用，
+签到结果仍可查日志。实际运行配置含凭据，继续留在本机的 `config/`，不提交。
+
+仅后端运行时，使用托盘的“仅退出前端”关闭 Node.js 服务，随后通过后端
+`POST /api/dispatch/start` 提交一次 `AutoProxy` 队列任务。用响应的 `taskId`
+查询 `GET /api/dispatch/task/{taskId}`；运行日志在 `debug/app.log`，脚本历史
+保存在 `history/`。一次运行的任务 ID、提交版本和起始日志位置记录在本机
+`debug/web2-backend-queue-run.json`，供延后核查，不纳入版本库。
+
 使用 PowerShell 7。随桌面安装包分发的 Runtime 版本记录在 `res/runtime-version.txt`，它只是
 **打包时内置的那一版**：CI 从本次构建所选分支读取它，下载对应 Release 的 exe、按同一 Release
 的 `SHA256SUMS.txt` 校验后捆绑进安装包，并拒绝缺少后台更新协议的二进制。内置版本只用于离线
