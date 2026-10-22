@@ -14,6 +14,18 @@ export async function getInitializationDecision(): Promise<InitializationDecisio
   const api = window.electronAPI
   const logger = api.getLogger('初始化决策')
   const currentVersion = import.meta.env.VITE_APP_VERSION
+  // 浏览器的 Python 后端由 Node.js 宿主管理，不能进入桌面 Runtime 安装流程。
+  if (window.__AUTO_MAS_BROWSER_HOST__) {
+    sessionStorage.removeItem('forceBackendUpdate')
+    sessionStorage.removeItem('disableInitializationSkip')
+    return {
+      mode: 'skip-home',
+      currentVersion,
+      savedVersion: currentVersion,
+      autoUpdateEnabled: false,
+      forceBackendUpdate: false,
+    }
+  }
   const forceBackendUpdate = sessionStorage.getItem('forceBackendUpdate') === 'true'
   const disableSkip = sessionStorage.getItem('disableInitializationSkip') === 'true'
 

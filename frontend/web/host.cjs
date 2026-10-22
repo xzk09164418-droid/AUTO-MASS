@@ -4,7 +4,7 @@ const path = require('node:path')
 const os = require('node:os')
 const { spawn } = require('node:child_process')
 
-function createBrowserHost(root, backendPort) {
+function createBrowserHost(root, backendPort, lifecycle = {}) {
   const services = require('../dist-host/services.cjs')
   const configPath = path.join(root, 'config', 'frontend_config.json')
   const userData = path.join(root, 'data', 'browser')
@@ -59,6 +59,10 @@ function createBrowserHost(root, backendPort) {
       child.once('spawn', () => resolve({ success: true }))
     })
   const api = {
+    backendStart: async () => {
+      if (!lifecycle.startBackend) throw new Error('当前宿主未配置后端启动能力')
+      return lifecycle.startBackend()
+    },
     async localControl(action, payload) {
       const routes = {
         status: ['GET', '/api/child-session/status'],

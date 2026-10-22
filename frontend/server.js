@@ -244,7 +244,15 @@ function resolveStaticFile(requestPath) {
 }
 
 function startFrontendServer(opts, backendProc) {
-  const handleHost = createBrowserHost(ROOT_DIR, opts.backendPort);
+  const handleHost = createBrowserHost(ROOT_DIR, opts.backendPort, {
+    async startBackend() {
+      try {
+        const started = await ensureBackendStarted(opts);
+        if (started) backendProc = started;
+        return { success: true };
+      } catch (error) { return { success: false, error: error.message }; }
+    },
+  });
   const server = http.createServer(async (req, res) => {
     const reqUrl = req.url || '/';
     if (await handleHost(req, res)) return;
