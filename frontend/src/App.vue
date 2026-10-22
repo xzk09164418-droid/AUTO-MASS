@@ -107,7 +107,7 @@ onMounted(async () => {
     <AppearanceDecoration />
     <!-- 初始化页面使用带标题栏的全屏布局 -->
     <div v-if="isInitializationPage" class="initialization-container">
-      <TitleBar />
+      <TitleBar v-if="!windowIsBrowser" />
       <div class="initialization-content">
         <router-view />
       </div>
@@ -118,7 +118,7 @@ onMounted(async () => {
     </div>
     <!-- 其他页面使用带标题栏的应用布局 - 仅在初始化完成后挂载 -->
     <div v-else-if="isAppReady && performanceStore.initialized" class="app-container">
-      <TitleBar />
+      <TitleBar v-if="!windowIsBrowser" />
       <AppLayout />
     </div>
 

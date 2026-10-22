@@ -17,6 +17,7 @@ import { formatPauseUntil, getPauseDisabledDate, isUpdatePaused } from '@/compos
 const logger = window.electronAPI.getLogger('设置-其他')
 
 const { t } = useI18n()
+const isBrowserHost = window.__AUTO_MAS_BROWSER_HOST__ === true
 
 const {
   version,
@@ -102,8 +103,14 @@ const copyAllInfo = async () => {
   <div class="tab-content">
     <div class="form-section">
       <div class="section-header">
-        <h3>{{ t('setting.others.updateSection') }}</h3>
-        <a-button type="primary" size="small" class="section-update-button" @click="checkUpdate">
+        <h3>{{ t(isBrowserHost ? 'setting.others.networkSection' : 'setting.others.updateSection') }}</h3>
+        <a-button
+          v-if="!isBrowserHost"
+          type="primary"
+          size="small"
+          class="section-update-button"
+          @click="checkUpdate"
+        >
           <template #icon>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
               <path
@@ -116,14 +123,14 @@ const copyAllInfo = async () => {
       </div>
       <!-- 暂停中：显著状态条（含副标题提示）；日期选择器常驻，暂停期间也可改截止日期 -->
       <a-alert
-        v-if="isPaused"
+        v-if="!isBrowserHost && isPaused"
         type="info"
         show-icon
         class="pause-status-alert"
         :message="t('setting.others.pauseStatus', { date: pauseUntilDisplay })"
         :description="t('setting.others.pauseStatusHint')"
       />
-      <a-row :gutter="24">
+      <a-row v-if="!isBrowserHost" :gutter="24">
         <a-col :span="8">
           <div class="form-item-vertical">
             <div class="form-label-wrapper">
@@ -145,7 +152,7 @@ const copyAllInfo = async () => {
           </div>
         </a-col>
       </a-row>
-      <a-row :gutter="24">
+      <a-row v-if="!isBrowserHost" :gutter="24">
         <a-col :span="8">
           <div class="form-item-vertical">
             <div class="form-label-wrapper">
@@ -201,7 +208,7 @@ const copyAllInfo = async () => {
         </a-col>
       </a-row>
       <a-row :gutter="24">
-        <a-col :span="8">
+        <a-col :span="isBrowserHost ? 12 : 8">
           <div class="form-item-vertical">
             <div class="form-label-wrapper">
               <span class="form-label">{{ t('setting.others.proxy') }}</span>
@@ -217,7 +224,7 @@ const copyAllInfo = async () => {
             />
           </div>
         </a-col>
-        <a-col :span="8">
+        <a-col :span="isBrowserHost ? 12 : 8">
           <div class="form-item-vertical">
             <div class="form-label-wrapper">
               <span class="form-label">{{ t('setting.others.githubMirror') }}</span>
@@ -235,7 +242,7 @@ const copyAllInfo = async () => {
             />
           </div>
         </a-col>
-        <a-col :span="8">
+        <a-col v-if="!isBrowserHost" :span="8">
           <div class="form-item-vertical">
             <div class="form-label-wrapper">
               <span class="form-label">{{ t('setting.others.cdk') }}</span>

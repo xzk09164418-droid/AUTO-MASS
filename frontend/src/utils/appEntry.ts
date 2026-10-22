@@ -18,6 +18,7 @@ let versionServicesStarted = false
  * 2. 版本更新检查（4小时一次，带弹窗提醒）
  */
 function startVersionServices() {
+  if (window.__AUTO_MAS_BROWSER_HOST__) return
   if (versionServicesStarted) {
     logger.info('版本检查服务已启动，跳过重复启动')
     return

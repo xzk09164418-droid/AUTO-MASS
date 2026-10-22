@@ -14,6 +14,7 @@ import { navigateTo } from '@/router'
 import FailureReplaySettings from './components/FailureReplaySettings.vue'
 
 const { t } = useI18n()
+const isBrowserHost = window.__AUTO_MAS_BROWSER_HOST__ === true
 
 // 指向 releases 页而不是某一版安装包的直链：直链会随上游发版失效，而且点下去直接落一个 exe，
 // 用户没机会先看清自己在装什么。releases/latest 永远指向最新一版，页面上的 `-setup.exe` 就是它。
@@ -147,7 +148,7 @@ const { settings, historyRetentionOptions, voiceTypeOptions, handleSettingChange
             </a-select>
           </div>
         </a-col>
-        <a-col :span="12">
+        <a-col v-if="!isBrowserHost" :span="12">
           <div class="form-item-vertical">
             <div class="form-label-wrapper">
               <span class="form-label">{{ t('setting.func.startMinimized') }}</span>

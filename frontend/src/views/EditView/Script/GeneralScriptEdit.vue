@@ -260,90 +260,6 @@
               </a-form-item>
             </a-col>
           </a-row>
-          <a-row :gutter="24">
-            <a-col :span="12">
-              <a-form-item name="configPath" :rules="rules.configPath">
-                <template #label>
-                  <a-tooltip
-                    :title="
-                      generalConfig.Script.ConfigPathMode === 'Folder'
-                        ? t('edit.pathFolderHoldingScript')
-                        : t('edit.pathScriptConfigurationFile')
-                    "
-                  >
-                    <span class="form-label">
-                      {{ t('edit.configurationFilePath') }}
-                      <QuestionCircleOutlined class="help-icon" />
-                    </span>
-                  </a-tooltip>
-                </template>
-                <a-input-group compact class="path-input-group">
-                  <a-input
-                    v-model:value="formData.configPath"
-                    :placeholder="
-                      generalConfig.Script.ConfigPathMode === 'Folder'
-                        ? t('edit.pickConfigurationFolder')
-                        : t('edit.pickConfigurationFile')
-                    "
-                    size="large"
-                    class="path-input"
-                    readonly
-                  />
-                  <a-button size="large" class="path-button" @click="selectConfigPath">
-                    <template #icon>
-                      <FolderOpenOutlined v-if="generalConfig.Script.ConfigPathMode === 'Folder'" />
-                      <FileOutlined v-else />
-                    </template>
-                    {{
-                      generalConfig.Script.ConfigPathMode === 'Folder' ? '选择文件夹' : '选择文件'
-                    }}
-                  </a-button>
-                </a-input-group>
-              </a-form-item>
-            </a-col>
-            <a-col :span="6">
-              <a-form-item>
-                <template #label>
-                  <a-tooltip :title="t('edit.scriptConfigurationFileType')">
-                    <span class="form-label">
-                      {{ t('edit.configurationFileType') }}
-                      <QuestionCircleOutlined class="help-icon" />
-                    </span>
-                  </a-tooltip>
-                </template>
-                <a-select
-                  v-model:value="generalConfig.Script.ConfigPathMode"
-                  size="large"
-                  @change="handleChange('Script', 'ConfigPathMode', $event)"
-                >
-                  <a-select-option value="File">{{ t('edit.singleFile') }}</a-select-option>
-                  <a-select-option value="Folder">{{ t('edit.folder') }}</a-select-option>
-                </a-select>
-              </a-form-item>
-            </a-col>
-            <a-col :span="6">
-              <a-form-item>
-                <template #label>
-                  <a-tooltip :title="t('edit.updateScriptConfigurationFile')">
-                    <span class="form-label">
-                      {{ t('edit.whenConfigurationFileUpdated') }}
-                      <QuestionCircleOutlined class="help-icon" />
-                    </span>
-                  </a-tooltip>
-                </template>
-                <a-select
-                  v-model:value="generalConfig.Script.UpdateConfigMode"
-                  size="large"
-                  @change="handleChange('Script', 'UpdateConfigMode', $event)"
-                >
-                  <a-select-option value="Never">{{ t('edit.never') }}</a-select-option>
-                  <a-select-option value="Success">{{ t('edit.success') }}</a-select-option>
-                  <a-select-option value="Failure">{{ t('edit.failure') }}</a-select-option>
-                  <a-select-option value="Always">{{ t('edit.always') }}</a-select-option>
-                </a-select>
-              </a-form-item>
-            </a-col>
-          </a-row>
           <a-alert
             type="info"
             show-icon
@@ -1221,7 +1137,6 @@ const validatePath = (rootPath: string, targetPath: string, pathName: string): b
 // 存储路径的相对关系，用于根目录变化时自动调整
 const pathRelations = reactive({
   scriptPathRelative: '',
-  configPathRelative: '',
   logPathRelative: '',
   trackProcessExeRelative: '',
 })
@@ -1231,7 +1146,6 @@ const updatePathRelations = () => {
   const rootPath = generalConfig.Info.RootPath
   if (!rootPath || rootPath === '.') {
     pathRelations.scriptPathRelative = ''
-    pathRelations.configPathRelative = ''
     pathRelations.logPathRelative = ''
     pathRelations.trackProcessExeRelative = ''
     return
@@ -1241,13 +1155,6 @@ const updatePathRelations = () => {
     pathRelations.scriptPathRelative = pathUtils.getRelativePath(
       rootPath,
       generalConfig.Script.ScriptPath
-    )
-  }
-
-  if (generalConfig.Script.ConfigPath && generalConfig.Script.ConfigPath !== '.') {
-    pathRelations.configPathRelative = pathUtils.getRelativePath(
-      rootPath,
-      generalConfig.Script.ConfigPath
     )
   }
 
@@ -1284,12 +1191,6 @@ const updatePathsBasedOnRoot = (newRootPath: string) => {
     const newScriptPath = pathUtils.resolvePath(newRootPath, pathRelations.scriptPathRelative)
     const normalizedScriptPath = pathUtils.normalizePath(newScriptPath)
     generalConfig.Script.ScriptPath = normalizedScriptPath
-  }
-
-  if (pathRelations.configPathRelative && isInternalPath(pathRelations.configPathRelative)) {
-    const newConfigPath = pathUtils.resolvePath(newRootPath, pathRelations.configPathRelative)
-    const normalizedConfigPath = pathUtils.normalizePath(newConfigPath)
-    generalConfig.Script.ConfigPath = normalizedConfigPath
   }
 
   if (pathRelations.logPathRelative && isInternalPath(pathRelations.logPathRelative)) {
@@ -1333,12 +1234,6 @@ const formData = reactive({
   },
   set scriptPath(value) {
     generalConfig.Script.ScriptPath = value
-  },
-  get configPath() {
-    return generalConfig.Script.ConfigPath
-  },
-  set configPath(value) {
-    generalConfig.Script.ConfigPath = value
   },
   get logPath() {
     return generalConfig.Script.LogPath
@@ -1428,7 +1323,6 @@ const rules = {
   type: [{ required: true, message: t('edit.pickScriptType'), trigger: 'change' }],
   rootPath: [{ required: true, message: t('edit.pickScriptRootDirectory2'), trigger: 'blur' }],
   scriptPath: [{ required: true, message: t('edit.pickMainProgramPath'), trigger: 'blur' }],
-  configPath: [{ required: false, message: t('edit.pickConfigurationFilePath'), trigger: 'blur' }],
   logPath: [
     {
       required: false,
@@ -1506,64 +1400,6 @@ const errorLogRegexError = computed(() => {
 const emulatorLoading = ref(false)
 const emulatorOptions = ref<ComboBoxItem[]>([])
 
-// 延迟注册 ConfigPathMode watcher（在加载脚本并完成初始化后再注册）
-// 注意：此 watcher 用于业务逻辑处理（配置文件类型切换时重置路径），而非简单的配置自动保存
-let stopConfigPathModeWatcher: (() => void) | null = null
-
-const setupConfigPathModeWatcher = () => {
-  // 如果已存在 watcher，先停止
-  if (stopConfigPathModeWatcher) {
-    stopConfigPathModeWatcher()
-    stopConfigPathModeWatcher = null
-  }
-
-  // 监听配置文件类型变化，当从"单文件"切换到"文件夹"或反之时，自动重置路径
-  // 这是必要的业务逻辑，因为文件路径和文件夹路径不能混用
-  stopConfigPathModeWatcher = watch(
-    () => generalConfig.Script.ConfigPathMode,
-    async (newMode, oldMode) => {
-      if (
-        newMode !== oldMode &&
-        generalConfig.Script.ConfigPath &&
-        generalConfig.Script.ConfigPath !== '.'
-      ) {
-        // 当配置文件类型改变时，重置为根目录路径
-        const rootPath = generalConfig.Info.RootPath
-        let newConfigPath: string
-        if (rootPath && rootPath !== '.') {
-          newConfigPath = rootPath
-          generalConfig.Script.ConfigPath = rootPath
-          const typeText = newMode === 'Folder' ? '文件夹' : '文件'
-          message.info(t('edit.configurationFileTypeChanged2', { p0: typeText }))
-        } else {
-          // 如果没有设置根目录，则清空路径
-          newConfigPath = '.'
-          generalConfig.Script.ConfigPath = '.'
-          const typeText = newMode === 'Folder' ? '文件夹' : '文件'
-          message.info(t('edit.configurationFileTypeChanged', { p0: typeText }))
-        }
-
-        // 保存被重置的 ConfigPath（ConfigPathMode 已经通过 @change 保存了）
-        // 使用即时保存模式，而非 watch 自动保存
-        if (!isInitializing.value) {
-          await enqueue(async () => {
-            try {
-              const updateData = { Script: { ConfigPath: newConfigPath } }
-              const success = await updateScript(scriptId, updateData)
-              if (success) {
-                logger.info('配置路径已重置并保存')
-              }
-            } catch (error) {
-              const errorMsg = error instanceof Error ? error.message : String(error)
-              logger.error(`保存配置路径失败: ${errorMsg}`)
-            }
-          }, 'Script.ConfigPath')
-        }
-      }
-    }
-  )
-}
-
 // 即时保存函数 - 只发送修改的字段（遵循最小原则）；连续变更进保存队列按序写回，
 // 同一字段的连续变更只保留最后一次
 // 后端会把这些路径字段规范化（相对路径转绝对、展开 %APPDATA%、解析 .lnk 等），
@@ -1571,7 +1407,6 @@ const setupConfigPathModeWatcher = () => {
 const FIELDS_REQUIRE_REFRESH_AFTER_SAVE = new Set<string>([
   'Info.RootPath',
   'Script.ScriptPath',
-  'Script.ConfigPath',
   'Script.LogPath',
   'Game.Path',
 ])
@@ -1657,8 +1492,6 @@ onMounted(async () => {
   if (generalConfig.Game.Type === 'Emulator') {
     await loadEmulatorOptions()
   }
-  // 在脚本加载完成并完成初始化后，再注册 ConfigPathMode 的 watcher，避免初始化阶段触发重置逻辑
-  setupConfigPathModeWatcher()
   // 初始化完成后允许自动保存
   isInitializing.value = false
 })
@@ -1869,9 +1702,6 @@ const selectRootPath = async () => {
         if (generalConfig.Script.ScriptPath && generalConfig.Script.ScriptPath !== '.') {
           scriptPathUpdates.ScriptPath = generalConfig.Script.ScriptPath
         }
-        if (generalConfig.Script.ConfigPath && generalConfig.Script.ConfigPath !== '.') {
-          scriptPathUpdates.ConfigPath = generalConfig.Script.ConfigPath
-        }
         if (generalConfig.Script.LogPath && generalConfig.Script.LogPath !== '.') {
           scriptPathUpdates.LogPath = generalConfig.Script.LogPath
         }
@@ -1988,57 +1818,6 @@ const clearTrackProcessExe = async () => {
   updatePathRelations()
   await handleChange('Script', 'TrackProcessExe', '')
   message.success(t('edit.trackedProcessExecutablePath'))
-}
-
-const selectConfigPath = async () => {
-  try {
-    if (!window.electronAPI) {
-      message.error(t('edit.filePickingUnavailableRun'))
-      return
-    }
-
-    let selectedPath: string | undefined
-
-    // 根据配置文件类型选择不同的选择方式
-    if (generalConfig.Script.ConfigPathMode === 'Folder') {
-      // 选择文件夹
-      const folderPath = await window.electronAPI.selectFolder()
-      selectedPath = folderPath || undefined
-    } else {
-      // 选择文件（默认行为）
-      const paths = await window.electronAPI.selectFile([
-        {
-          name: t('edit.configurationFiles'),
-          extensions: ['json', 'yaml', 'yml', 'ini', 'conf', 'toml'],
-        },
-        { name: t('edit.jsonFiles'), extensions: ['json'] },
-        { name: t('edit.yamlFiles'), extensions: ['yaml', 'yml'] },
-        { name: t('edit.iniFiles'), extensions: ['ini', 'conf'] },
-        { name: t('edit.tomlFiles'), extensions: ['toml'] },
-        { name: t('edit.allFiles'), extensions: ['*'] },
-      ])
-      selectedPath = paths && paths.length > 0 ? paths[0] : undefined
-    }
-
-    if (selectedPath) {
-      // 验证路径是否在根目录下
-      const pathType = generalConfig.Script.ConfigPathMode === 'Folder' ? '配置文件夹' : '配置文件'
-      if (validatePath(generalConfig.Info.RootPath, selectedPath, `${pathType}路径`)) {
-        const normalizedPath = pathUtils.normalizePath(selectedPath)
-        generalConfig.Script.ConfigPath = normalizedPath
-        // 更新相对路径关系
-        updatePathRelations()
-        // 保存配置路径
-        await handleChange('Script', 'ConfigPath', normalizedPath)
-        message.success(t('edit.p0PathSelected', { p0: pathType }))
-      }
-    }
-  } catch (error) {
-    const errorMsg = error instanceof Error ? error.message : String(error)
-    logger.error(`选择配置路径失败: ${errorMsg}`)
-    const typeText = generalConfig.Script.ConfigPathMode === 'Folder' ? '文件夹' : '文件'
-    message.error(t('edit.couldNotPickP0', { p0: typeText }))
-  }
 }
 
 const selectLogPath = async () => {

@@ -381,7 +381,7 @@ const exportDataBackup = async () => {
       </a-row>
     </div>
 
-    <div class="form-section">
+    <div v-if="!isBrowserHost" class="form-section">
       <div class="section-header">
         <h3>
           {{ t('setting.advanced.runtimeLaunchMode') }}

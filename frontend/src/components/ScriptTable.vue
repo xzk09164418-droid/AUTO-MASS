@@ -407,7 +407,7 @@
 
                           <!-- 当前配置来源与覆写状态：跟在账号标签之后，与账号名同行左对齐，弱化显示 -->
                           <div
-                            v-if="getConfigSource(script, user)"
+                            v-if="script.type !== 'General' && getConfigSource(script, user)"
                             class="user-config-summary"
                             :class="{ 'is-overlay-on': getOverlayState(script, user) }"
                           >

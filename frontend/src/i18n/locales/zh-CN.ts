@@ -5107,6 +5107,7 @@ export default {
     },
     others: {
       updateSection: '更新配置',
+      networkSection: '网络配置',
       checkUpdate: '检查更新',
       pauseUpdates: '暂停更新',
       pauseUpdatesTip:
