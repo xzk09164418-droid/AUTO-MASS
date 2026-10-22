@@ -1,7 +1,21 @@
 <template>
   <section class="overview-grid" :aria-label="t('home.proxy.aria')">
-    <a-card class="proxy-card" :title="t('home.proxy.title')" :loading="loading">
-      <div v-if="Object.keys(proxyData).length > 0" class="proxy-list">
+    <a-card
+      class="proxy-card"
+      :title="t('home.proxy.title')"
+      :loading="loading && expanded"
+      :body-style="expanded ? undefined : { display: 'none' }"
+    >
+      <template #extra>
+        <a-button type="text" :aria-expanded="expanded" @click="expanded = !expanded">
+          <template #icon>
+            <UpOutlined v-if="expanded" />
+            <DownOutlined v-else />
+          </template>
+          {{ t(expanded ? 'home.proxy.collapse' : 'home.proxy.expand') }}
+        </a-button>
+      </template>
+      <div v-if="expanded && Object.keys(proxyData).length > 0" class="proxy-list">
         <a-row :gutter="[16, 16]">
           <a-col v-for="(proxy, username) in proxyData" :key="username" :xs="24" :lg="12" :xl="8">
             <div class="proxy-item">
@@ -35,7 +49,7 @@
         </a-row>
       </div>
 
-      <div v-else-if="!loading" class="empty-state">
+      <div v-else-if="expanded && !loading" class="empty-state">
         <img src="@/assets/NoData.png" :alt="t('home.empty.noData')" class="empty-image" />
       </div>
     </a-card>
@@ -44,7 +58,8 @@
 
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
-import { UserOutlined } from '@ant-design/icons-vue'
+import { ref } from 'vue'
+import { DownOutlined, UpOutlined, UserOutlined } from '@ant-design/icons-vue'
 import { formatBackendDateTime } from '@/utils/dateDisplay'
 import type { ProxyInfo } from '@/types/home'
 
@@ -60,6 +75,7 @@ interface Props {
 defineProps<Props>()
 
 const { t } = useI18n()
+const expanded = ref(false)
 
 const formatProxyDisplay = (dateString: string) => {
   if (dateString === '暂无代理数据') {

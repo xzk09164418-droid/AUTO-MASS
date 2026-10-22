@@ -3741,6 +3741,8 @@ export default {
     proxy: {
       aria: '代理状态',
       title: '自动运行状态',
+      expand: '展开运行状态',
+      collapse: '收起运行状态',
       lastTime: '最后运行时间',
       times: '运行次数',
       errors: '错误次数',

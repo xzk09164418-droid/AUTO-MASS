@@ -35,11 +35,45 @@ export const HOME_ACTIVITY_MODULE_KEYS: HomeModuleKey[] = [
   'infinitynikki',
 ]
 
-// 直接使用后端的游戏归属，新活动卡无需另补脚本类型映射。
+// 名称忽略大小写、空格和连接符，通用脚本也可启用已有的活动数据源。
+const ACTIVITY_GAME_ALIASES: Partial<Record<HomeModuleKey, string[]>> = {
+  endfield: ['终末地', 'endfield', 'maaend'],
+  starrail: ['星穹铁道', '星铁', '崩铁', 'starrail', 'src', 'sra', 'hsr'],
+  genshin: ['原神', 'genshin', 'bettergi', 'bgi'],
+  zenless: ['绝区零', 'zenless', 'zzz', '一条龙绝区零'],
+  wutheringwaves: ['鸣潮', 'wutheringwaves', 'okww'],
+  nte: ['异环', 'nevernesstoeverness', 'oknte'],
+  reverse1999: ['重返未来', 'reverse1999', '1999'],
+  bluearchive: ['蔚蓝档案', '碧蓝档案', 'bluearchive', 'baah'],
+  arknights: ['明日方舟', 'arknights'],
+  stellasora: ['星塔旅人', 'stellasora'],
+  infinitynikki: ['无限暖暖', 'infinitynikki', 'whimbox'],
+}
+
+const normalizeScriptName = (name: string) =>
+  name
+    .normalize('NFKC')
+    .toLowerCase()
+    .replace(/[\s\p{P}\p{S}]/gu, '')
+
 export const managedHomeActivityKeys = (
-  scripts: { activityGame?: string | null }[]
+  scripts: { activityGame?: string | null; name?: string; type?: string }[]
 ): HomeModuleKey[] =>
-  HOME_ACTIVITY_MODULE_KEYS.filter(key => scripts.some(script => script.activityGame === key))
+  HOME_ACTIVITY_MODULE_KEYS.filter(key =>
+    scripts.some(script => {
+      // 专项提供的明确归属优先，避免 MAAEnd 等类型被较短别名重复识别。
+      if (HOME_ACTIVITY_MODULE_KEYS.some(game => game === script.activityGame)) {
+        return script.activityGame === key
+      }
+      return [script.name ?? '', script.type ?? ''].some(value => {
+        const name = normalizeScriptName(value)
+        return (
+          ACTIVITY_GAME_ALIASES[key]?.some(alias => name.includes(alias)) ||
+          (key === 'arknights' && /maa(?!end|fw)/.test(name))
+        )
+      })
+    })
+  )
 
 /** 已接入日常便笺的游戏，提供首页社区信息的独立开关。 */
 export const HOME_ACTIVITY_NOTE_KEYS: HomeModuleKey[] = [
