@@ -116,13 +116,8 @@ const cursorEffectOptions = computed<{ label: string; value: CursorEffect }[]>((
   { label: t('setting.cursor.fluid'), value: 'fluid' },
 ])
 
-// 这几类配置 Electron 主进程也要用（托盘、自启、更新源等），保存后同步过去
-const ELECTRON_SYNCED_CATEGORIES = new Set<keyof GlobalConfig>([
-  'UI',
-  'Start',
-  'Update',
-  'Function',
-])
+// 这几类配置 Node 宿主也要用（托盘、自启、更新源等），保存后同步过去
+const HOST_SYNCED_CATEGORIES = new Set<keyof GlobalConfig>(['UI', 'Start', 'Update', 'Function'])
 
 // 后端会规范化这些字段的值（加密存储 / URL 校验），保存后要回读；其余字段本地应用即可
 const NORMALIZED_SETTING_KEYS = new Set([
@@ -133,22 +128,22 @@ const NORMALIZED_SETTING_KEYS = new Set([
   'Update.MirrorChyanCDK',
 ])
 
-const syncConfigToElectron = async (data: GlobalConfig) => {
+const syncConfigToHost = async (data: GlobalConfig) => {
   try {
     if (window.hostAPI?.syncBackendConfig) {
-      // toRaw 剥掉 reactive 代理：Electron IPC 的结构化克隆不支持 Proxy，直接传会报
-      // "An object could not be cloned"（对已是普通对象的入参 toRaw 原样返回）
+      // toRaw 剥掉 reactive 代理：先去掉响应式代理，再将普通配置对象交给宿主；
+      // 对已是普通对象的入参 toRaw 原样返回。
       await window.hostAPI.syncBackendConfig({
         UI: toRaw(data.UI),
         Start: toRaw(data.Start),
         Update: toRaw(data.Update),
         Function: toRaw(data.Function),
       })
-      logger.info('配置已同步到 Electron')
+      logger.info('配置已同步到 Node 宿主')
     }
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error)
-    logger.error(`同步配置到 Electron 失败: ${errorMsg}`)
+    logger.error(`同步配置到 Node 宿主失败: ${errorMsg}`)
   }
 }
 
@@ -158,7 +153,7 @@ const loadSettings = async () => {
   if (data) {
     Object.assign(settings, data)
     syncUiPreferences(data.UI)
-    await syncConfigToElectron(data)
+    await syncConfigToHost(data)
   }
 }
 
@@ -186,7 +181,7 @@ const refreshSettings = async () => {
   if (data) {
     Object.assign(settings, data)
     syncUiPreferences(data.UI)
-    await syncConfigToElectron(data)
+    await syncConfigToHost(data)
   }
 }
 
@@ -199,7 +194,7 @@ const applyLocalSettingChange = async (category: keyof GlobalConfig, key: string
   }
   section[key] = value
   if (category === 'UI') syncUiPreferences(settings.UI)
-  if (ELECTRON_SYNCED_CATEGORIES.has(category)) await syncConfigToElectron(settings)
+  if (HOST_SYNCED_CATEGORIES.has(category)) await syncConfigToHost(settings)
 }
 
 const handleSettingChange = async (category: keyof GlobalConfig, key: string, value: any) => {
