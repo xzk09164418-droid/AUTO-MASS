@@ -369,6 +369,7 @@ function startFrontendServer(opts, runtimeLogs) {
 
   // 透明代理 WebSocket 升级请求 (/api/core/ws 等)
   server.on('upgrade', (req, clientSocket, head) => {
+    clientSocket.setNoDelay(true);
     const backendSocket = net.connect(opts.backendPort, opts.backendHost, () => {
       const headers = [`${req.method} ${req.url} HTTP/${req.httpVersion}`];
       for (let i = 0; i < req.rawHeaders.length; i += 2) {
@@ -389,6 +390,7 @@ function startFrontendServer(opts, runtimeLogs) {
       backendSocket.pipe(clientSocket);
     });
 
+    backendSocket.setNoDelay(true);
     backendSocket.on('error', () => clientSocket.destroy());
     clientSocket.on('error', () => backendSocket.destroy());
   });
