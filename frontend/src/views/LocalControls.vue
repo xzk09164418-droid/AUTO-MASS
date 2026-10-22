@@ -216,7 +216,7 @@ onUnmounted(() => clearInterval(timer))
               : t('localControls.unavailable')
           }}</a-descriptions-item>
         </a-descriptions>
-        <a-space wrap class="control-actions">
+        <div class="control-actions">
           <a-button
             type="primary"
             :loading="loading"
@@ -232,8 +232,8 @@ onUnmounted(() => clearInterval(timer))
           <a-button danger :disabled="loading" @click="confirmAction('logoff')">{{
             t('localControls.logoff')
           }}</a-button>
-        </a-space>
-        <a-space wrap class="control-actions">
+        </div>
+        <div class="control-actions">
           <a-button
             :disabled="loading || !connected"
             @click="action('window', { watchMode: !status.hostStatus?.watchMode })"
@@ -259,7 +259,7 @@ onUnmounted(() => clearInterval(timer))
             @click="action('window', { shortcut: 'Win+D' })"
             >Win+D</a-button
           >
-        </a-space>
+        </div>
         <div class="form-section">
           <div class="section-header">
             <h3>{{ t('localControls.navigation') }}</h3>
@@ -362,6 +362,8 @@ onUnmounted(() => clearInterval(timer))
 }
 .control-actions {
   display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
   margin-bottom: 24px;
 }
 </style>

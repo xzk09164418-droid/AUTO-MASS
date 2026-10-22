@@ -22,9 +22,23 @@ html.browser-host,
 .browser-host .ant-col > .ant-form-item > .ant-row {
   flex-direction: column;
 }
-.browser-host .ant-col > .ant-form-item .ant-form-item-label {
-  min-height: 32px;
+.browser-host .ant-col .ant-form-item-label {
+  --browser-form-label-height: 32px;
+  min-height: var(--browser-form-label-height);
   overflow: visible;
+}
+.browser-host .ant-col .form-label-wrapper {
+  --browser-form-label-height: 0px;
+  min-height: var(--browser-form-label-height);
+}
+.browser-host .ant-form-item-label > label {
+  height: auto;
+  white-space: normal;
+}
+.browser-host .ant-form-item-label .form-label,
+.browser-host .form-label-wrapper .form-label {
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 .browser-host .path-input-group {
   display: flex;
@@ -61,6 +75,20 @@ html.browser-host,
   min-width: 180px;
   flex: 1;
   max-width: 320px;
+}
+.browser-host .plan-config-card .ant-card-head-wrapper {
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.browser-host .plan-config-card .ant-card-head-title {
+  flex: 1 0 180px;
+}
+.browser-host .plan-config-card .ant-card-extra {
+  max-width: 100%;
+  margin-inline-start: 0;
+}
+.browser-host .plan-config-card .ant-card-extra > .ant-space {
+  flex-wrap: wrap;
 }
 @media (max-width: 1100px) {
   .browser-host .scripts-header {

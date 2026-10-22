@@ -404,42 +404,37 @@
             </a-col>
           </a-row>
 
-          <a-row :gutter="24">
-            <a-col :span="12">
-              <LogTimestampSelector
-                v-model:form-data="formData"
-                :log-file-path="formData.logPath"
-                :handle-change="handleChange"
-                :rules="rules"
+          <LogTimestampSelector
+            v-model:form-data="formData"
+            :log-file-path="formData.logPath"
+            :handle-change="handleChange"
+            :rules="rules"
+          >
+            <a-form-item name="logTimeFormat" :rules="rules.logTimeFormat">
+              <template #label>
+                <a-tooltip :title="t('edit.timestampFormatUsedScript')">
+                  <span class="form-label">
+                    {{ t('edit.logTimestampFormat') }}
+                    <QuestionCircleOutlined class="help-icon" />
+                  </span>
+                </a-tooltip>
+              </template>
+              <a-input
+                v-model:value="formData.logTimeFormat"
+                :placeholder="t('edit.enterScriptLogTimestamp')"
+                size="large"
+                class="modern-input"
+                @blur="handleChange('Script', 'LogTimeFormat', formData.logTimeFormat)"
               />
-            </a-col>
-            <a-col :span="12">
-              <a-form-item name="logTimeFormat" :rules="rules.logTimeFormat">
-                <template #label>
-                  <a-tooltip :title="t('edit.timestampFormatUsedScript')">
-                    <span class="form-label">
-                      {{ t('edit.logTimestampFormat') }}
-                      <QuestionCircleOutlined class="help-icon" />
-                    </span>
-                  </a-tooltip>
-                </template>
-                <a-input
-                  v-model:value="formData.logTimeFormat"
-                  :placeholder="t('edit.enterScriptLogTimestamp')"
-                  size="large"
-                  class="modern-input"
-                  @blur="handleChange('Script', 'LogTimeFormat', formData.logTimeFormat)"
-                />
-                <div class="format-preview">
-                  {{ t('edit.examplePreview')
-                  }}<span class="format-preview-value">{{ logTimeFormatPreview }}</span>
-                </div>
-                <div v-if="hasFractionalSecondToken" class="format-preview-tip">
-                  {{ t('edit.tipFAcceptsBoth') }} {{ t('edit.k123456DigitCountLog') }}
-                </div>
-              </a-form-item>
-            </a-col>
-          </a-row>
+              <div class="format-preview">
+                {{ t('edit.examplePreview')
+                }}<span class="format-preview-value">{{ logTimeFormatPreview }}</span>
+              </div>
+              <div v-if="hasFractionalSecondToken" class="format-preview-tip">
+                {{ t('edit.tipFAcceptsBoth') }} {{ t('edit.k123456DigitCountLog') }}
+              </div>
+            </a-form-item>
+          </LogTimestampSelector>
 
           <LogHookConfig
             v-model:enabled="generalConfig.Script.LogHookEnabled"
@@ -1434,7 +1429,13 @@ const rules = {
   rootPath: [{ required: true, message: t('edit.pickScriptRootDirectory2'), trigger: 'blur' }],
   scriptPath: [{ required: true, message: t('edit.pickMainProgramPath'), trigger: 'blur' }],
   configPath: [{ required: false, message: t('edit.pickConfigurationFilePath'), trigger: 'blur' }],
-  logPath: [{ required: false, message: '可选：留空则进入无日志模式（上限时间内自行退出即判成功）', trigger: 'blur' }],
+  logPath: [
+    {
+      required: false,
+      message: '可选：留空则进入无日志模式（上限时间内自行退出即判成功）',
+      trigger: 'blur',
+    },
+  ],
   logTimeStart: [{ required: false, message: t('edit.enterWhereLogTimestamp2'), trigger: 'blur' }],
   logTimeEnd: [{ required: false, message: t('edit.enterWhereLogTimestamp'), trigger: 'blur' }],
   logTimeFormat: [{ required: false, message: t('edit.enterLogTimestampFormat'), trigger: 'blur' }],

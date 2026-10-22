@@ -11,105 +11,102 @@
       <a-radio-button value="visual">{{ t('comp.visualSelection') }}</a-radio-button>
     </a-radio-group>
 
-    <!-- 输入框模式 -->
-    <div v-if="viewMode === 'input'">
-      <!-- gutter 与外层分区保持一致，子列边界才能和外层两列对齐 -->
-      <a-row :gutter="24">
-        <a-col :span="12">
-          <a-form-item name="logTimeStart" :rules="rules.logTimeStart">
-            <template #label>
-              <a-tooltip :title="t('comp.logTimestampStartPosition')">
-                <span class="form-label">
-                  {{ t('comp.logTimestampStart') }}
-                  <QuestionCircleOutlined class="help-icon" />
-                </span>
-              </a-tooltip>
-            </template>
-            <a-input-number
-              v-model:value="formData.logTimeStart"
-              :min="1"
-              :max="9999"
-              size="large"
-              style="width: 100%"
-              @blur="handleChange('Script', 'LogTimeStart', formData.logTimeStart)"
-            />
-          </a-form-item>
-        </a-col>
-        <a-col :span="12">
-          <a-form-item name="logTimeEnd" :rules="rules.logTimeEnd">
-            <template #label>
-              <a-tooltip :title="t('comp.logTimestampEndPosition')">
-                <span class="form-label">
-                  {{ t('comp.logTimestampEnd') }}
-                  <QuestionCircleOutlined class="help-icon" />
-                </span>
-              </a-tooltip>
-            </template>
-            <a-input-number
-              v-model:value="formData.logTimeEnd"
-              :min="1"
-              :max="9999"
-              size="large"
-              style="width: 100%"
-              @blur="handleChange('Script', 'LogTimeEnd', formData.logTimeEnd)"
-            />
-          </a-form-item>
-        </a-col>
-      </a-row>
-    </div>
+    <!-- 模式切换独占一行；位置与格式字段共用同一行标签高度。 -->
+    <a-row :gutter="24">
+      <a-col v-if="viewMode === 'input'" :span="6">
+        <a-form-item name="logTimeStart" :rules="rules.logTimeStart">
+          <template #label>
+            <a-tooltip :title="t('comp.logTimestampStartPosition')">
+              <span class="form-label">
+                {{ t('comp.logTimestampStart') }}
+                <QuestionCircleOutlined class="help-icon" />
+              </span>
+            </a-tooltip>
+          </template>
+          <a-input-number
+            v-model:value="formData.logTimeStart"
+            :min="1"
+            :max="9999"
+            size="large"
+            style="width: 100%"
+            @blur="handleChange('Script', 'LogTimeStart', formData.logTimeStart)"
+          />
+        </a-form-item>
+      </a-col>
+      <a-col v-if="viewMode === 'input'" :span="6">
+        <a-form-item name="logTimeEnd" :rules="rules.logTimeEnd">
+          <template #label>
+            <a-tooltip :title="t('comp.logTimestampEndPosition')">
+              <span class="form-label">
+                {{ t('comp.logTimestampEnd') }}
+                <QuestionCircleOutlined class="help-icon" />
+              </span>
+            </a-tooltip>
+          </template>
+          <a-input-number
+            v-model:value="formData.logTimeEnd"
+            :min="1"
+            :max="9999"
+            size="large"
+            style="width: 100%"
+            @blur="handleChange('Script', 'LogTimeEnd', formData.logTimeEnd)"
+          />
+        </a-form-item>
+      </a-col>
+      <!-- 可视化选择模式 -->
+      <a-col v-if="viewMode === 'visual'" :span="12">
+        <div class="visual-mode-container">
+          <div class="log-preview-header">
+            <span>{{ t('comp.logPreviewSelectTimestamp') }}</span>
+            <a-button
+              type="primary"
+              :loading="loadingPreview"
+              :disabled="!logFilePath"
+              @click="loadLogFile"
+            >
+              {{ t('comp.loadLog') }}
+            </a-button>
+          </div>
 
-    <!-- 可视化选择模式 -->
-    <div v-else-if="viewMode === 'visual'">
-      <div class="visual-mode-container">
-        <div class="log-preview-header">
-          <span>{{ t('comp.logPreviewSelectTimestamp') }}</span>
-          <a-button
-            type="primary"
-            :loading="loadingPreview"
-            :disabled="!logFilePath"
-            @click="loadLogFile"
-          >
-            {{ t('comp.loadLog') }}
-          </a-button>
-        </div>
-
-        <div
-          ref="logPreviewRef"
-          class="log-preview-area"
-          @mouseup="handleMouseUp"
-          @mouseleave="handleMouseLeave"
-        >
           <div
-            v-for="(line, index) in logLines"
-            :key="index"
-            class="log-line"
-            :data-line-index="index"
+            ref="logPreviewRef"
+            class="log-preview-area"
+            @mouseup="handleMouseUp"
+            @mouseleave="handleMouseLeave"
           >
-            <span class="line-number">{{ index + 1 }}</span>
-            <span class="line-content-wrapper">
-              <!-- 位置高亮框 -->
-              <span
-                v-if="selection.valid && line.length > selection.startPos"
-                class="position-highlight"
-                :style="getHighlightStyle(line)"
-              ></span>
-              <!-- 日志内容 -->
-              <span class="line-content">{{ line }}</span>
-            </span>
+            <div
+              v-for="(line, index) in logLines"
+              :key="index"
+              class="log-line"
+              :data-line-index="index"
+            >
+              <span class="line-number">{{ index + 1 }}</span>
+              <span class="line-content-wrapper">
+                <!-- 位置高亮框 -->
+                <span
+                  v-if="selection.valid && line.length > selection.startPos"
+                  class="position-highlight"
+                  :style="getHighlightStyle(line)"
+                ></span>
+                <!-- 日志内容 -->
+                <span class="line-content">{{ line }}</span>
+              </span>
+            </div>
           </div>
-        </div>
 
-        <div class="selection-info">
-          <div class="current-selection">
-            当前选择: 起始位置 {{ selection.startPos + 1 }} - 结束位置 {{ selection.endPos + 1 }}
-            <span v-if="selectedText">(内容: "{{ selectedText }}")</span>
+          <div class="selection-info">
+            <div class="current-selection">
+              当前选择: 起始位置 {{ selection.startPos + 1 }} - 结束位置 {{ selection.endPos + 1 }}
+              <span v-if="selectedText">(内容: "{{ selectedText }}")</span>
+            </div>
+            <a-button type="primary" :disabled="!selection.valid" @click="applySelection">
+              {{ t('comp.appSelection') }}
+            </a-button>
           </div>
-          <a-button type="primary" :disabled="!selection.valid" @click="applySelection">
-            {{ t('comp.appSelection') }}
-          </a-button>
         </div>
-      </div>
-    </div>
+      </a-col>
+      <a-col :span="12"><slot /></a-col>
+    </a-row>
   </div>
 </template>
 
