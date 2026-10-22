@@ -13,7 +13,6 @@ import { useLocale } from '@/composables/useLocale'
 import type { ThemeColor, ThemeMode } from '@/composables/useTheme'
 import { SUPPORTED_LOCALES, type AppLocale } from '@/i18n'
 import type { CursorEffect } from '@/types/cursorEffect'
-import type { HomeSatelliteStyle } from '@/types/homeSatellite'
 import type { PressSoundPhase, PressSoundPreset } from '@/types/pressSound'
 import type { GlobalConfig } from '@/api'
 import type { SelectValue } from 'ant-design-vue/es/select'
@@ -37,10 +36,6 @@ interface TabBasicProps {
   cursorEffectOptions: { label: string; value: CursorEffect }[]
   lowPerformanceMode: boolean
   lowPerformanceModeSaving: boolean
-  pauseHomeEffectsWhenRunning: boolean
-  pauseHomeEffectsWhenRunningSaving: boolean
-  homeSatelliteStyle: HomeSatelliteStyle
-  homeSatelliteStyleSaving: boolean
   pressSoundEnabled: boolean
   pressSoundPreset: PressSoundPreset
   pressSoundCustomPath: string
@@ -54,7 +49,6 @@ interface TabBasicProps {
   handlePressSoundVolumeChange(_volume: number): Promise<void>
   handlePressSoundImport(kind?: 'single' | 'press' | 'release'): Promise<void>
   handlePressSoundPreview(phase?: PressSoundPhase): void
-  handleHomeSatelliteStyleChange(_style: HomeSatelliteStyle): Promise<void>
   handleThemeModeChange(value: SelectValue): Promise<void>
   handleAppearanceChange(value: SelectValue): Promise<void>
   handleAppearanceImport(): Promise<void>
@@ -63,7 +57,6 @@ interface TabBasicProps {
   handleThemeReset(): Promise<void>
   handleCursorEffectChange(value: SelectValue): Promise<void>
   handleLowPerformanceModeChange(_enabled: boolean): Promise<void>
-  handlePauseHomeEffectsWhenRunningChange(_enabled: boolean): Promise<void>
   handleSettingChange(category: keyof GlobalConfig, key: string, value: any): Promise<void>
 }
 const isBrowserHost = window.__AUTO_MAS_BROWSER_HOST__ === true
@@ -83,10 +76,6 @@ const {
   cursorEffectOptions,
   lowPerformanceMode,
   lowPerformanceModeSaving,
-  pauseHomeEffectsWhenRunning,
-  pauseHomeEffectsWhenRunningSaving,
-  homeSatelliteStyle,
-  homeSatelliteStyleSaving,
   pressSoundEnabled,
   pressSoundPreset,
   pressSoundCustomPath,
@@ -100,7 +89,6 @@ const {
   handlePressSoundVolumeChange,
   handlePressSoundImport,
   handlePressSoundPreview,
-  handleHomeSatelliteStyleChange,
   handleThemeModeChange,
   handleAppearanceChange,
   handleAppearanceImport,
@@ -109,7 +97,6 @@ const {
   handleThemeReset,
   handleCursorEffectChange,
   handleLowPerformanceModeChange,
-  handlePauseHomeEffectsWhenRunningChange,
   handleSettingChange,
 } = defineProps<TabBasicProps>()
 
@@ -305,54 +292,6 @@ const handleLocaleChange = (value: unknown): void => {
               size="large"
               style="width: 100%"
               @change="(enabled: any) => handleLowPerformanceModeChange(enabled)"
-            >
-              <a-select-option :value="true">{{ t('common.on') }}</a-select-option>
-              <a-select-option :value="false">{{ t('common.off') }}</a-select-option>
-            </a-select>
-          </div>
-        </a-col>
-        <a-col :span="12">
-          <div class="form-item-vertical">
-            <div class="form-label-wrapper">
-              <span class="form-label">{{ t('setting.basic.homeSatellite') }}</span>
-              <a-tooltip :title="t('setting.basic.homeSatelliteTip')">
-                <QuestionCircleOutlined class="help-icon" />
-              </a-tooltip>
-            </div>
-            <a-select
-              :value="homeSatelliteStyle"
-              :disabled="homeSatelliteStyleSaving"
-              :loading="homeSatelliteStyleSaving"
-              size="large"
-              style="width: 100%"
-              @change="(style: any) => handleHomeSatelliteStyleChange(style)"
-            >
-              <a-select-option value="classic">
-                {{ t('setting.basic.homeSatelliteClassic') }}
-              </a-select-option>
-              <a-select-option value="galaxy">
-                {{ t('setting.basic.homeSatelliteGalaxy') }}
-              </a-select-option>
-            </a-select>
-          </div>
-        </a-col>
-      </a-row>
-      <a-row :gutter="24">
-        <a-col :span="12">
-          <div class="form-item-vertical">
-            <div class="form-label-wrapper">
-              <span class="form-label">{{ t('setting.basic.pauseHomeEffects') }}</span>
-              <a-tooltip :title="t('setting.basic.pauseHomeEffectsTip')">
-                <QuestionCircleOutlined class="help-icon" />
-              </a-tooltip>
-            </div>
-            <a-select
-              :value="pauseHomeEffectsWhenRunning"
-              :disabled="pauseHomeEffectsWhenRunningSaving"
-              :loading="pauseHomeEffectsWhenRunningSaving"
-              size="large"
-              style="width: 100%"
-              @change="(enabled: any) => handlePauseHomeEffectsWhenRunningChange(enabled)"
             >
               <a-select-option :value="true">{{ t('common.on') }}</a-select-option>
               <a-select-option :value="false">{{ t('common.off') }}</a-select-option>

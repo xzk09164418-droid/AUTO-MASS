@@ -22,9 +22,7 @@ import { useUpdateChecker } from '@/composables/useUpdateChecker.ts'
 import { updateInfo } from '@/composables/useVersionService'
 import { useCursorEffectStore } from '@/stores/cursorEffect'
 import { usePerformanceStore } from '@/stores/performance'
-import { useHomeSatelliteStore } from '@/stores/homeSatellite'
 import { usePressSoundStore } from '@/stores/pressSound'
-import type { HomeSatelliteStyle } from '@/types/homeSatellite'
 import { Service, type VersionOut } from '@/api'
 import { useAppearanceSettings } from './useAppearanceSettings'
 
@@ -64,8 +62,6 @@ const { loading, getSettings, updateSettings } = useSettingsApi()
 const { syncUiPreferences } = useUiPreferences()
 const cursorEffectStore = useCursorEffectStore()
 const performanceStore = usePerformanceStore()
-const homeSatelliteStore = useHomeSatelliteStore()
-void homeSatelliteStore.load()
 const pressSoundStore = usePressSoundStore()
 void pressSoundStore.load()
 const {
@@ -303,26 +299,6 @@ const handleLowPerformanceModeChange = async (enabled: boolean) => {
   }
 }
 
-const handlePauseHomeEffectsWhenRunningChange = async (enabled: boolean) => {
-  try {
-    await performanceStore.setPauseHomeEffectsWhenRunning(enabled)
-  } catch (error) {
-    const errorMsg = error instanceof Error ? error.message : String(error)
-    logger.error(`保存脚本运行暂停主页动效失败: ${errorMsg}`)
-    message.error(t('setting.toast.pauseHomeEffectsSaveFailed'))
-  }
-}
-
-const handleHomeSatelliteStyleChange = async (style: HomeSatelliteStyle) => {
-  try {
-    await homeSatelliteStore.setStyle(style)
-  } catch (error) {
-    const errorMsg = error instanceof Error ? error.message : String(error)
-    logger.error(`保存主页卫星样式失败: ${errorMsg}`)
-    message.error(t('setting.toast.homeSatelliteSaveFailed'))
-  }
-}
-
 const reportPressSoundError = (action: string, error: unknown): void => {
   const errorMsg = error instanceof Error ? error.message : String(error)
   logger.error(`${action}失败: ${errorMsg}`)
@@ -529,10 +505,6 @@ onMounted(() => {
             :cursor-effect-options="cursorEffectOptions"
             :low-performance-mode="performanceStore.lowPerformanceMode"
             :low-performance-mode-saving="performanceStore.saving"
-            :pause-home-effects-when-running="performanceStore.pauseHomeEffectsWhenRunning"
-            :pause-home-effects-when-running-saving="performanceStore.saving"
-            :home-satellite-style="homeSatelliteStore.style"
-            :home-satellite-style-saving="homeSatelliteStore.saving"
             :press-sound-enabled="pressSoundStore.enabled"
             :press-sound-preset="pressSoundStore.preset"
             :press-sound-custom-path="pressSoundStore.customPath"
@@ -546,7 +518,6 @@ onMounted(() => {
             :handle-press-sound-volume-change="handlePressSoundVolumeChange"
             :handle-press-sound-import="handlePressSoundImport"
             :handle-press-sound-preview="handlePressSoundPreview"
-            :handle-home-satellite-style-change="handleHomeSatelliteStyleChange"
             :handle-theme-mode-change="handleThemeModeChange"
             :handle-appearance-change="handleAppearanceChange"
             :handle-appearance-import="handleAppearanceImport"
@@ -555,7 +526,6 @@ onMounted(() => {
             :handle-theme-reset="handleThemeReset"
             :handle-cursor-effect-change="handleCursorEffectChange"
             :handle-low-performance-mode-change="handleLowPerformanceModeChange"
-            :handle-pause-home-effects-when-running-change="handlePauseHomeEffectsWhenRunningChange"
             :handle-setting-change="handleSettingChange"
           />
         </a-tab-pane>

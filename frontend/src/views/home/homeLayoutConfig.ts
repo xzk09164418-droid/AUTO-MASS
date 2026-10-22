@@ -87,7 +87,6 @@ export const HOME_ACTIVITY_NOTE_KEYS: HomeModuleKey[] = [
 export const defaultHomeModuleOrder: HomeModuleKey[] = [
   'command',
   'quick',
-  'satellite',
   'proxy',
   HOME_ACTIVITY_CAROUSEL_KEY,
   ...HOME_ACTIVITY_MODULE_KEYS,

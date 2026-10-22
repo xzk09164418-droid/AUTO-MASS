@@ -74,16 +74,6 @@
 
           <HomeQuickActionsCard v-else-if="moduleKey === 'quick'" />
 
-          <section v-else-if="moduleKey === 'satellite'" class="satellite-animation-section">
-            <template v-if="homeSatelliteStore.initialized">
-              <SatelliteClassic
-                v-if="homeSatelliteStore.style === 'classic'"
-                v-show="!performanceStore.isBackgrounded"
-              />
-              <SatelliteAnimation v-else v-show="!performanceStore.isBackgrounded" />
-            </template>
-          </section>
-
           <HomeProxyCard
             v-else-if="moduleKey === 'proxy'"
             :loading="loading"
@@ -122,8 +112,6 @@ import { useI18n } from 'vue-i18n'
 import { computed, onMounted, watch } from 'vue'
 import { BellOutlined, EditOutlined } from '@ant-design/icons-vue'
 import NoticeModal from '@/components/NoticeModal.vue'
-import SatelliteAnimation from '@/components/SatelliteAnimation.vue'
-import SatelliteClassic from '@/components/SatelliteClassic.vue'
 import { useAppInitialization } from '@/composables/useAppInitialization'
 import HomeActivityCarousel from '@/views/home/components/HomeActivityCarousel.vue'
 import HomeBackToTop from '@/views/home/components/HomeBackToTop.vue'
@@ -138,18 +126,12 @@ import { useHomeLayout } from '@/views/home/useHomeLayout'
 import { useHomeNotice } from '@/views/home/useHomeNotice'
 import { useHomeOverview } from '@/views/home/useHomeOverview'
 import { useHomeQuickStart } from '@/views/home/useHomeQuickStart'
-import { usePerformanceStore } from '@/stores/performance'
-import { useHomeSatelliteStore } from '@/stores/homeSatellite'
 
 defineOptions({
   name: 'HomeView',
 })
 
 const { isBootstrapping } = useAppInitialization()
-const performanceStore = usePerformanceStore()
-// 卫星样式读到之前先不出卫星，免得先按默认建一遍再换成用户选的那种
-const homeSatelliteStore = useHomeSatelliteStore()
-void homeSatelliteStore.load()
 const {
   layoutReady,
   layoutDrawerOpen,
@@ -307,11 +289,6 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   gap: 24px;
-}
-
-.satellite-animation-section {
-  width: 100%;
-  margin-top: 0;
 }
 
 .home-module {

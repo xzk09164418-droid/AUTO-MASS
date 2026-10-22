@@ -1,7 +1,6 @@
 export type HomeModuleKey =
   | 'command'
   | 'quick'
-  | 'satellite'
   | 'proxy'
   | 'activities'
   | 'endfield'
