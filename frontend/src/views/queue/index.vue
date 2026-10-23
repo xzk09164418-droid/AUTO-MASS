@@ -634,16 +634,23 @@ const handleAfterAccomplishDelayBlur = async () => {
   await handleConfigChange('AfterAccomplishDelay', delay)
 }
 
+// 提示音失败或资源响应较慢时，不阻塞已经成功的队列操作。
+const playQueueSound = async (sound: 'add_queue' | 'delete_queue') => {
+  try {
+    const { useAudioPlayer } = await import('@/composables/useAudioPlayer')
+    await useAudioPlayer().playSound(sound)
+  } catch (error) {
+    logger.warn(`播放队列提示音失败: ${error instanceof Error ? error.message : String(error)}`)
+  }
+}
+
 // 添加队列
 const handleAddQueue = async () => {
   try {
     const response = await Service.addQueueApiQueueAddPost()
 
     if (response.code === 200 && response.queueId) {
-      // 播放添加队列成功音频
-      const { useAudioPlayer } = await import('@/composables/useAudioPlayer')
-      const { playSound } = useAudioPlayer()
-      await playSound('add_queue')
+      void playQueueSound('add_queue')
 
       const defaultName = t('queue.defaultName')
       const newQueue = {
@@ -679,10 +686,7 @@ const handleRemoveQueue = async (queueId: string) => {
     const response = await Service.deleteQueueApiQueueDeletePost({ queueId })
 
     if (response.code === 200) {
-      // 播放删除队列成功音频
-      const { useAudioPlayer } = await import('@/composables/useAudioPlayer')
-      const { playSound } = useAudioPlayer()
-      await playSound('delete_queue')
+      void playQueueSound('delete_queue')
 
       const index = queueList.value.findIndex(queue => queue.id === queueId)
       if (index > -1) {
