@@ -41,7 +41,7 @@ function applyLocale(next: AppLocale): void {
 watch(locale, applyLocale, { immediate: true })
 
 /**
- * 首次启动跟随系统语言，之后以用户在设置里的选择为准。
+ * 首次启动默认简体中文，之后以用户在设置里的选择为准。
  * 语言存在前端配置（Electron 侧）里，不经过后端。
  */
 async function initLocale(preloadedConfig?: FrontendConfig): Promise<void> {
@@ -53,13 +53,10 @@ async function initLocale(preloadedConfig?: FrontendConfig): Promise<void> {
       locale.value = normalizeLocale(config.language)
       return
     }
-    // 未设置过则跟随系统：渲染进程的 navigator.language 即 Electron 的应用语言
-    locale.value = normalizeLocale(navigator.language)
+    locale.value = 'zh-CN'
   } catch (error) {
-    // 配置读不出来时仍能拿到系统语言，没必要连它一起放弃——
-    // 「读取失败」和「语言标记不认识」是同一类情况，应给同一个答案。
-    logger.warn(`读取语言设置失败，改用系统语言: ${error instanceof Error ? error.message : error}`)
-    locale.value = normalizeLocale(navigator.language)
+    logger.warn(`读取语言设置失败，改用简体中文: ${error instanceof Error ? error.message : error}`)
+    locale.value = 'zh-CN'
   }
 }
 
@@ -68,8 +65,7 @@ async function initLocale(preloadedConfig?: FrontendConfig): Promise<void> {
 let savePending: Promise<void> = Promise.resolve()
 
 async function setLocale(next: AppLocale): Promise<void> {
-  // 不在此处按当前值早退：首启跟随系统时选择器已显示该语言，
-  // 用户再显式选一次的意图是"钉住它"，必须落盘，否则日后仍会跟着系统变。
+  // 不在此处按当前值早退：用户显式选择默认语言时也要持久化该选择。
   const previous = locale.value
   locale.value = next
 
