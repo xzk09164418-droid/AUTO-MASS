@@ -26,7 +26,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onUnmounted, ref } from 'vue'
+import { computed, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppInitialization } from '@/composables/useAppInitialization'
 import { openLaunchLogWindow } from '@/utils/launch'
@@ -45,10 +45,20 @@ const visible = computed(
   () =>
     window.__AUTO_MAS_BROWSER_HOST__ && (!complete.value || !isInitialized.value || !!error.value)
 )
+const STARTUP_POLL_INTERVAL_MS = 1000
 let disposed = false
+let polling = false
+let refreshRequested = false
 let timer: ReturnType<typeof setTimeout> | undefined
 
 async function poll() {
+  if (disposed) return
+  if (polling) {
+    refreshRequested = true
+    return
+  }
+  polling = true
+  clearTimeout(timer)
   try {
     const state = await window.hostAPI.getStartupStatus()
     if (disposed) return
@@ -58,9 +68,22 @@ async function poll() {
     logs.value = state.logs.slice(-20).join('\n')
   } catch (cause) {
     if (!disposed) statusError.value = t('launch.statusUnavailable', { detail: String(cause) })
+  } finally {
+    polling = false
+    const delay = refreshRequested ? 0 : STARTUP_POLL_INTERVAL_MS
+    refreshRequested = false
+    if (!disposed && visible.value) timer = setTimeout(poll, delay)
   }
-  if (!disposed && visible.value) timer = setTimeout(poll, 1000)
 }
+
+// WebSocket 初始化完成后立即核对后台状态，不额外等待下一轮轮询。
+watch(
+  isInitialized,
+  initialized => {
+    if (initialized && visible.value) void poll()
+  },
+  { immediate: true }
+)
 
 function retry() {
   statusError.value = ''
