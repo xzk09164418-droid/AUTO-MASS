@@ -2420,35 +2420,6 @@ html.dark .modern-number-input :deep(.ant-input-number-focused) {
   }
 }
 
-/* 动画效果 */
-@keyframes fadeInUp {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.form-section {
-  animation: fadeInUp 0.6s ease-out;
-}
-
-.form-section:nth-child(2) {
-  animation-delay: 0.1s;
-}
-
-.form-section:nth-child(3) {
-  animation-delay: 0.2s;
-}
-
-.form-section:nth-child(4) {
-  animation-delay: 0.3s;
-}
-
 /* Tooltip样式优化 */
 :deep(.ant-tooltip-inner) {
   background: var(--ant-color-bg-elevated);
