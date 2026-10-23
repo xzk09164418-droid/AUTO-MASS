@@ -57,7 +57,13 @@ TPlanInfo = TypeVar("TPlanInfo")
 TPlanItem = TypeVar("TPlanItem")
 
 
-class OutBase(BaseModel):
+class _SchemaModel(BaseModel):
+    """按需构建校验器与序列化器，减少未使用模型的启动开销。"""
+
+    model_config = ConfigDict(defer_build=True)
+
+
+class OutBase(_SchemaModel):
     code: int = Field(default=200, description="状态码")
     status: str = Field(default="success", description="操作状态")
     message: str = Field(default="操作成功", description="操作消息")
@@ -80,7 +86,7 @@ class NoticeOut(OutBase):
     )
 
 
-class TagItem(BaseModel):
+class TagItem(_SchemaModel):
     text: str = Field(..., description="标签文本")
     color: Literal[
         "red",
@@ -99,7 +105,7 @@ class TagItem(BaseModel):
     ] = Field(..., description="标签颜色")
 
 
-class ComboBoxItem(BaseModel):
+class ComboBoxItem(_SchemaModel):
     label: str = Field(..., description="展示值")
     value: Optional[str] = Field(..., description="实际值")
 
@@ -117,7 +123,7 @@ class MaaDepotInventoryOut(OutBase):
     )
 
 
-class MaaCultivateGoalOptionItem(BaseModel):
+class MaaCultivateGoalOptionItem(_SchemaModel):
     value: str = Field(..., description="目标 ID（专精=skillId，模组=uniEquipId）")
     label: str = Field(..., description="目标名称（模组带分支码）")
     maxLevel: int = Field(default=0, description="可达档位上限（按非空消耗档数）")
@@ -126,7 +132,7 @@ class MaaCultivateGoalOptionItem(BaseModel):
     )
 
 
-class MaaCultivateOperatorOptionItem(BaseModel):
+class MaaCultivateOperatorOptionItem(_SchemaModel):
     value: str = Field(..., description="干员 ID")
     label: str = Field(..., description="干员名")
     rarity: int = Field(default=0, description="稀有度")
@@ -157,12 +163,12 @@ class MaaCultivateOperatorsOut(OutBase):
     )
 
 
-class MaaCultivateImportIn(BaseModel):
+class MaaCultivateImportIn(_SchemaModel):
     scriptId: str = Field(..., description="脚本ID")
     content: str = Field(..., description="明日方舟工具箱导出至 MAA 的养成目标 JSON")
 
 
-class MaaCultivateImportSkippedItem(BaseModel):
+class MaaCultivateImportSkippedItem(_SchemaModel):
     error: Literal[
         "format",
         "empty",
@@ -187,7 +193,7 @@ class MaaCultivateImportOut(MaaCultivateOperatorsOut):
     name: str = Field(default="", description="出错条目的干员名称")
 
 
-class CultivatePreviewIn(BaseModel):
+class CultivatePreviewIn(_SchemaModel):
     scriptId: str = Field(..., description="脚本ID")
     userId: str = Field(..., description="用户ID")
     targets: str = Field(
@@ -195,7 +201,7 @@ class CultivatePreviewIn(BaseModel):
     )
 
 
-class CultivatePreviewItem(BaseModel):
+class CultivatePreviewItem(_SchemaModel):
     itemId: str = Field(..., description="物品ID")
     name: str = Field(..., description="物品名称")
     count: int = Field(..., description="需求数量（保有量目标）")
@@ -208,7 +214,7 @@ class CultivatePreviewItem(BaseModel):
     )
 
 
-class CultivateOperatorProgression(BaseModel):
+class CultivateOperatorProgression(_SchemaModel):
     """单个目标干员的当前练度（编辑器"当前等级 → 目标等级"展示用）。"""
 
     operatorId: str = Field(..., description="干员 ID")
@@ -252,7 +258,7 @@ class CultivatePreviewOut(OutBase):
     hasInventory: bool = Field(..., description="是否存在仓库识别档案")
 
 
-class BlueArchiveActivityIn(BaseModel):
+class BlueArchiveActivityIn(_SchemaModel):
     """碧蓝档案活动数据查询参数"""
 
     line_type: Literal["JP", "Globle", "CN"] = Field(
@@ -262,7 +268,7 @@ class BlueArchiveActivityIn(BaseModel):
     page_size: int = Field(default=50, ge=1, le=100, description="每页条数")
 
 
-class GameCalendarActivityInfo(BaseModel):
+class GameCalendarActivityInfo(_SchemaModel):
     name: str = Field(..., min_length=1, max_length=500, description="活动名称")
     startTime: AwareDatetime = Field(..., description="活动开始时间，包含时区")
     endTime: AwareDatetime = Field(..., description="活动结束时间，包含时区")
@@ -278,6 +284,7 @@ class GameCalendarActivityUpdateIn(GameCalendarActivityInfo):
     completed: bool = Field(..., description="是否由用户标记为已完成")
 
 
+# 此模型用于 FastAPI Depends()，路由注册前必须生成完整的查询参数签名。
 class GameCalendarActivityScopeIn(BaseModel):
     game: Literal[
         "endfield",
@@ -309,7 +316,7 @@ class GameCalendarActivitiesOut(OutBase):
     )
 
 
-class BetterGICustomGroupOut(BaseModel):
+class BetterGICustomGroupOut(_SchemaModel):
     """BetterGI 一条龙自定义配置组（非内置 8 组）"""
 
     name: str = Field(..., description="配置组名称")
@@ -331,7 +338,7 @@ class BetterGIOneDragonSettingsOut(OutBase):
     )
 
 
-class BetterGIOneDragonSettingsIn(BaseModel):
+class BetterGIOneDragonSettingsIn(_SchemaModel):
     """BetterGI 一条龙设置项写入请求"""
 
     scriptId: str = Field(..., description="所属脚本ID")
@@ -359,7 +366,7 @@ class BetterGIGlobalDomainSettingsOut(OutBase):
     )
 
 
-class BetterGIGlobalDomainSettingsIn(BaseModel):
+class BetterGIGlobalDomainSettingsIn(_SchemaModel):
     """BetterGI 秘境刷取配置写入请求（per-user 副本；userId 为空时原生来源 BGI 全局 config.json）"""
 
     scriptId: str = Field(..., description="所属脚本ID")
@@ -389,7 +396,7 @@ class BetterGIGlobalStygianSettingsOut(OutBase):
     )
 
 
-class BetterGIGlobalStygianSettingsIn(BaseModel):
+class BetterGIGlobalStygianSettingsIn(_SchemaModel):
     """BetterGI 幽境危战设置写入请求（per-user 副本；userId 为空时原生来源 BGI 全局 config.json）"""
 
     scriptId: str = Field(..., description="所属脚本ID")
@@ -406,7 +413,7 @@ class BetterGIGlobalStygianSettingsIn(BaseModel):
     )
 
 
-class BetterGIDomainCatalogItem(BaseModel):
+class BetterGIDomainCatalogItem(_SchemaModel):
     """BetterGI 每周秘境可选秘境目录项（来源：官方 tp.json，唯一数据源）"""
 
     name: str = Field(
@@ -443,7 +450,7 @@ class BetterGIScriptGroupDetailOut(OutBase):
     )
 
 
-class BetterGIScriptGroupSaveIn(BaseModel):
+class BetterGIScriptGroupSaveIn(_SchemaModel):
     """BetterGI 配置组 json 写入请求（保存到 per-user 副本，不触碰 BGI 同名实配）"""
 
     scriptId: str = Field(..., description="所属脚本ID")
@@ -470,7 +477,7 @@ class BetterGIScriptReadmeOut(OutBase):
     data: str = Field(default="", description="README 纯文本内容（缺失时为空字符串）")
 
 
-class BetterGIPathingNode(BaseModel):
+class BetterGIPathingNode(_SchemaModel):
     """BetterGI AutoPathing 目录树节点"""
 
     name: str = Field(..., description="目录名")
@@ -512,7 +519,7 @@ class BetterGIScriptDirsOut(OutBase):
     exePath: Optional[str] = Field(default=None, description="BetterGI 主程序路径")
 
 
-class ZzzOdInstanceOut(BaseModel):
+class ZzzOdInstanceOut(_SchemaModel):
     """zzz-od 实例（账号）信息"""
 
     idx: int = Field(..., description="实例下标（config/{idx:02d} 目录）")
@@ -529,14 +536,14 @@ class ZzzOdInstancesOut(OutBase):
     data: List[ZzzOdInstanceOut] = Field(..., description="实例列表")
 
 
-class ZzzOdInstanceAddIn(BaseModel):
+class ZzzOdInstanceAddIn(_SchemaModel):
     """直控：新建一条龙实例（分配最小空闲槽并注册）"""
 
     scriptId: str = Field(..., description="所属脚本ID")
     name: str = Field(..., description="实例名称（必填，创建后可在重命名中修改）")
 
 
-class ZzzOdInstanceRenameIn(BaseModel):
+class ZzzOdInstanceRenameIn(_SchemaModel):
     """直控：重命名实例（只改注册表 name，实例目录不变）"""
 
     scriptId: str = Field(..., description="所属脚本ID")
@@ -544,7 +551,7 @@ class ZzzOdInstanceRenameIn(BaseModel):
     name: str = Field(..., description="新实例名称")
 
 
-class ZzzOdInstanceFlagIn(BaseModel):
+class ZzzOdInstanceFlagIn(_SchemaModel):
     """直控：切换实例是否参与「全部实例」运行模式（active_in_od）"""
 
     scriptId: str = Field(..., description="所属脚本ID")
@@ -552,14 +559,14 @@ class ZzzOdInstanceFlagIn(BaseModel):
     activeInOd: bool = Field(..., description="是否参与「全部实例」模式")
 
 
-class ZzzOdInstanceActiveIn(BaseModel):
+class ZzzOdInstanceActiveIn(_SchemaModel):
     """直控：把所选实例设为当前活跃（「仅运行当前」运行的就是它）"""
 
     scriptId: str = Field(..., description="所属脚本ID")
     instanceIdx: int = Field(..., description="目标实例下标")
 
 
-class ZzzOdInstanceForceLoginIn(BaseModel):
+class ZzzOdInstanceForceLoginIn(_SchemaModel):
     """直控：切换实例「运行前切换账号」（一条龙原生能力，MAS 不干涉）"""
 
     scriptId: str = Field(..., description="所属脚本ID")
@@ -567,7 +574,7 @@ class ZzzOdInstanceForceLoginIn(BaseModel):
     forceLogin: bool = Field(..., description="是否开启运行前切换账号")
 
 
-class ZzzOdInstanceRunModeIn(BaseModel):
+class ZzzOdInstanceRunModeIn(_SchemaModel):
     """直控：设置运行实例（one_dragon.yml 全局 instance_run，与编辑所选实例无关）"""
 
     scriptId: str = Field(..., description="所属脚本ID")
@@ -577,14 +584,14 @@ class ZzzOdInstanceRunModeIn(BaseModel):
     )
 
 
-class ZzzOdInstanceDeleteIn(BaseModel):
+class ZzzOdInstanceDeleteIn(_SchemaModel):
     """直控：删除实例（注册表条目 + 实例目录，受 MAS 绑定槽保护）"""
 
     scriptId: str = Field(..., description="所属脚本ID")
     instanceIdx: int = Field(..., description="目标实例下标")
 
 
-class ZzzOdSlotOwnerOut(BaseModel):
+class ZzzOdSlotOwnerOut(_SchemaModel):
     """实例槽的 MAS 归属（哪个脚本的哪个用户占着这个号）"""
 
     scriptId: str = Field(..., description="所属脚本ID")
@@ -596,7 +603,7 @@ class ZzzOdSlotOwnerOut(BaseModel):
     )
 
 
-class ZzzOdSlotOut(BaseModel):
+class ZzzOdSlotOut(_SchemaModel):
     """实例槽总览行（原生实例 / MAS 绑定槽 / 无主残留）"""
 
     idx: int = Field(..., description="槽下标（config/{idx:02d}）")
@@ -617,7 +624,7 @@ class ZzzOdSlotsOut(OutBase):
     data: List[ZzzOdSlotOut] = Field(..., description="实例槽总览")
 
 
-class ZzzOdSlotCleanIn(BaseModel):
+class ZzzOdSlotCleanIn(_SchemaModel):
     """手动清理无主实例槽（先归档进回收池再删目录）"""
 
     scriptId: str = Field(..., description="所属脚本ID")
@@ -627,7 +634,7 @@ class ZzzOdSlotCleanOut(OutBase):
     data: List[int] = Field(..., description="实际回收的槽下标")
 
 
-class ZzzOdRecycleEntryOut(BaseModel):
+class ZzzOdRecycleEntryOut(_SchemaModel):
     """回收池条目（槽内容或该槽 MAS 备份池的一份快照）"""
 
     slot: int = Field(..., description="槽下标")
@@ -644,7 +651,7 @@ class ZzzOdRecycleOut(OutBase):
     data: List[ZzzOdRecycleEntryOut] = Field(..., description="回收池条目")
 
 
-class ZzzOdRecycleClearIn(BaseModel):
+class ZzzOdRecycleClearIn(_SchemaModel):
     """清空实例槽回收池（只清 recycle 池，不碰配置恢复池）"""
 
     scriptId: str = Field(..., description="所属脚本ID")
@@ -654,7 +661,7 @@ class ZzzOdRecycleClearOut(OutBase):
     data: int = Field(..., description="删除的条目数")
 
 
-class ZzzOdRecycleRestoreIn(BaseModel):
+class ZzzOdRecycleRestoreIn(_SchemaModel):
     """把回收池里的一条槽快照恢复给某个 MAS 用户（现有用户或新建用户）"""
 
     scriptId: str = Field(..., description="所属脚本ID")
@@ -668,7 +675,7 @@ class ZzzOdRecycleRestoreIn(BaseModel):
     )
 
 
-class ZzzOdCatalogItemOut(BaseModel):
+class ZzzOdCatalogItemOut(_SchemaModel):
     """一条龙任务目录项（静态解析应用注册信息）"""
 
     app_id: str = Field(..., description="应用ID")
@@ -688,7 +695,7 @@ class ZzzOdCatalogOut(OutBase):
     data: List[ZzzOdCatalogItemOut] = Field(..., description="任务目录")
 
 
-class ZzzOdAppConfigFieldOut(BaseModel):
+class ZzzOdAppConfigFieldOut(_SchemaModel):
     """任务级配置字段（元数据 + 当前值）
 
     type 决定前端渲染方式：select 下拉 / bool 开关 / number 数字 /
@@ -718,14 +725,14 @@ class ZzzOdAppConfigOut(OutBase):
     fields: List[ZzzOdAppConfigFieldOut] = Field(..., description="配置字段列表")
 
 
-class ZzzOdMissionNameOut(BaseModel):
+class ZzzOdMissionNameOut(_SchemaModel):
     """副本字典关卡项"""
 
     name: str = Field(..., description="关卡名（配置取值）")
     display: str = Field(..., description="关卡展示名")
 
 
-class ZzzOdMissionTypeOut(BaseModel):
+class ZzzOdMissionTypeOut(_SchemaModel):
     """副本字典类型项"""
 
     name: str = Field(..., description="类型名（配置取值）")
@@ -735,7 +742,7 @@ class ZzzOdMissionTypeOut(BaseModel):
     )
 
 
-class ZzzOdTrainCategoryOut(BaseModel):
+class ZzzOdTrainCategoryOut(_SchemaModel):
     """「训练」tab 副本分类（体力刷本/恶名狩猎级联选项）"""
 
     name: str = Field(..., description="分类名（配置取值）")
@@ -763,7 +770,7 @@ class ZzzOdTaskOptionsOut(OutBase):
     )
 
 
-class ZzzOdAppConfigSaveIn(BaseModel):
+class ZzzOdAppConfigSaveIn(_SchemaModel):
     """保存任务级配置（字段白名单校验后写入绑定槽；直控可指定原生实例）"""
 
     scriptId: str = Field(..., description="所属脚本ID")
@@ -778,7 +785,7 @@ class ZzzOdAppConfigSaveIn(BaseModel):
     )
 
 
-class ZzzOdTeamItemOut(BaseModel):
+class ZzzOdTeamItemOut(_SchemaModel):
     """预备编队条目（team.yml；成员为游戏内识别结果，MAS 不编辑）"""
 
     idx: int = Field(..., description="编队在列表中的下标")
@@ -797,7 +804,7 @@ class ZzzOdTeamsOut(OutBase):
     )
 
 
-class ZzzOdTeamsSaveIn(BaseModel):
+class ZzzOdTeamsSaveIn(_SchemaModel):
     """整表保存预备编队（名称 + 绑定配队方案 + 成员 agent_id_list）"""
 
     scriptId: str = Field(..., description="所属脚本ID")
@@ -817,7 +824,7 @@ class ZzzOdTeamsSaveOut(OutBase):
     teams: List[ZzzOdTeamItemOut] = Field(..., description="编队列表")
 
 
-class ConfigBackupItemOut(BaseModel):
+class ConfigBackupItemOut(_SchemaModel):
     """配置备份条目"""
 
     time: str = Field(..., description="备份时间戳（目录名，如 20260910-104500）")
@@ -835,7 +842,7 @@ class ConfigBackupListOut(OutBase):
     )
 
 
-class ConfigBackupRestoreIn(BaseModel):
+class ConfigBackupRestoreIn(_SchemaModel):
     """把指定备份恢复到目标位置（target 取值由专项池定义）"""
 
     scriptId: str = Field(..., description="所属脚本ID")
@@ -855,7 +862,7 @@ class ConfigBackupRestoreOut(OutBase):
     target: str = Field(..., description="实际执行的恢复目标")
 
 
-class ConfigBackupEnsureIn(BaseModel):
+class ConfigBackupEnsureIn(_SchemaModel):
     """按需归档目标池当前配置（编辑界面进入/退出时机，指纹去重）"""
 
     scriptId: str = Field(..., description="所属脚本ID")
@@ -894,7 +901,7 @@ class ConfigBackupFileOut(OutBase):
     )
 
 
-class ZzzOdNativeAccountField(BaseModel):
+class ZzzOdNativeAccountField(_SchemaModel):
     """直控编辑的账号字段（强绑定 zzz-od 原生 game_account.yml）。"""
 
     key: str = Field(..., description="game_account.yml 字段名")
@@ -905,7 +912,7 @@ class ZzzOdNativeAccountField(BaseModel):
     )
 
 
-class ZzzOdNativeLaunchArgs(BaseModel):
+class ZzzOdNativeLaunchArgs(_SchemaModel):
     """直控编辑的一条龙游戏启动参数（强绑定 zzz-od 原生 game.yml）。"""
 
     launch_argument: bool = Field(
@@ -925,7 +932,7 @@ class ZzzOdNativeLaunchArgs(BaseModel):
     )
 
 
-class ZzzOdNativeTaskOut(BaseModel):
+class ZzzOdNativeTaskOut(_SchemaModel):
     """原生来源任务编排条目（原生 app_list 与目录合并后的可选项）。"""
 
     app_id: str = Field(..., description="应用ID")
@@ -966,14 +973,14 @@ class ZzzOdNativeConfigOut(OutBase):
     )
 
 
-class ZzzOdNativeTaskIn(BaseModel):
+class ZzzOdNativeTaskIn(_SchemaModel):
     """原生来源任务编排条目（保存用：app_id + 启用状态）。"""
 
     app_id: str = Field(..., description="应用ID")
     enabled: bool = Field(..., description="是否启用")
 
 
-class ZzzOdNativeConfigIn(BaseModel):
+class ZzzOdNativeConfigIn(_SchemaModel):
     """直控模式：保存所选实例的原生配置（可选增量，缺省字段不写回）。"""
 
     scriptId: str = Field(..., description="所属脚本ID")
@@ -1009,7 +1016,7 @@ class ZzzOdLauncherOut(OutBase):
     )
 
 
-class ZzzOdImportIn(BaseModel):
+class ZzzOdImportIn(_SchemaModel):
     """基于一条龙已有实例快速生成当前用户配置（覆盖本用户账号与任务编排）。"""
 
     scriptId: str = Field(..., description="所属脚本ID")
@@ -1033,13 +1040,13 @@ class ZzzOdImportOut(OutBase):
     )
 
 
-class MaaEndEssenceTargetGroup(BaseModel):
+class MaaEndEssenceTargetGroup(_SchemaModel):
     value: str = Field(..., description="武器类型标识")
     label: str = Field(..., description="武器类型展示名")
     options: List[ComboBoxItem] = Field(..., description="该类型可选武器")
 
 
-class MaaEndAutoCollectGroup(BaseModel):
+class MaaEndAutoCollectGroup(_SchemaModel):
     value: str = Field(..., description="上游路线选项名")
     label: str = Field(..., description="采集分类展示名")
     region: str = Field(..., description="上游地区开关名，旧版为空")
@@ -1080,7 +1087,7 @@ class MaaEndOptionsOut(OutBase):
     )
 
 
-class GetStageIn(BaseModel):
+class GetStageIn(_SchemaModel):
     type: Literal[
         "User",
         "Today",
@@ -1098,12 +1105,12 @@ class GetStageIn(BaseModel):
     )
 
 
-class EmulatorConfigIndexItem(BaseModel):
+class EmulatorConfigIndexItem(_SchemaModel):
     uid: str = Field(..., description="唯一标识符")
     type: Literal["EmulatorConfig"] = Field(..., description="配置类型")
 
 
-class EmulatorConfig_Info(BaseModel):
+class EmulatorConfig_Info(_SchemaModel):
     Name: Optional[str] = Field(default=None, description="模拟器名称")
     Type: Optional[Literal["general", "mumu", "ldplayer", "emulator2"]] = Field(
         default=None, description="模拟器类型"
@@ -1134,13 +1141,13 @@ class EmulatorConfig_Info(BaseModel):
     )
 
 
-class EmulatorConfig(BaseModel):
+class EmulatorConfig(_SchemaModel):
     Info: Optional[EmulatorConfig_Info] = Field(
         default=None, description="模拟器基础信息"
     )
 
 
-class ToolsConfig_GameSign(BaseModel):
+class ToolsConfig_GameSign(_SchemaModel):
     Enabled: bool | None = Field(default=None, description="是否启用游戏社区")
     NotifyEnabled: bool | None = Field(default=None, description="签到后是否发送通知")
     ActivityEnabled: bool | None = Field(default=None, description="是否启用日常便笺")
@@ -1151,7 +1158,7 @@ class ToolsConfig_GameSign(BaseModel):
     Result: str | None = Field(default=None, description="签到结果 JSON")
 
 
-class GameSignAccountGroupConfig(BaseModel):
+class GameSignAccountGroupConfig(_SchemaModel):
     """游戏社区账号组配置"""
 
     Name: str | None = Field(default=None, description="账号组名称")
@@ -1186,14 +1193,14 @@ class GameSignAccountCreateOut(OutBase):
     )
 
 
-class GameSignAccountInstanceOut(BaseModel):
+class GameSignAccountInstanceOut(_SchemaModel):
     """游戏社区账号组顺序项。"""
 
     uid: str = Field(..., description="账号组 UUID")
     type: str = Field(..., description="账号组配置类型")
 
 
-class GameSignAccountDataOut(BaseModel):
+class GameSignAccountDataOut(_SchemaModel):
     """动态 UUID 键对应的游戏社区账号组数据。"""
 
     GameSignAccount: GameSignAccountGroupConfig = Field(..., description="账号组配置")
@@ -1208,26 +1215,26 @@ class GameSignAccountsListOut(OutBase):
     ] = Field(default_factory=dict, description="账号组列表")
 
 
-class GameSignAccountUpdateIn(BaseModel):
+class GameSignAccountUpdateIn(_SchemaModel):
     """游戏社区账号组更新请求"""
 
     accountId: str = Field(..., description="账号组 UUID")
     data: GameSignAccountGroupConfig = Field(..., description="账号组配置")
 
 
-class GameSignAccountDeleteIn(BaseModel):
+class GameSignAccountDeleteIn(_SchemaModel):
     """游戏社区账号组删除请求"""
 
     accountId: str = Field(..., description="账号组 UUID")
 
 
-class GameSignAccountReorderIn(BaseModel):
+class GameSignAccountReorderIn(_SchemaModel):
     """游戏社区账号组排序请求"""
 
     order: list[str] = Field(..., description="账号组 UUID 顺序列表")
 
 
-class CommunityActivityQueryIn(BaseModel):
+class CommunityActivityQueryIn(_SchemaModel):
     """游戏社区日常查询请求。"""
 
     accountIds: list[str] | None = Field(
@@ -1236,7 +1243,7 @@ class CommunityActivityQueryIn(BaseModel):
     )
 
 
-class CommunityActivityTaskOut(BaseModel):
+class CommunityActivityTaskOut(_SchemaModel):
     """日常活动中的单项任务。"""
 
     name: str = Field(..., description="任务名称")
@@ -1246,7 +1253,7 @@ class CommunityActivityTaskOut(BaseModel):
     period: str = Field(default="daily", description="任务周期")
 
 
-class CommunityActivityResourceOut(BaseModel):
+class CommunityActivityResourceOut(_SchemaModel):
     """日常活动中的可用资源。"""
 
     name: str = Field(..., description="资源名称")
@@ -1255,7 +1262,7 @@ class CommunityActivityResourceOut(BaseModel):
     status: str = Field(..., description="资源状态")
 
 
-class CommunityActivitySnapshotOut(BaseModel):
+class CommunityActivitySnapshotOut(_SchemaModel):
     """单个游戏角色的日常活动快照。"""
 
     account: str = Field(..., description="账号组名称")
@@ -1289,7 +1296,7 @@ class CommunityActivityOut(OutBase):
     )
 
 
-class TaygedoLoginIn(BaseModel):
+class TaygedoLoginIn(_SchemaModel):
     """塔吉多一次性账号密码登录请求。"""
 
     accountId: str = Field(..., description="账号组 UUID")
@@ -1297,23 +1304,23 @@ class TaygedoLoginIn(BaseModel):
     password: SecretStr = Field(..., min_length=1, description="塔吉多账号密码")
 
 
-class ToolsConfig(BaseModel):
+class ToolsConfig(_SchemaModel):
     GameSign: ToolsConfig_GameSign | None = Field(
         default=None, description="游戏社区签到配置"
     )
 
 
-class WebhookIndexItem(BaseModel):
+class WebhookIndexItem(_SchemaModel):
     uid: str = Field(..., description="唯一标识符")
     type: Literal["Webhook"] = Field(..., description="配置类型")
 
 
-class Webhook_Info(BaseModel):
+class Webhook_Info(_SchemaModel):
     Name: Optional[str] = Field(default=None, description="Webhook名称")
     Enabled: Optional[bool] = Field(default=None, description="是否启用")
 
 
-class Webhook_Data(BaseModel):
+class Webhook_Data(_SchemaModel):
     Url: Optional[str] = Field(default=None, description="Webhook URL")
     Template: Optional[str] = Field(default=None, description="消息模板")
     Headers: Optional[str] = Field(default=None, description="自定义请求头")
@@ -1322,12 +1329,12 @@ class Webhook_Data(BaseModel):
     )
 
 
-class Webhook(BaseModel):
+class Webhook(_SchemaModel):
     Info: Optional[Webhook_Info] = Field(default=None, description="Webhook基础信息")
     Data: Optional[Webhook_Data] = Field(default=None, description="Webhook配置数据")
 
 
-class GlobalConfig_Function(BaseModel):
+class GlobalConfig_Function(_SchemaModel):
     HistoryRetentionTime: Optional[Literal[7, 15, 30, 60, 90, 180, 365, 0]] = Field(
         None, description="历史记录保留时间, 0表示永久保存"
     )
@@ -1345,7 +1352,7 @@ class GlobalConfig_Function(BaseModel):
     )
 
 
-class GlobalConfig_Replay(BaseModel):
+class GlobalConfig_Replay(_SchemaModel):
     Enabled: Optional[bool] = Field(default=None, description="失败时保存 OBS 回放")
     Port: Optional[int] = Field(
         default=None, ge=1, le=65535, description="本机 OBS WebSocket 端口"
@@ -1361,7 +1368,7 @@ class GlobalConfig_Replay(BaseModel):
     )
 
 
-class GlobalConfig_Display(BaseModel):
+class GlobalConfig_Display(_SchemaModel):
     IfEnableVirtualDisplay: Optional[bool] = Field(
         default=None,
         description="无人值守时，检测不到任何真实显示输出则临时挂载虚拟显示器（需自行安装 Parsec 虚拟显示驱动）",
@@ -1372,7 +1379,7 @@ class GlobalConfig_Display(BaseModel):
     )
 
 
-class VirtualDisplayCheckResultItem(BaseModel):
+class VirtualDisplayCheckResultItem(_SchemaModel):
     """检测的三段之一。分开报是有意的：给用户的下一步动作完全不同。"""
 
     stage: Literal["installed", "openable", "effective"] = Field(description="检测阶段")
@@ -1396,14 +1403,14 @@ class VirtualDisplayDetachOut(OutBase):
     )
 
 
-class GlobalConfig_Voice(BaseModel):
+class GlobalConfig_Voice(_SchemaModel):
     Enabled: Optional[bool] = Field(default=None, description="语音功能是否启用")
     Type: Optional[Literal["simple", "noisy"]] = Field(
         default=None, description="语音类型, simple为简洁, noisy为聒噪"
     )
 
 
-class GlobalConfig_Start(BaseModel):
+class GlobalConfig_Start(_SchemaModel):
     IfSelfStart: Optional[bool] = Field(
         default=None, description="是否在系统启动时自动运行"
     )
@@ -1412,7 +1419,7 @@ class GlobalConfig_Start(BaseModel):
     )
 
 
-class GlobalConfig_UI(BaseModel):
+class GlobalConfig_UI(_SchemaModel):
     IfShowTray: Optional[bool] = Field(default=None, description="是否常态显示托盘图标")
     IfToTray: Optional[bool] = Field(default=None, description="是否最小化到托盘")
     IfHideCloseButton: Optional[bool] = Field(
@@ -1420,7 +1427,7 @@ class GlobalConfig_UI(BaseModel):
     )
 
 
-class GlobalConfig_Notify(BaseModel):
+class GlobalConfig_Notify(_SchemaModel):
     SendTaskResultTime: Optional[Literal["不推送", "任何时刻", "仅失败时"]] = Field(
         default=None, description="任务结果推送时机"
     )
@@ -1458,14 +1465,14 @@ class GlobalConfig_Notify(BaseModel):
     )
 
 
-class NotifyChannelOptionOut(BaseModel):
+class NotifyChannelOptionOut(_SchemaModel):
     """渠道下拉选项的取值与文案键；取值保持后端配置字面量（含布尔）。"""
 
     value: Union[bool, str] = Field(..., description="选项值，保持后端配置字面量")
     labelKey: str = Field(..., description="选项文案的词表键")
 
 
-class NotifyChannelFieldOut(BaseModel):
+class NotifyChannelFieldOut(_SchemaModel):
     """渠道在某个作用域暴露的一个配置字段描述。"""
 
     group: str = Field(..., description="配置组，如 Notify")
@@ -1479,7 +1486,7 @@ class NotifyChannelFieldOut(BaseModel):
     tipKey: str = Field(default="", description="提示文案词表键")
 
 
-class NotifyChannelOut(BaseModel):
+class NotifyChannelOut(_SchemaModel):
     """一个通知渠道的展示元数据；服务无鉴权，负载不得出现任何配置值。"""
 
     key: str = Field(..., description="渠道标识")
@@ -1519,7 +1526,7 @@ class OpenClawQQQrStartOut(OutBase):
     qrUrl: str = Field(default="", description="用于生成二维码的登录链接")
 
 
-class OpenClawQQQrCheckIn(BaseModel):
+class OpenClawQQQrCheckIn(_SchemaModel):
     """QQ 官方机器人二维码状态查询请求。"""
 
     sessionId: str = Field(..., min_length=1, description="二维码登录会话 ID")
@@ -1549,7 +1556,7 @@ class OpenClawQQStatusOut(OutBase):
     )
 
 
-class GlobalConfig_Update(BaseModel):
+class GlobalConfig_Update(_SchemaModel):
     IfAutoUpdate: Optional[bool] = Field(default=None, description="是否自动更新")
     PauseUntil: Optional[str] = Field(
         default=None, description="暂停更新截止日期 YYYY-MM-DD，空字符串表示未暂停"
@@ -1571,7 +1578,7 @@ class GlobalConfig_Update(BaseModel):
     MirrorChyanCDK: Optional[str] = Field(default=None, description="Mirror酱CDK")
 
 
-class GlobalConfig_ChildSession(BaseModel):
+class GlobalConfig_ChildSession(_SchemaModel):
     Enabled: Optional[bool] = Field(
         default=None, description="是否启用基于 BetterGI 的本地远程桌面 (Child Session) 执行任务"
     )
@@ -1589,7 +1596,7 @@ class GlobalConfig_ChildSession(BaseModel):
     )
 
 
-class GlobalConfig_Hotkey(BaseModel):
+class GlobalConfig_Hotkey(_SchemaModel):
     Enabled: Optional[bool] = Field(default=None, description="是否启用全局热键")
     ToggleStartStop: Optional[str] = Field(
         default=None, description="全局热键：控制程序启停"
@@ -1602,7 +1609,7 @@ class GlobalConfig_Hotkey(BaseModel):
     )
 
 
-class GlobalConfig(BaseModel):
+class GlobalConfig(_SchemaModel):
     Replay: Optional[GlobalConfig_Replay] = Field(
         default=None, description="OBS 失败回放配置"
     )
@@ -1633,28 +1640,28 @@ class GlobalConfig(BaseModel):
     )
 
 
-class QueueIndexItem(BaseModel):
+class QueueIndexItem(_SchemaModel):
     uid: str = Field(..., description="唯一标识符")
     type: Literal["QueueConfig"] = Field(..., description="配置类型")
 
 
-class QueueItemIndexItem(BaseModel):
+class QueueItemIndexItem(_SchemaModel):
     uid: str = Field(..., description="唯一标识符")
     type: Literal["QueueItem"] = Field(..., description="配置类型")
 
 
-class TimeSetIndexItem(BaseModel):
+class TimeSetIndexItem(_SchemaModel):
     uid: str = Field(..., description="唯一标识符")
     type: Literal["TimeSet"] = Field(..., description="配置类型")
 
 
-class QueueItem_Info(BaseModel):
+class QueueItem_Info(_SchemaModel):
     ScriptId: Optional[str] = Field(
         default=None, description="任务所对应的脚本ID, 为None时表示未选择"
     )
 
 
-class QueueItem_Schedule(BaseModel):
+class QueueItem_Schedule(_SchemaModel):
     Enabled: Optional[bool] = Field(default=None, description="是否参与循环调度")
     Mode: Optional[Literal["fixed_time", "interval"]] = Field(
         default=None, description="循环调度模式, 固定时间或间隔"
@@ -1686,7 +1693,7 @@ class QueueItem_Schedule(BaseModel):
     )
 
 
-class QueueItem_Data(BaseModel):
+class QueueItem_Data(_SchemaModel):
     LastCycleStartedAt: Optional[str] = Field(
         default=None, description="上次循环开始时间"
     )
@@ -1695,7 +1702,7 @@ class QueueItem_Data(BaseModel):
     )
 
 
-class QueueItem(BaseModel):
+class QueueItem(_SchemaModel):
     Info: Optional[QueueItem_Info] = Field(default=None, description="队列项")
     Schedule: Optional[QueueItem_Schedule] = Field(
         default=None, description="队列项的循环调度配置"
@@ -1705,7 +1712,7 @@ class QueueItem(BaseModel):
     )
 
 
-class TimeSet_Info(BaseModel):
+class TimeSet_Info(_SchemaModel):
     Enabled: Optional[bool] = Field(default=None, description="是否启用")
     Days: Optional[
         List[
@@ -1723,11 +1730,11 @@ class TimeSet_Info(BaseModel):
     Time: Optional[str] = Field(default=None, description="时间设置, 格式为HH:MM")
 
 
-class TimeSet(BaseModel):
+class TimeSet(_SchemaModel):
     Info: Optional[TimeSet_Info] = Field(default=None, description="时间项")
 
 
-class QueueConfig_Info(BaseModel):
+class QueueConfig_Info(_SchemaModel):
     Name: Optional[str] = Field(default=None, description="队列名称")
     TimeEnabled: Optional[bool] = Field(default=None, description="是否启用定时")
     StartUpMode: Optional[Literal["Never", "Always", "DailyFirst"]] = Field(
@@ -1766,11 +1773,11 @@ class QueueConfig_Info(BaseModel):
     )
 
 
-class QueueConfig(BaseModel):
+class QueueConfig(_SchemaModel):
     Info: Optional[QueueConfig_Info] = Field(default=None, description="队列信息")
 
 
-class ScriptIndexItem(BaseModel):
+class ScriptIndexItem(_SchemaModel):
     uid: str = Field(..., description="唯一标识符")
     type: Literal[
         "MaaConfig",
@@ -1794,7 +1801,7 @@ class ScriptIndexItem(BaseModel):
     )
 
 
-class UserIndexItem(BaseModel):
+class UserIndexItem(_SchemaModel):
     uid: str = Field(..., description="唯一标识符")
     type: Literal[
         "MaaUserConfig",
@@ -1814,7 +1821,7 @@ class UserIndexItem(BaseModel):
     ] = Field(..., description="配置类型")
 
 
-class UserConfigInfoBase(BaseModel):
+class UserConfigInfoBase(_SchemaModel):
     """用户配置 Info 的公共基类：兼容旧请求的 ``Mode`` 来源字段。
 
     旧「脚本/用户/直控」来源已迁移为 ``Base``（shared/independent/native），
@@ -1863,7 +1870,7 @@ class MaaUserConfig_Info(UserConfigInfoBase):
     Tag: Optional[str] = Field(default=None, description="状态标签列表")
 
 
-class MaaUserConfig_Stage(BaseModel):
+class MaaUserConfig_Stage(_SchemaModel):
     StageMode: Optional[str] = Field(default=None, description="关卡配置模式")
     MedicineNumb: Optional[int] = Field(default=None, description="吃理智药数量")
     SeriesNumb: Optional[Literal["0", "6", "5", "4", "3", "2", "1", "-1"]] = Field(
@@ -1875,7 +1882,7 @@ class MaaUserConfig_Stage(BaseModel):
     Stage_3: Optional[str] = Field(default=None, description="备选关卡 - 3")
 
 
-class MaaUserConfig_Data(BaseModel):
+class MaaUserConfig_Data(_SchemaModel):
     AnnihilationCompletedWeek: Optional[str] = Field(
         default=None, description="剿灭达到周上限时的 ISO 周"
     )
@@ -1896,7 +1903,7 @@ class MaaUserConfig_Data(BaseModel):
     )
 
 
-class MaaUserConfig_Task(BaseModel):
+class MaaUserConfig_Task(_SchemaModel):
     IfStartUp: Optional[bool] = Field(default=None, description="开始唤醒")
     IfRecruit: Optional[bool] = Field(default=None, description="自动公招")
     IfInfrast: Optional[bool] = Field(default=None, description="基建换班")
@@ -1970,7 +1977,7 @@ class MaaUserConfig_Task(BaseModel):
     )
 
 
-class MaaUserConfig_Notify(BaseModel):
+class MaaUserConfig_Notify(_SchemaModel):
     Enabled: Optional[bool] = Field(default=None, description="是否启用通知")
     IfSendStatistic: Optional[bool] = Field(
         default=None, description="是否发送统计信息"
@@ -1984,7 +1991,7 @@ class MaaUserConfig_Notify(BaseModel):
     ServerChanKey: Optional[str] = Field(default=None, description="ServerChanKey")
 
 
-class GeneralUserConfig_Notify(BaseModel):
+class GeneralUserConfig_Notify(_SchemaModel):
     Enabled: Optional[bool] = Field(default=None, description="是否启用通知")
     IfSendStatistic: Optional[bool] = Field(
         default=None, description="是否发送统计信息"
@@ -1997,7 +2004,7 @@ class GeneralUserConfig_Notify(BaseModel):
     ServerChanKey: Optional[str] = Field(default=None, description="ServerChanKey")
 
 
-class MaaUserConfig(BaseModel):
+class MaaUserConfig(_SchemaModel):
     Info: Optional[MaaUserConfig_Info] = Field(default=None, description="基础信息")
     Stage: Optional[MaaUserConfig_Stage] = Field(default=None, description="关卡配置")
     Data: Optional[MaaUserConfig_Data] = Field(default=None, description="用户数据")
@@ -2005,17 +2012,17 @@ class MaaUserConfig(BaseModel):
     Notify: Optional[MaaUserConfig_Notify] = Field(default=None, description="单独通知")
 
 
-class MaaConfig_Info(BaseModel):
+class MaaConfig_Info(_SchemaModel):
     Name: Optional[str] = Field(default=None, description="脚本名称")
     Path: Optional[str] = Field(default=None, description="脚本路径")
 
 
-class MaaConfig_Emulator(BaseModel):
+class MaaConfig_Emulator(_SchemaModel):
     Id: Optional[str] = Field(default=None, description="模拟器ID")
     Index: Optional[str] = Field(default=None, description="模拟器多开实例索引")
 
 
-class MaaConfig_Run(BaseModel):
+class MaaConfig_Run(_SchemaModel):
     HardTimeLimit: Optional[int] = Field(
         default=None,
         ge=1,
@@ -2042,7 +2049,7 @@ class MaaConfig_Run(BaseModel):
     )
 
 
-class MaaConfig_Update(BaseModel):
+class MaaConfig_Update(_SchemaModel):
     TakeoverEnabled: Optional[bool] = Field(
         default=None,
         description="是否接管 MAA 本体与资源更新（关=完全由 MAA 自行处理）",
@@ -2052,7 +2059,7 @@ class MaaConfig_Update(BaseModel):
     )
 
 
-class MaaConfig(BaseModel):
+class MaaConfig(_SchemaModel):
     Info: Optional[MaaConfig_Info] = Field(default=None, description="脚本基础信息")
     Emulator: Optional[MaaConfig_Emulator] = Field(
         default=None, description="模拟器配置"
@@ -2086,12 +2093,12 @@ class GeneralUserConfig_Info(UserConfigInfoBase):
     )
 
 
-class GeneralUserConfig_Data(BaseModel):
+class GeneralUserConfig_Data(_SchemaModel):
     LastProxyDate: Optional[str] = Field(default=None, description="上次代理日期")
     ProxyTimes: Optional[int] = Field(default=None, description="代理次数")
 
 
-class GeneralUserConfig(BaseModel):
+class GeneralUserConfig(_SchemaModel):
     Info: Optional[GeneralUserConfig_Info] = Field(default=None, description="用户信息")
     Data: Optional[GeneralUserConfig_Data] = Field(default=None, description="用户数据")
     Notify: Optional[GeneralUserConfig_Notify] = Field(
@@ -2099,7 +2106,7 @@ class GeneralUserConfig(BaseModel):
     )
 
 
-class OkwwUserConfig_Task(BaseModel):
+class OkwwUserConfig_Task(_SchemaModel):
     WhichToFarm: Optional[
         Literal["Tacet Suppression", "Forgery Challenge", "Simulation Challenge"]
     ] = Field(default=None, description="每日任务体力用途")
@@ -2163,7 +2170,7 @@ class OkwwUserConfig_Notify(GeneralUserConfig_Notify):
     )
 
 
-class OkwwUserConfig(BaseModel):
+class OkwwUserConfig(_SchemaModel):
     Info: Optional[OkwwUserConfig_Info] = Field(default=None, description="用户信息")
     Task: Optional[OkwwUserConfig_Task] = Field(default=None, description="任务配置")
     Data: Optional[OkwwUserConfig_Data] = Field(default=None, description="用户数据")
@@ -2172,7 +2179,7 @@ class OkwwUserConfig(BaseModel):
     )
 
 
-class OkNteUserConfig_Task(BaseModel):
+class OkNteUserConfig_Task(_SchemaModel):
     TaskIndex: Optional[int] = Field(
         default=None, description="启动后执行第 N 个任务（-t N，从 1 开始）"
     )
@@ -2216,7 +2223,7 @@ class OkNteUserConfig_Notify(GeneralUserConfig_Notify):
     )
 
 
-class OkNteUserConfig(BaseModel):
+class OkNteUserConfig(_SchemaModel):
     Info: Optional[OkNteUserConfig_Info] = Field(default=None, description="用户信息")
     Task: Optional[OkNteUserConfig_Task] = Field(default=None, description="任务配置")
     Data: Optional[OkNteUserConfig_Data] = Field(default=None, description="用户数据")
@@ -2225,13 +2232,13 @@ class OkNteUserConfig(BaseModel):
     )
 
 
-class BetterGIUserConfig_Task(BaseModel):
+class BetterGIUserConfig_Task(_SchemaModel):
     OneDragonConfigName: Optional[str] = Field(
         default=None, description="BetterGI「一条龙」配置名"
     )
 
 
-class BetterGIUserConfig_Switch(BaseModel):
+class BetterGIUserConfig_Switch(_SchemaModel):
     """BetterGI 切换账号配置（切换账号多模式脚本专项适配）"""
 
     Resource: Optional[str] = Field(
@@ -2279,7 +2286,7 @@ class BetterGIGameInfoOut(OutBase):
     )
 
 
-class BetterGIUserConfig_OneDragon(BaseModel):
+class BetterGIUserConfig_OneDragon(_SchemaModel):
     """BetterGI 一条龙配置"""
 
     Groups: Optional[List[str]] = Field(
@@ -2351,7 +2358,7 @@ class BetterGIUserConfig_Notify(GeneralUserConfig_Notify):
     )
 
 
-class BetterGIUserConfig(BaseModel):
+class BetterGIUserConfig(_SchemaModel):
     Info: Optional[BetterGIUserConfig_Info] = Field(
         default=None, description="用户信息"
     )
@@ -2411,7 +2418,7 @@ class ZzzOdUserConfig_Info(UserConfigInfoBase):
     )
 
 
-class ZzzOdUserConfig_Game(BaseModel):
+class ZzzOdUserConfig_Game(_SchemaModel):
     """ZZZ-OD 用户游戏账号配置（运行时生成 game_account.yml 注入）"""
 
     GameRegion: Optional[Literal["cn", "cn_b", "us", "eu", "asia", "twhkmo"]] = Field(
@@ -2465,7 +2472,7 @@ class ZzzOdUserConfig_Game(BaseModel):
     )
 
 
-class ZzzOdUserConfig_OneDragon(BaseModel):
+class ZzzOdUserConfig_OneDragon(_SchemaModel):
     """ZZZ-OD 用户一条龙任务编排"""
 
     AppList: Optional[str] = Field(
@@ -2495,7 +2502,7 @@ class ZzzOdUserConfig_Notify(GeneralUserConfig_Notify):
     )
 
 
-class ZzzOdUserConfig(BaseModel):
+class ZzzOdUserConfig(_SchemaModel):
     Info: Optional[ZzzOdUserConfig_Info] = Field(default=None, description="用户信息")
     Game: Optional[ZzzOdUserConfig_Game] = Field(
         default=None, description="游戏账号配置"
@@ -2539,12 +2546,12 @@ class BAAHUserConfig_Info(UserConfigInfoBase):
     )
 
 
-class BAAHUserConfig_Data(BaseModel):
+class BAAHUserConfig_Data(_SchemaModel):
     LastProxyDate: Optional[str] = Field(default=None, description="上次代理日期")
     ProxyTimes: Optional[int] = Field(default=None, description="代理次数")
 
 
-class BAAHUserConfig_Notify(BaseModel):
+class BAAHUserConfig_Notify(_SchemaModel):
     Enabled: Optional[bool] = Field(default=None, description="是否启用通知")
     IfSendStatistic: Optional[bool] = Field(
         default=None, description="是否发送统计信息"
@@ -2557,7 +2564,7 @@ class BAAHUserConfig_Notify(BaseModel):
     ServerChanKey: Optional[str] = Field(default=None, description="ServerChanKey")
 
 
-class BAAHUserConfig(BaseModel):
+class BAAHUserConfig(_SchemaModel):
     Info: Optional[BAAHUserConfig_Info] = Field(default=None, description="用户信息")
     Data: Optional[BAAHUserConfig_Data] = Field(default=None, description="用户数据")
     Notify: Optional[BAAHUserConfig_Notify] = Field(
@@ -2565,12 +2572,12 @@ class BAAHUserConfig(BaseModel):
     )
 
 
-class GeneralConfig_Info(BaseModel):
+class GeneralConfig_Info(_SchemaModel):
     Name: Optional[str] = Field(default=None, description="脚本名称")
     RootPath: Optional[str] = Field(default=None, description="脚本根目录")
 
 
-class GeneralConfig_Script(BaseModel):
+class GeneralConfig_Script(_SchemaModel):
     ScriptPath: Optional[str] = Field(default=None, description="脚本可执行文件路径")
     Arguments: Optional[str] = Field(default=None, description="脚本启动附加命令参数")
     IfTrackProcess: Optional[bool] = Field(
@@ -2620,7 +2627,7 @@ class GeneralConfig_Script(BaseModel):
     )
 
 
-class GeneralConfig_Game(BaseModel):
+class GeneralConfig_Game(_SchemaModel):
     Enabled: Optional[bool] = Field(
         default=None, description="游戏/模拟器相关功能是否启用"
     )
@@ -2639,7 +2646,7 @@ class GeneralConfig_Game(BaseModel):
     EmulatorIndex: Optional[str] = Field(default=None, description="模拟器多开实例索引")
 
 
-class GeneralConfig_Run(BaseModel):
+class GeneralConfig_Run(_SchemaModel):
     HardTimeLimit: Optional[int] = Field(
         default=None,
         ge=1,
@@ -2651,14 +2658,14 @@ class GeneralConfig_Run(BaseModel):
     RunTimeLimit: Optional[int] = Field(default=None, description="日志超时限制")
 
 
-class GeneralConfig(BaseModel):
+class GeneralConfig(_SchemaModel):
     Info: Optional[GeneralConfig_Info] = Field(default=None, description="脚本基础信息")
     Script: Optional[GeneralConfig_Script] = Field(default=None, description="脚本配置")
     Game: Optional[GeneralConfig_Game] = Field(default=None, description="游戏配置")
     Run: Optional[GeneralConfig_Run] = Field(default=None, description="运行配置")
 
 
-class OkwwConfig_Game(BaseModel):
+class OkwwConfig_Game(_SchemaModel):
     """OK-WW 游戏配置（复用通用字段）"""
 
     Enabled: Optional[bool] = Field(default=None, description="游戏相关功能是否启用")
@@ -2694,7 +2701,7 @@ class OkwwClientPathOut(OutBase):
     client_path: str = Field(..., description="解码得到的鸣潮客户端 exe 完整路径")
 
 
-class OkwwConfig(BaseModel):
+class OkwwConfig(_SchemaModel):
     Info: Optional[GeneralConfig_Info] = Field(default=None, description="脚本基础信息")
     Game: Optional[OkwwConfig_Game] = Field(default=None, description="游戏配置")
     Run: Optional[GeneralConfig_Run] = Field(default=None, description="运行配置")
@@ -2704,7 +2711,7 @@ class OkNteConfig_Info(GeneralConfig_Info):
     """OK-NTE 脚本基础信息（复用通用字段）"""
 
 
-class OkNteConfig_Script(BaseModel):
+class OkNteConfig_Script(_SchemaModel):
     """OK-NTE 脚本配置（仅暴露运行期存在的字段；LogHook/PushLog 等通用脚本字段不适用于 OK-NTE）"""
 
     ScriptPath: Optional[str] = Field(default=None, description="脚本可执行文件路径")
@@ -2742,7 +2749,7 @@ class OkNteConfig_Script(BaseModel):
     )
 
 
-class OkNteConfig_Game(BaseModel):
+class OkNteConfig_Game(_SchemaModel):
     """OK-NTE 游戏配置"""
 
     Enabled: Optional[bool] = Field(default=None, description="游戏相关功能是否启用")
@@ -2780,14 +2787,14 @@ class OkNteConfig_Run(GeneralConfig_Run):
     """OK-NTE 运行配置（复用通用字段）"""
 
 
-class OkNteConfig(BaseModel):
+class OkNteConfig(_SchemaModel):
     Info: Optional[OkNteConfig_Info] = Field(default=None, description="脚本基础信息")
     Script: Optional[OkNteConfig_Script] = Field(default=None, description="脚本配置")
     Game: Optional[OkNteConfig_Game] = Field(default=None, description="游戏配置")
     Run: Optional[OkNteConfig_Run] = Field(default=None, description="运行配置")
 
 
-class BetterGIConfig_Game(BaseModel):
+class BetterGIConfig_Game(_SchemaModel):
     """BetterGI 游戏配置"""
 
     Controller: Optional[str] = Field(
@@ -2818,7 +2825,7 @@ class BetterGIConfig_Run(GeneralConfig_Run):
     )
 
 
-class BetterGIConfig(BaseModel):
+class BetterGIConfig(_SchemaModel):
     Info: Optional[GeneralConfig_Info] = Field(default=None, description="脚本基础信息")
     Run: Optional[BetterGIConfig_Run] = Field(default=None, description="运行配置")
     Game: Optional[BetterGIConfig_Game] = Field(default=None, description="游戏配置")
@@ -2828,7 +2835,7 @@ class ZzzOdConfig_Info(GeneralConfig_Info):
     """ZZZ-OD 脚本基础信息（复用通用字段）"""
 
 
-class ZzzOdConfig_Game(BaseModel):
+class ZzzOdConfig_Game(_SchemaModel):
     """ZZZ-OD 游戏配置"""
 
     Enabled: Optional[bool] = Field(
@@ -2857,17 +2864,17 @@ class ZzzOdConfig_Run(GeneralConfig_Run):
     """ZZZ-OD 运行配置（复用通用字段）"""
 
 
-class ZzzOdConfig(BaseModel):
+class ZzzOdConfig(_SchemaModel):
     Info: Optional[ZzzOdConfig_Info] = Field(default=None, description="脚本基础信息")
     Game: Optional[ZzzOdConfig_Game] = Field(default=None, description="游戏配置")
     Run: Optional[ZzzOdConfig_Run] = Field(default=None, description="运行配置")
 
 
-class BAAHConfig_Info(BaseModel):
+class BAAHConfig_Info(_SchemaModel):
     Name: Optional[str] = Field(default=None, description="脚本名称")
 
 
-class BAAHConfig_Script(BaseModel):
+class BAAHConfig_Script(_SchemaModel):
     BAAHPath: Optional[str] = Field(
         default=None,
         description="BAAH 主程序路径；程序目录、配置目录与日志目录均由此派生",
@@ -2880,7 +2887,7 @@ class BAAHConfig_Script(BaseModel):
     )
 
 
-class BAAHConfig_Run(BaseModel):
+class BAAHConfig_Run(_SchemaModel):
     HardTimeLimit: Optional[int] = Field(
         default=None,
         ge=1,
@@ -2891,12 +2898,12 @@ class BAAHConfig_Run(BaseModel):
     RunTimeLimit: Optional[int] = Field(default=None, description="运行时间限制")
 
 
-class BAAHConfig_Emulator(BaseModel):
+class BAAHConfig_Emulator(_SchemaModel):
     Id: Optional[str] = Field(default=None, description="模拟器ID")
     Index: Optional[str] = Field(default=None, description="模拟器多开实例索引")
 
 
-class BAAHConfig(BaseModel):
+class BAAHConfig(_SchemaModel):
     Info: Optional[BAAHConfig_Info] = Field(default=None, description="脚本基础信息")
     Script: Optional[BAAHConfig_Script] = Field(default=None, description="脚本配置")
     Run: Optional[BAAHConfig_Run] = Field(default=None, description="运行配置")
@@ -2905,7 +2912,7 @@ class BAAHConfig(BaseModel):
     )
 
 
-class WhimboxConfig_Run(BaseModel):
+class WhimboxConfig_Run(_SchemaModel):
     """奇想盒运行配置（复用通用三限语义 + 提权开关）"""
 
     HardTimeLimit: Optional[int] = Field(
@@ -2927,7 +2934,7 @@ class WhimboxConfig_Run(BaseModel):
     )
 
 
-class WhimboxConfig(BaseModel):
+class WhimboxConfig(_SchemaModel):
     """奇想盒脚本配置（无限暖暖，BetterGI 线）"""
 
     Info: Optional[GeneralConfig_Info] = Field(default=None, description="脚本基础信息")
@@ -2967,7 +2974,7 @@ class WhimboxUserConfig_Info(UserConfigInfoBase):
     )
 
 
-class WhimboxUserConfig_OneDragon(BaseModel):
+class WhimboxUserConfig_OneDragon(_SchemaModel):
     """奇想盒一条龙流程级配置（物化为上游 OneDragon 流程开关）"""
 
     IfRunAllAccounts: Optional[bool] = Field(
@@ -2976,7 +2983,7 @@ class WhimboxUserConfig_OneDragon(BaseModel):
     )
 
 
-class WhimboxUserConfig_Task(BaseModel):
+class WhimboxUserConfig_Task(_SchemaModel):
     """奇想盒任务覆盖集（键集来自任务目录，MAS 不建模字段定义）"""
 
     Tasks: Optional[Union[str, dict]] = Field(
@@ -2997,7 +3004,7 @@ class WhimboxUserConfig_Data(GeneralUserConfig_Data):
     )
 
 
-class WhimboxUserConfig(BaseModel):
+class WhimboxUserConfig(_SchemaModel):
     """奇想盒用户配置（一条龙配置档）"""
 
     Info: Optional[WhimboxUserConfig_Info] = Field(default=None, description="用户信息")
@@ -3013,7 +3020,7 @@ class WhimboxUserConfig(BaseModel):
     )
 
 
-class WhimboxTaskCatalogItem(BaseModel):
+class WhimboxTaskCatalogItem(_SchemaModel):
     """任务目录条目：一条龙步骤开关（上游三件套机械转换）"""
 
     key: str = Field(default=..., description="上游配置键")
@@ -3021,7 +3028,7 @@ class WhimboxTaskCatalogItem(BaseModel):
     section: str = Field(default=..., description="上游配置节")
 
 
-class WhimboxOptionCatalogItem(BaseModel):
+class WhimboxOptionCatalogItem(_SchemaModel):
     """任务目录条目：一条龙目标/参数字段（上游三件套机械转换）"""
 
     key: str = Field(default=..., description="上游配置键")
@@ -3036,7 +3043,7 @@ class WhimboxOptionCatalogItem(BaseModel):
     )
 
 
-class WhimboxTaskCatalogData(BaseModel):
+class WhimboxTaskCatalogData(_SchemaModel):
     """任务目录数据：步骤开关 + 参数字段 + 上游版本提示"""
 
     steps: List[WhimboxTaskCatalogItem] = Field(
@@ -3079,7 +3086,7 @@ class MaaEndUserConfig_Info(UserConfigInfoBase):
     Tag: Optional[str] = Field(default=None, description="用户标签信息")
 
 
-class MaaEndUserConfig_Task(BaseModel):
+class MaaEndUserConfig_Task(_SchemaModel):
     SanityTaskType: Optional[
         Literal["OperatorProgression", "WeaponProgression", "CrisisDrills", "Essence"]
     ] = Field(default=None, description="理智任务类型")
@@ -3155,7 +3162,7 @@ class MaaEndUserConfig_Task(BaseModel):
     IfPullCountCalculator: Optional[bool] = Field(default=None, description="抽数计算")
 
 
-class MaaEndUserConfig_Notify(BaseModel):
+class MaaEndUserConfig_Notify(_SchemaModel):
     Enabled: Optional[bool] = Field(default=None, description="是否启用通知")
     PushLogMode: Optional[Literal["关闭", "逐条", "汇总"]] = Field(
         default=None,
@@ -3170,7 +3177,7 @@ class MaaEndUserConfig_Notify(BaseModel):
     ServerChanKey: Optional[str] = Field(default=None, description="Server酱密钥")
 
 
-class MaaEndUserConfig_Data(BaseModel):
+class MaaEndUserConfig_Data(_SchemaModel):
     LastProxyDate: Optional[str] = Field(default=None, description="上次代理日期")
     ProxyTimes: Optional[int] = Field(default=None, description="代理次数")
     LastProxyStatus: Optional[Literal["未知", "成功", "失败"]] = Field(
@@ -3181,7 +3188,7 @@ class MaaEndUserConfig_Data(BaseModel):
     )
 
 
-class MaaEndUserConfig(BaseModel):
+class MaaEndUserConfig(_SchemaModel):
     Info: Optional[MaaEndUserConfig_Info] = Field(default=None, description="用户信息")
     Task: Optional[MaaEndUserConfig_Task] = Field(default=None, description="任务配置")
     Data: Optional[MaaEndUserConfig_Data] = Field(default=None, description="运行数据")
@@ -3190,12 +3197,12 @@ class MaaEndUserConfig(BaseModel):
     )
 
 
-class MaaEndConfig_Info(BaseModel):
+class MaaEndConfig_Info(_SchemaModel):
     Name: Optional[str] = Field(default=None, description="脚本名称")
     Path: Optional[str] = Field(default=None, description="脚本路径")
 
 
-class MaaEndConfig_Run(BaseModel):
+class MaaEndConfig_Run(_SchemaModel):
     HardTimeLimit: Optional[int] = Field(
         default=None,
         ge=1,
@@ -3215,7 +3222,7 @@ class MaaEndConfig_Run(BaseModel):
     )
 
 
-class MaaEndConfig_Game(BaseModel):
+class MaaEndConfig_Game(_SchemaModel):
     ControllerType: Optional[str] = Field(default=None, description="控制器类型")
     LaunchMode: Optional[Literal["Client", "Launcher", "MAS", "MaaEnd"]] = Field(
         default=None,
@@ -3261,7 +3268,7 @@ class MaaEndConfig_Game(BaseModel):
     )
 
 
-class MaaEndConfig(BaseModel):
+class MaaEndConfig(_SchemaModel):
     Info: Optional[MaaEndConfig_Info] = Field(default=None, description="脚本信息")
     Run: Optional[MaaEndConfig_Run] = Field(default=None, description="运行配置")
     Game: Optional[MaaEndConfig_Game] = Field(default=None, description="游戏配置")
@@ -3311,7 +3318,7 @@ class SrcUserConfig_Info(UserConfigInfoBase):
     Tag: Optional[str] = Field(default=None, description="用户标签信息")
 
 
-class SrcUserConfig_Stage(BaseModel):
+class SrcUserConfig_Stage(_SchemaModel):
     Channel: Literal["Relic", "Materials", "Ornament"] | None = Field(
         default=None, description="关卡通道"
     )
@@ -3431,12 +3438,12 @@ class SrcUserConfig_Stage(BaseModel):
     )
 
 
-class SrcUserConfig_Data(BaseModel):
+class SrcUserConfig_Data(_SchemaModel):
     LastProxyDate: Optional[str] = Field(default=None, description="上次代理日期")
     ProxyTimes: Optional[int] = Field(default=None, description="代理次数")
 
 
-class SrcUserConfig_Notify(BaseModel):
+class SrcUserConfig_Notify(_SchemaModel):
     Enabled: Optional[bool] = Field(default=None, description="是否启用通知")
     IfSendStatistic: Optional[bool] = Field(
         default=None, description="是否发送统计信息"
@@ -3447,24 +3454,24 @@ class SrcUserConfig_Notify(BaseModel):
     ServerChanKey: Optional[str] = Field(default=None, description="Server酱密钥")
 
 
-class SrcUserConfig(BaseModel):
+class SrcUserConfig(_SchemaModel):
     Info: Optional[SrcUserConfig_Info] = Field(default=None, description="基础信息")
     Stage: Optional[SrcUserConfig_Stage] = Field(default=None, description="关卡配置")
     Data: Optional[SrcUserConfig_Data] = Field(default=None, description="用户数据")
     Notify: Optional[SrcUserConfig_Notify] = Field(default=None, description="单独通知")
 
 
-class SrcConfig_Info(BaseModel):
+class SrcConfig_Info(_SchemaModel):
     Name: Optional[str] = Field(default=None, description="SRC脚本名称")
     Path: Optional[str] = Field(default=None, description="SRC路径")
 
 
-class SrcConfig_Emulator(BaseModel):
+class SrcConfig_Emulator(_SchemaModel):
     Id: Optional[str] = Field(default=None, description="模拟器ID")
     Index: Optional[str] = Field(default=None, description="模拟器索引")
 
 
-class SrcConfig_Run(BaseModel):
+class SrcConfig_Run(_SchemaModel):
     HardTimeLimit: Optional[int] = Field(
         default=None,
         ge=1,
@@ -3490,7 +3497,7 @@ class SrcConfig_Run(BaseModel):
     )
 
 
-class SrcConfig(BaseModel):
+class SrcConfig(_SchemaModel):
     Info: Optional[SrcConfig_Info] = Field(default=None, description="脚本基础信息")
     Emulator: Optional[SrcConfig_Emulator] = Field(
         default=None, description="模拟器配置"
@@ -3498,7 +3505,7 @@ class SrcConfig(BaseModel):
     Run: Optional[SrcConfig_Run] = Field(default=None, description="脚本运行配置")
 
 
-class HSRConfig_Info(BaseModel):
+class HSRConfig_Info(_SchemaModel):
     Name: Optional[str] = Field(default=None, description="HSR 脚本名称")
     M7APath: Optional[str] = Field(default=None, description="M7A 路径")
     SRAPath: Optional[str] = Field(default=None, description="SRA 路径")
@@ -3508,7 +3515,7 @@ class HSRConfig_Info(BaseModel):
     )
 
 
-class HSRConfig_Game(BaseModel):
+class HSRConfig_Game(_SchemaModel):
     Platform: Optional[Literal["Client", "Cloud"]] = Field(
         default=None, description="游戏平台：本地客户端 / 云·星穹铁道"
     )
@@ -3523,7 +3530,7 @@ class HSRConfig_Game(BaseModel):
     )
 
 
-class HSRConfig_Cloud(BaseModel):
+class HSRConfig_Cloud(_SchemaModel):
     UsePaidTime: Optional[bool] = Field(
         default=None, description="云·星穹铁道是否消耗付费时长走快速排队通道"
     )
@@ -3539,7 +3546,7 @@ class HSRConfig_Cloud(BaseModel):
     )
 
 
-class HSRConfig_Run(BaseModel):
+class HSRConfig_Run(_SchemaModel):
     ProxyTimesLimit: Optional[int] = Field(default=None, description="每日代理次数限制")
     RunTimesLimit: Optional[int] = Field(
         default=None, description="失败任务最大尝试次数"
@@ -3555,7 +3562,7 @@ class HSRConfig_Run(BaseModel):
     )
 
 
-class HSRConfig_TaskMapping(BaseModel):
+class HSRConfig_TaskMapping(_SchemaModel):
     Daily: Optional[Literal["M7A", "SRA"]] = Field(
         default=None, description="日常模块执行脚本"
     )
@@ -3570,7 +3577,7 @@ class HSRConfig_TaskMapping(BaseModel):
     )
 
 
-class HSRConfig_Update(BaseModel):
+class HSRConfig_Update(_SchemaModel):
     AutoUpdateMode: Optional[Literal["Off", "AfterRun"]] = Field(
         default=None,
         description="外部脚本自动更新时机：Off 不更新 / AfterRun 全部用户跑完后",
@@ -3594,7 +3601,7 @@ class HSRConfig_Update(BaseModel):
     )
 
 
-class HSRConfig_TaskSwitch(BaseModel):
+class HSRConfig_TaskSwitch(_SchemaModel):
     Daily: Optional[bool] = Field(default=None, description="日常模块开关")
     ReceiveRewards: Optional[bool] = Field(default=None, description="领取奖励模块开关")
     DivergentUniverse: Optional[bool] = Field(
@@ -3603,7 +3610,7 @@ class HSRConfig_TaskSwitch(BaseModel):
     CurrencyWars: Optional[bool] = Field(default=None, description="货币战争模块开关")
 
 
-class HSRConfig_Stage(BaseModel):
+class HSRConfig_Stage(_SchemaModel):
     Channel: Optional[Literal["CalyxGolden", "CalyxCrimson", "Relic", "Ornament"]] = (
         Field(default=None, description="体力关卡通道")
     )
@@ -3615,7 +3622,7 @@ class HSRConfig_Stage(BaseModel):
     )
 
 
-class HSRConfig_TaskOpt(BaseModel):
+class HSRConfig_TaskOpt(_SchemaModel):
     EchoOfWarWeekday: Optional[
         Literal[
             "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"
@@ -3623,7 +3630,7 @@ class HSRConfig_TaskOpt(BaseModel):
     ] = Field(default=None, description="历战余响开始刷的星期（周一 ~ 周日）")
 
 
-class HSRConfig_Managed(BaseModel):
+class HSRConfig_Managed(_SchemaModel):
     """脚本级共享计划的托管覆盖。
 
     脚本级 ``Managed.TaskMapping`` 恒为空（引擎分配走 ``TaskMapping`` 组），
@@ -3633,7 +3640,7 @@ class HSRConfig_Managed(BaseModel):
     Options: Optional[str] = Field(default=None, description="托管任务选项 JSON")
 
 
-class HSRConfig(BaseModel):
+class HSRConfig(_SchemaModel):
     Info: Optional[HSRConfig_Info] = Field(default=None, description="脚本基础信息")
     Game: Optional[HSRConfig_Game] = Field(default=None, description="游戏配置")
     Cloud: Optional[HSRConfig_Cloud] = Field(
@@ -3688,7 +3695,7 @@ class HSRUserConfig_Info(UserConfigInfoBase):
     Tag: Optional[str] = Field(default=None, description="用户标签列表")
 
 
-class HSRUserConfig_Data(BaseModel):
+class HSRUserConfig_Data(_SchemaModel):
     LastProxyDate: Optional[str] = Field(default=None, description="上次代理日期")
     ProxyTimes: Optional[int] = Field(default=None, description="代理次数")
     # 历战余响
@@ -3719,7 +3726,7 @@ class HSRUserConfig_Data(BaseModel):
     )
 
 
-class HSRUserConfig_TaskSwitch(BaseModel):
+class HSRUserConfig_TaskSwitch(_SchemaModel):
     Daily: Optional[bool] = Field(default=None, description="日常模块开关")
     ReceiveRewards: Optional[bool] = Field(default=None, description="领取奖励模块开关")
     DivergentUniverse: Optional[bool] = Field(
@@ -3728,7 +3735,7 @@ class HSRUserConfig_TaskSwitch(BaseModel):
     CurrencyWars: Optional[bool] = Field(default=None, description="货币战争模块开关")
 
 
-class HSRUserConfig_Stage(BaseModel):
+class HSRUserConfig_Stage(_SchemaModel):
     Channel: Optional[Literal["CalyxGolden", "CalyxCrimson", "Relic", "Ornament"]] = (
         Field(default=None, description="体力关卡通道")
     )
@@ -3740,7 +3747,7 @@ class HSRUserConfig_Stage(BaseModel):
     )
 
 
-class HSRUserConfig_TaskOpt(BaseModel):
+class HSRUserConfig_TaskOpt(_SchemaModel):
     # 历战余响开始刷的星期
     EchoOfWarWeekday: Optional[
         Literal[
@@ -3749,17 +3756,17 @@ class HSRUserConfig_TaskOpt(BaseModel):
     ] = Field(default=None, description="历战余响开始刷的星期（周一 ~ 周日）")
 
 
-class HSRUserConfig_Control(BaseModel):
+class HSRUserConfig_Control(_SchemaModel):
     SRA: Optional[bool] = Field(default=None, description="原生来源时是否运行 SRA")
     M7A: Optional[bool] = Field(default=None, description="原生来源时是否运行三月七")
 
 
-class HSRUserConfig_Managed(BaseModel):
+class HSRUserConfig_Managed(_SchemaModel):
     TaskMapping: Optional[str] = Field(default=None, description="托管任务映射 JSON")
     Options: Optional[str] = Field(default=None, description="托管任务选项 JSON")
 
 
-class HSRUserConfig_Notify(BaseModel):
+class HSRUserConfig_Notify(_SchemaModel):
     Enabled: Optional[bool] = Field(default=None, description="是否启用通知")
     IfSendStatistic: Optional[bool] = Field(
         default=None, description="是否发送统计信息"
@@ -3770,7 +3777,7 @@ class HSRUserConfig_Notify(BaseModel):
     ServerChanKey: Optional[str] = Field(default=None, description="Server 酱密钥")
 
 
-class HSRUserConfig(BaseModel):
+class HSRUserConfig(_SchemaModel):
     Info: Optional[HSRUserConfig_Info] = Field(default=None, description="基础信息")
     Data: Optional[HSRUserConfig_Data] = Field(default=None, description="用户数据")
     TaskSwitch: Optional[HSRUserConfig_TaskSwitch] = Field(
@@ -3789,17 +3796,17 @@ class HSRUserConfig(BaseModel):
     )
 
 
-class HSRDynamicStageM7A(BaseModel):
+class HSRDynamicStageM7A(_SchemaModel):
     instanceType: Optional[str] = Field(default=None, description="M7A 副本类型")
     instanceName: Optional[str] = Field(default=None, description="M7A 副本名称")
 
 
-class HSRDynamicStageSRA(BaseModel):
+class HSRDynamicStageSRA(_SchemaModel):
     id: Optional[str] = Field(default=None, description="SRA 体力任务 ID")
     level: Optional[int] = Field(default=None, description="SRA 体力任务层级")
 
 
-class HSRDynamicStageOption(BaseModel):
+class HSRDynamicStageOption(_SchemaModel):
     label: str = Field(..., description="副本展示名称")
     detail: Optional[str] = Field(default=None, description="副本说明")
     value: str = Field(..., description="副本选项值")
@@ -3811,7 +3818,7 @@ class HSRDynamicStageOption(BaseModel):
     sra: Optional[HSRDynamicStageSRA] = Field(default=None, description="SRA 原生字段")
 
 
-class HSRDynamicStageCategory(BaseModel):
+class HSRDynamicStageCategory(_SchemaModel):
     categoryKey: str = Field(..., description="副本分类键")
     categoryLabel: str = Field(..., description="副本分类名称")
     cost: Optional[int] = Field(default=None, description="单次体力消耗")
@@ -3821,7 +3828,7 @@ class HSRDynamicStageCategory(BaseModel):
     )
 
 
-class HSRStageOptionsData(BaseModel):
+class HSRStageOptionsData(_SchemaModel):
     engine: Literal["M7A", "SRA"] = Field(..., description="体力副本执行脚本")
     source: Optional[str] = Field(default=None, description="选项来源文件或目录")
     categories: List[HSRDynamicStageCategory] = Field(
@@ -3835,7 +3842,7 @@ class HSRStageOptionsOut(OutBase):
     )
 
 
-class HSRCapabilityTask(BaseModel):
+class HSRCapabilityTask(_SchemaModel):
     key: str = Field(..., description="任务键")
     name: str = Field(..., description="任务名称")
     phase: Literal["daily", "weekly"] = Field(..., description="任务阶段")
@@ -3848,7 +3855,7 @@ class HSRCapabilityTask(BaseModel):
     )
 
 
-class HSRCapabilityAdapter(BaseModel):
+class HSRCapabilityAdapter(_SchemaModel):
     engine: Literal["M7A", "SRA"] = Field(..., description="原生脚本引擎")
     display_name: str = Field(..., description="引擎展示名称")
     version: Optional[str] = Field(default=None, description="引擎版本")
@@ -3859,7 +3866,7 @@ class HSRCapabilityAdapter(BaseModel):
     ready_reason: Optional[str] = Field(default=None, description="引擎状态说明")
 
 
-class HSRCapabilitiesData(BaseModel):
+class HSRCapabilitiesData(_SchemaModel):
     revision: str = Field(default="old-dev", description="契约版本")
     available: bool = Field(default=False, description="HSR 是否可用")
     unavailable_reason: Optional[str] = Field(default=None, description="不可用原因")
@@ -3884,7 +3891,7 @@ class HSRCapabilitiesOut(OutBase):
     data: Optional[HSRCapabilitiesData] = Field(default=None, description="HSR 能力")
 
 
-class HSRUpdateIn(BaseModel):
+class HSRUpdateIn(_SchemaModel):
     scriptId: str = Field(..., description="HSR 脚本配置 ID")
     engine: Literal["M7A", "SRA"] = Field(..., description="要操作的外部脚本引擎")
     action: Literal["check", "apply"] = Field(
@@ -3892,7 +3899,7 @@ class HSRUpdateIn(BaseModel):
     )
 
 
-class HSRUpdateData(BaseModel):
+class HSRUpdateData(_SchemaModel):
     engine: Literal["M7A", "SRA"] = Field(..., description="外部脚本引擎")
     checked: bool = Field(default=False, description="是否成功查到版本信息")
     updated: bool = Field(default=False, description="本次是否真的完成了更新")
@@ -3909,12 +3916,12 @@ class HSRUpdateOut(OutBase):
     data: Optional[HSRUpdateData] = Field(default=None, description="更新结果")
 
 
-class HSRCloudLoginIn(BaseModel):
+class HSRCloudLoginIn(_SchemaModel):
     scriptId: str = Field(..., description="HSR 脚本配置 ID")
     userId: str = Field(..., description="要登录云·星穹铁道的用户 ID")
 
 
-class HSRCloudLoginData(BaseModel):
+class HSRCloudLoginData(_SchemaModel):
     logged_in: bool = Field(default=False, description="是否确认已登录")
     last_login: Optional[str] = Field(
         default=None, description="本次确认已登录的时间（ISO 8601）"
@@ -3926,14 +3933,14 @@ class HSRCloudLoginOut(OutBase):
     data: Optional[HSRCloudLoginData] = Field(default=None, description="登录结果")
 
 
-class HSRManagedFieldVisibleWhen(BaseModel):
+class HSRManagedFieldVisibleWhen(_SchemaModel):
     key: str = Field(..., description="依赖的同模块字段键")
     values: List[Any] = Field(
         default_factory=list, description="该字段取这些值之一时才显示"
     )
 
 
-class HSRManagedField(BaseModel):
+class HSRManagedField(_SchemaModel):
     key: str = Field(..., description="字段键")
     label: str = Field(default="", description="字段名称")
     type: str = Field(default="string", description="字段类型")
@@ -3960,7 +3967,7 @@ class HSRManagedField(BaseModel):
     )
 
 
-class HSRManagedDroppedOverride(BaseModel):
+class HSRManagedDroppedOverride(_SchemaModel):
     key: str = Field(..., description="被忽略的 Managed.Options 覆盖键")
     reason: Literal["unknown", "type"] = Field(
         ...,
@@ -3973,7 +3980,7 @@ class HSRManagedDroppedOverride(BaseModel):
     message: str = Field(default="", description="人类可读说明")
 
 
-class HSRManagedForm(BaseModel):
+class HSRManagedForm(_SchemaModel):
     key: Optional[str] = Field(default=None, description="任务键")
     engine: Literal["M7A", "SRA"] = Field(..., description="表单引擎")
     fields: List[HSRManagedField] = Field(default_factory=list, description="表单字段")
@@ -3988,7 +3995,7 @@ class HSRManagedForm(BaseModel):
     )
 
 
-class HSRManagedTask(BaseModel):
+class HSRManagedTask(_SchemaModel):
     key: str = Field(..., description="任务键")
     name: str = Field(..., description="任务名称")
     phase: Literal["daily", "weekly"] = Field(..., description="任务阶段")
@@ -4004,7 +4011,7 @@ class HSRManagedTask(BaseModel):
     )
 
 
-class HSRManagedConfigData(BaseModel):
+class HSRManagedConfigData(_SchemaModel):
     revision: str = Field(default="old-dev", description="契约版本")
     plan_owner: Literal["script", "user"] = Field(
         default="script",
@@ -4024,13 +4031,13 @@ class HSRManagedConfigOut(OutBase):
     data: Optional[HSRManagedConfigData] = Field(default=None, description="托管配置")
 
 
-class HSRSRAProfile(BaseModel):
+class HSRSRAProfile(_SchemaModel):
     id: str = Field(..., description="档案 id（文件名，不含扩展名）")
     path: str = Field(..., description="档案文件路径")
     selected: bool = Field(default=False, description="是否为当前生效的档案")
 
 
-class HSRSRAProfilesData(BaseModel):
+class HSRSRAProfilesData(_SchemaModel):
     engine: Literal["SRA"] = Field(default="SRA", description="原生脚本引擎")
     root: str = Field(..., description="档案目录（%APPDATA%/SRA/configs）")
     available: bool = Field(
@@ -4088,7 +4095,7 @@ class MaaFWUserConfig_Info(UserConfigInfoBase):
     )
 
 
-class MaaFWUserConfig_Task(BaseModel):
+class MaaFWUserConfig_Task(_SchemaModel):
     SelectedPreset: Optional[str] = Field(
         default=None, description="选中的 interface preset"
     )
@@ -4097,14 +4104,14 @@ class MaaFWUserConfig_Task(BaseModel):
     )
 
 
-class MaaFWUserConfig_Device(BaseModel):
+class MaaFWUserConfig_Device(_SchemaModel):
     AdbAddress: Optional[str] = Field(default=None, description="用户覆盖 ADB 地址")
     HWnd: Optional[int] = Field(default=None, description="窗口句柄")
     PlayCoverAddress: Optional[str] = Field(default=None, description="PlayCover 地址")
     PlayCoverUuid: Optional[str] = Field(default=None, description="PlayCover UUID")
 
 
-class MaaFWUserConfig_Data(BaseModel):
+class MaaFWUserConfig_Data(_SchemaModel):
     LastProxyDate: Optional[str] = Field(default=None, description="上次代理日期")
     ProxyTimes: Optional[int] = Field(default=None, description="代理次数")
     IfPassCheck: Optional[bool] = Field(default=None, description="是否通过检查")
@@ -4114,7 +4121,7 @@ class MaaFWUserConfig_Data(BaseModel):
     )
 
 
-class MaaFWUserConfig_Notify(BaseModel):
+class MaaFWUserConfig_Notify(_SchemaModel):
     Enabled: Optional[bool] = Field(default=None, description="是否启用通知")
     IfSendStatistic: Optional[bool] = Field(
         default=None, description="是否发送统计信息"
@@ -4125,7 +4132,7 @@ class MaaFWUserConfig_Notify(BaseModel):
     ServerChanKey: Optional[str] = Field(default=None, description="Server 酱密钥")
 
 
-class MaaFWUserConfig(BaseModel):
+class MaaFWUserConfig(_SchemaModel):
     Info: Optional[MaaFWUserConfig_Info] = Field(default=None, description="基础信息")
     Task: Optional[MaaFWUserConfig_Task] = Field(default=None, description="任务配置")
     Device: Optional[MaaFWUserConfig_Device] = Field(
@@ -4137,7 +4144,7 @@ class MaaFWUserConfig(BaseModel):
     )
 
 
-class MaaFWConfig_Info(BaseModel):
+class MaaFWConfig_Info(_SchemaModel):
     Name: Optional[str] = Field(default=None, description="MaaFW 脚本名称")
     ProjectLabel: Optional[str] = Field(default=None, description="MaaFW 项目标签")
     Path: Optional[str] = Field(default=None, description="MaaFW 项目根目录")
@@ -4145,12 +4152,12 @@ class MaaFWConfig_Info(BaseModel):
     Resource: Optional[str] = Field(default=None, description="MaaFW resource 名称")
 
 
-class MaaFWConfig_Emulator(BaseModel):
+class MaaFWConfig_Emulator(_SchemaModel):
     Id: Optional[str] = Field(default=None, description="模拟器 ID")
     Index: Optional[str] = Field(default=None, description="模拟器索引")
 
 
-class MaaFWConfig_Device(BaseModel):
+class MaaFWConfig_Device(_SchemaModel):
     AdbPath: Optional[str] = Field(default=None, description="ADB 路径")
     AdbAddress: Optional[str] = Field(default=None, description="ADB 地址")
     AdbScreencapMethods: Optional[int] = Field(default=None, description="ADB 截图方法")
@@ -4168,7 +4175,7 @@ class MaaFWConfig_Device(BaseModel):
     PlayCoverUuid: Optional[str] = Field(default=None, description="PlayCover UUID")
 
 
-class MaaFWConfig_Game(BaseModel):
+class MaaFWConfig_Game(_SchemaModel):
     LaunchMode: Optional[Literal["DirectExe", "AttachOnly"]] = Field(
         default=None,
         description="游戏启动模式：DirectExe 让 MAS 启动并在结束后关闭 / AttachOnly 使用其他方式启停，MAS 只接管",
@@ -4195,7 +4202,7 @@ class MaaFWConfig_Game(BaseModel):
     )
 
 
-class MaaFWConfig_Update(BaseModel):
+class MaaFWConfig_Update(_SchemaModel):
     AutoUpdateMode: Optional[Literal["Off", "BeforeRun", "AfterRun"]] = Field(
         default=None,
         description="项目自动更新时机：Off 不更新 / BeforeRun 运行前 / AfterRun 全部用户跑完后",
@@ -4229,7 +4236,7 @@ class MaaFWConfig_Update(BaseModel):
     )
 
 
-class MaaFWConfig_Run(BaseModel):
+class MaaFWConfig_Run(_SchemaModel):
     ProxyTimesLimit: Optional[int] = Field(default=None, description="代理次数限制")
     RunTimesLimit: Optional[int] = Field(default=None, description="运行次数限制")
     RunTimeLimit: Optional[int] = Field(
@@ -4259,7 +4266,7 @@ class MaaFWConfig_Run(BaseModel):
     )
 
 
-class MaaFWConfig_Embedded(BaseModel):
+class MaaFWConfig_Embedded(_SchemaModel):
     SourceVersion: Optional[str] = Field(
         default=None, description="导入时来源的 interface 版本"
     )
@@ -4274,7 +4281,7 @@ class MaaFWConfig_Embedded(BaseModel):
     )
 
 
-class MaaFWConfig_Selection(BaseModel):
+class MaaFWConfig_Selection(_SchemaModel):
     """MaaFW 选择项的 API DTO。
 
     ConfigBase 将这三个列表以 JSON 字符串保存；API 同时接受已解析的
@@ -4292,14 +4299,14 @@ class MaaFWConfig_Selection(BaseModel):
     )
 
 
-class MaaFWConfig_Task(BaseModel):
+class MaaFWConfig_Task(_SchemaModel):
     Templates: Optional[str] = Field(
         default=None,
         description='用户页任务队列的自定义模板，JSON 字符串 [{"name": 模板名, "snapshot": 任务快照}]，同一脚本的用户共用',
     )
 
 
-class MaaFWConfig(BaseModel):
+class MaaFWConfig(_SchemaModel):
     Info: Optional[MaaFWConfig_Info] = Field(default=None, description="脚本基础信息")
     Emulator: Optional[MaaFWConfig_Emulator] = Field(
         default=None, description="模拟器配置"
@@ -4349,7 +4356,7 @@ class MSSConfig(MaaFWConfig):
     """MSS 脚本配置：与 MaaFW 脚本配置同形（MSS 是 MaaFW 的特调类型）。"""
 
 
-class MaaFWInterfacePreviewIn(BaseModel):
+class MaaFWInterfacePreviewIn(_SchemaModel):
     path: str = Field(default="", description="MaaFW 项目根目录，应包含 interface.json")
     scriptId: Optional[str] = Field(
         default=None,
@@ -4357,7 +4364,7 @@ class MaaFWInterfacePreviewIn(BaseModel):
     )
 
 
-class MaaFWGamePackageIn(BaseModel):
+class MaaFWGamePackageIn(_SchemaModel):
     path: str = Field(..., description="MaaFW 项目根目录，应包含 interface.json")
     resource: str = Field(..., description="要按哪个 resource 的 pipeline 推断包名")
     scriptId: Optional[str] = Field(
@@ -4366,7 +4373,7 @@ class MaaFWGamePackageIn(BaseModel):
     )
 
 
-class MaaFWGamePackageData(BaseModel):
+class MaaFWGamePackageData(_SchemaModel):
     reason: Literal["resolved", "not-found", "ambiguous"] = Field(
         ..., description="推断结果：唯一 / 没找到 / 多个互相矛盾"
     )
@@ -4382,18 +4389,18 @@ class MaaFWGamePackageOut(OutBase):
     )
 
 
-class MaaFWAdbEmulatorExtraCapabilityInfo(BaseModel):
+class MaaFWAdbEmulatorExtraCapabilityInfo(_SchemaModel):
     screencap: bool = Field(default=False, description="ADB EmulatorExtras 截图能力")
     input: bool = Field(default=False, description="ADB EmulatorExtras 输入能力")
 
 
-class MaaFWControlCapabilitiesInfo(BaseModel):
+class MaaFWControlCapabilitiesInfo(_SchemaModel):
     emulatorExtras: Dict[str, MaaFWAdbEmulatorExtraCapabilityInfo] = Field(
         default_factory=dict, description="按模拟器类型列出的 EmulatorExtras 能力"
     )
 
 
-class MaaFWProjectInfo(BaseModel):
+class MaaFWProjectInfo(_SchemaModel):
     name: str = Field(..., description="项目标识")
     label: Optional[str] = Field(default=None, description="项目显示名称")
     title: Optional[str] = Field(default=None, description="项目标题")
@@ -4407,7 +4414,7 @@ class MaaFWProjectInfo(BaseModel):
     icon: Optional[str] = Field(default=None, description="项目图标路径")
 
 
-class MaaFWControllerInfo(BaseModel):
+class MaaFWControllerInfo(_SchemaModel):
     name: str = Field(..., description="控制器名称")
     label: Optional[str] = Field(default=None, description="控制器显示名称")
     type: str = Field(..., description="控制器类型")
@@ -4417,7 +4424,7 @@ class MaaFWControllerInfo(BaseModel):
     permissionRequired: bool = Field(default=False, description="是否需要管理员权限")
 
 
-class MaaFWResourceInfo(BaseModel):
+class MaaFWResourceInfo(_SchemaModel):
     name: str = Field(..., description="资源名称")
     label: Optional[str] = Field(default=None, description="资源显示名称")
     description: Optional[str] = Field(default=None, description="资源描述")
@@ -4427,7 +4434,7 @@ class MaaFWResourceInfo(BaseModel):
     option: List[str] = Field(default_factory=list, description="资源选项")
 
 
-class MaaFWGroupInfo(BaseModel):
+class MaaFWGroupInfo(_SchemaModel):
     name: str = Field(..., description="任务分组名称")
     label: Optional[str] = Field(default=None, description="任务分组显示名称")
     description: Optional[str] = Field(default=None, description="任务分组描述")
@@ -4435,7 +4442,7 @@ class MaaFWGroupInfo(BaseModel):
     defaultExpand: bool = Field(default=True, description="是否默认展开")
 
 
-class MaaFWSettingInfo(BaseModel):
+class MaaFWSettingInfo(_SchemaModel):
     name: str = Field(..., description="设置分组名称")
     label: Optional[str] = Field(default=None, description="设置分组显示名称")
     description: Optional[str] = Field(default=None, description="设置分组描述")
@@ -4444,7 +4451,7 @@ class MaaFWSettingInfo(BaseModel):
     defaultExpand: bool = Field(default=True, description="是否默认展开")
 
 
-class MaaFWTaskInfo(BaseModel):
+class MaaFWTaskInfo(_SchemaModel):
     name: str = Field(..., description="任务名称")
     label: Optional[str] = Field(default=None, description="任务显示名称")
     entry: str = Field(..., description="MaaFW pipeline 入口")
@@ -4465,7 +4472,7 @@ class MaaFWTaskInfo(BaseModel):
     )
 
 
-class MaaFWOptionCaseInfo(BaseModel):
+class MaaFWOptionCaseInfo(_SchemaModel):
     name: str = Field(..., description="选项 case 名称")
     label: Optional[str] = Field(default=None, description="选项 case 显示名称")
     description: Optional[str] = Field(default=None, description="选项 case 描述")
@@ -4473,7 +4480,7 @@ class MaaFWOptionCaseInfo(BaseModel):
     option: List[str] = Field(default_factory=list, description="子选项列表")
 
 
-class MaaFWOptionInputInfo(BaseModel):
+class MaaFWOptionInputInfo(_SchemaModel):
     name: str = Field(..., description="输入项名称")
     label: Optional[str] = Field(default=None, description="输入项显示名称")
     description: Optional[str] = Field(default=None, description="输入项描述")
@@ -4488,7 +4495,7 @@ class MaaFWOptionInputInfo(BaseModel):
     )
 
 
-class MaaFWOptionHotkeyInfo(BaseModel):
+class MaaFWOptionHotkeyInfo(_SchemaModel):
     name: str = Field(..., description="热键项名称")
     label: Optional[str] = Field(default=None, description="热键项显示名称")
     description: Optional[str] = Field(default=None, description="热键项描述")
@@ -4499,7 +4506,7 @@ class MaaFWOptionHotkeyInfo(BaseModel):
     )
 
 
-class MaaFWOptionInfo(BaseModel):
+class MaaFWOptionInfo(_SchemaModel):
     name: str = Field(..., description="选项名称")
     type: str = Field(..., description="选项类型")
     label: Optional[str] = Field(default=None, description="选项显示名称")
@@ -4527,7 +4534,7 @@ class MaaFWOptionInfo(BaseModel):
     )
 
 
-class MaaFWTaskSnapshot(BaseModel):
+class MaaFWTaskSnapshot(_SchemaModel):
     """ProjectInterface 预设转换出的任务快照，前三个字段的键都是任务 name。
 
     与用户自己的任务快照同构。用户队列允许同一个任务加多份，那边的键是任务
@@ -4547,7 +4554,7 @@ class MaaFWTaskSnapshot(BaseModel):
     )
 
 
-class MaaFWPresetInfo(BaseModel):
+class MaaFWPresetInfo(_SchemaModel):
     name: str = Field(..., description="预设名称")
     label: Optional[str] = Field(default=None, description="预设显示名称")
     description: Optional[str] = Field(default=None, description="预设描述")
@@ -4556,7 +4563,7 @@ class MaaFWPresetInfo(BaseModel):
     snapshot: MaaFWTaskSnapshot = Field(..., description="预设转换后的任务快照")
 
 
-class MaaFWInterfacePreviewData(BaseModel):
+class MaaFWInterfacePreviewData(_SchemaModel):
     """MaaFW interface 预览数据。
 
     外层字段在宿主 schema 中明确建模；各列表条目的字段与 Phase 1
@@ -4595,18 +4602,18 @@ class MaaFWInterfacePreviewOut(OutBase):
     )
 
 
-class MaaFWEmbeddedIn(BaseModel):
+class MaaFWEmbeddedIn(_SchemaModel):
     scriptId: str = Field(..., min_length=1, description="MFW 脚本 ID")
 
 
-class MaaFWEmbeddedReimportIn(BaseModel):
+class MaaFWEmbeddedReimportIn(_SchemaModel):
     scriptId: str = Field(..., min_length=1, description="MFW 脚本 ID")
     sourcePath: str = Field(
         ..., min_length=1, description="新的来源目录，会写入 Info.Path"
     )
 
 
-class MaaFWEmbeddedCloneIn(BaseModel):
+class MaaFWEmbeddedCloneIn(_SchemaModel):
     scriptId: str = Field(
         ..., min_length=1, description="要建副本的 MFW 脚本 ID（新脚本）"
     )
@@ -4617,14 +4624,14 @@ class MaaFWEmbeddedCloneIn(BaseModel):
     )
 
 
-class MaaFWEmbeddedSourcesIn(BaseModel):
+class MaaFWEmbeddedSourcesIn(_SchemaModel):
     scriptId: Optional[str] = Field(
         default=None,
         description="要排除的脚本 ID（给已有脚本列候选时传；新建脚本对话框里还没有脚本，不传）",
     )
 
 
-class MaaFWEmbeddedSourceItem(BaseModel):
+class MaaFWEmbeddedSourceItem(_SchemaModel):
     scriptId: str = Field(..., description="可作为克隆来源的 MFW 脚本 ID")
     name: str = Field(default="", description="脚本名")
     type: str = Field(default="MaaFW", description="脚本类型（MaaFW / M9A / MSS）")
@@ -4639,7 +4646,7 @@ class MaaFWEmbeddedSourcesOut(OutBase):
     )
 
 
-class MaaFWEmbeddedProjection(BaseModel):
+class MaaFWEmbeddedProjection(_SchemaModel):
     sourceSizeBytes: int = Field(default=0, description="来源目录字节数")
     payloadSizeBytes: int = Field(default=0, description="副本字节数")
     savedBytes: int = Field(default=0, description="省下的字节数")
@@ -4662,7 +4669,7 @@ class MaaFWEmbeddedProjection(BaseModel):
     )
 
 
-class MaaFWEmbeddedStatusData(BaseModel):
+class MaaFWEmbeddedStatusData(_SchemaModel):
     copyPath: str = Field(default="", description="副本目录（只读展示）")
     copyHealthy: bool = Field(default=False, description="副本是否完整")
     sourcePath: str = Field(default="", description="来源目录（Info.Path）")
@@ -4691,7 +4698,7 @@ class MaaFWEmbeddedStatusOut(OutBase):
     )
 
 
-class MaaFWShellInstancesIn(BaseModel):
+class MaaFWShellInstancesIn(_SchemaModel):
     scriptId: str = Field(..., min_length=1, description="MFW 脚本 ID")
     path: Optional[str] = Field(
         default=None,
@@ -4699,7 +4706,7 @@ class MaaFWShellInstancesIn(BaseModel):
     )
 
 
-class MaaFWShellInstanceItem(BaseModel):
+class MaaFWShellInstanceItem(_SchemaModel):
     id: str = Field(..., description="实例 ID（导入时原样传回）")
     name: str = Field(..., description="外壳里的实例名")
     userName: str = Field(
@@ -4732,14 +4739,14 @@ class MaaFWShellInstancesOut(OutBase):
     )
 
 
-class MaaFWShellInstanceImportIn(BaseModel):
+class MaaFWShellInstanceImportIn(_SchemaModel):
     scriptId: str = Field(..., min_length=1, description="MFW 脚本 ID")
     instanceIds: List[str] = Field(
         ..., min_length=1, description="要导入的实例 ID，每个建一个用户"
     )
 
 
-class MaaFWShellInstanceApplyIn(BaseModel):
+class MaaFWShellInstanceApplyIn(_SchemaModel):
     scriptId: str = Field(..., min_length=1, description="MFW 脚本 ID")
     userId: str = Field(..., min_length=1, description="要覆盖任务队列的用户 ID")
     instanceId: str = Field(..., min_length=1, description="从哪份外壳实例导入")
@@ -4749,7 +4756,7 @@ class MaaFWShellInstanceApplyIn(BaseModel):
     )
 
 
-class MaaFWShellInstanceImportItem(BaseModel):
+class MaaFWShellInstanceImportItem(_SchemaModel):
     instanceId: str = Field(..., description="实例 ID")
     instanceName: str = Field(default="", description="外壳里的实例名")
     success: bool = Field(default=False, description="是否导入成功")
@@ -4771,7 +4778,7 @@ class MaaFWShellInstanceImportOut(OutBase):
     )
 
 
-class MaaFWShellInstanceApplyData(BaseModel):
+class MaaFWShellInstanceApplyData(_SchemaModel):
     """覆盖到已有用户的结果：除了逐项成败与跳过项，还带实际写进用户配置的任务快照。
 
     界面直接拿它刷新本地状态，不用再回头拉一次用户配置——那样会把用户还没保存的其它改动
@@ -4800,12 +4807,12 @@ class MaaFWShellInstanceApplyOut(OutBase):
     )
 
 
-class MssDefenseStatusIn(BaseModel):
+class MssDefenseStatusIn(_SchemaModel):
     scriptId: str = Field(..., min_length=1, description="MSS 脚本 ID")
     userId: str = Field(..., min_length=1, description="用户 ID")
 
 
-class MssDefenseStatusData(BaseModel):
+class MssDefenseStatusData(_SchemaModel):
     """个人版「灾变防线」这一期的状态：用户页拿它显示「本期未打 / 已打」。"""
 
     enabled: bool = Field(
@@ -4830,7 +4837,7 @@ class MssDefenseStatusOut(OutBase):
     data: MssDefenseStatusData = Field(default_factory=MssDefenseStatusData)
 
 
-class MaaFWProjectUpdateIn(BaseModel):
+class MaaFWProjectUpdateIn(_SchemaModel):
     scriptId: str = Field(..., min_length=1, description="MaaFW 脚本 ID")
     action: Literal["check", "apply"] = Field(
         default="check",
@@ -4838,7 +4845,7 @@ class MaaFWProjectUpdateIn(BaseModel):
     )
 
 
-class MaaFWProjectUpdateData(BaseModel):
+class MaaFWProjectUpdateData(_SchemaModel):
     checked: bool = Field(default=False, description="是否完成了一次更新检查")
     updated: bool = Field(default=False, description="本次是否实际应用了更新")
     updateAvailable: bool = Field(default=False, description="是否存在更新版本")
@@ -4874,7 +4881,7 @@ class MaaFWProjectUpdateOut(OutBase):
     )
 
 
-class MaaFWMirrorCdkIn(BaseModel):
+class MaaFWMirrorCdkIn(_SchemaModel):
     scriptId: str = Field(..., min_length=1, description="MaaFW 脚本 ID")
     cdk: str = Field(
         default="",
@@ -4882,7 +4889,7 @@ class MaaFWMirrorCdkIn(BaseModel):
     )
 
 
-class MaaFWMirrorCdkData(BaseModel):
+class MaaFWMirrorCdkData(_SchemaModel):
     status: str = Field(
         ...,
         description=(
@@ -4902,7 +4909,7 @@ class MaaFWMirrorCdkOut(OutBase):
     )
 
 
-class MaaFWAgentEnvPrepareIn(BaseModel):
+class MaaFWAgentEnvPrepareIn(_SchemaModel):
     path: str = Field(default="", description="MFW 项目根目录，应包含 interface.json")
     scriptId: Optional[str] = Field(
         default=None,
@@ -4914,7 +4921,7 @@ class MaaFWAgentEnvPrepareIn(BaseModel):
     )
 
 
-class MaaFWAgentEnvInfo(BaseModel):
+class MaaFWAgentEnvInfo(_SchemaModel):
     childExec: str = Field(..., description="interface 声明的 agent child_exec")
     executable: str = Field(..., description="实际使用的解释器或可执行文件")
     runtimeKind: Optional[str] = Field(
@@ -4930,7 +4937,7 @@ class MaaFWAgentEnvInfo(BaseModel):
     )
 
 
-class MaaFWAgentEnvPrepareData(BaseModel):
+class MaaFWAgentEnvPrepareData(_SchemaModel):
     path: str = Field(..., description="MFW 项目根目录")
     agentCount: int = Field(default=0, description="agent 数量")
     agents: List[MaaFWAgentEnvInfo] = Field(
@@ -4989,12 +4996,12 @@ PLAN_WEEKDAY_NAMES = (
 """周计划的七天，顺序与 calendar.day_name 一致。"""
 
 
-class PlanIndexItem(BaseModel):
+class PlanIndexItem(_SchemaModel):
     uid: str = Field(..., description="唯一标识符")
     type: PlanConfigType = Field(..., description="配置类型")
 
 
-class MaaPlanConfig_Info(BaseModel):
+class MaaPlanConfig_Info(_SchemaModel):
     Name: Optional[str] = Field(default=None, description="计划表名称")
     Mode: Optional[Literal["ALL", "Weekly", "Rotate"]] = Field(
         default=None, description="计划表模式"
@@ -5007,7 +5014,7 @@ class MaaPlanConfig_Info(BaseModel):
     )
 
 
-class MaaPlanConfig_Item(BaseModel):
+class MaaPlanConfig_Item(_SchemaModel):
     model_config = ConfigDict(extra="forbid")
 
     MedicineNumb: Optional[int] = Field(default=None, description="吃理智药")
@@ -5020,7 +5027,7 @@ class MaaPlanConfig_Item(BaseModel):
     Stage_3: Optional[str] = Field(default=None, description="备选关卡 - 3")
 
 
-class WeeklyPlanConfig(BaseModel, Generic[TPlanInfo, TPlanItem]):
+class WeeklyPlanConfig(_SchemaModel, Generic[TPlanInfo, TPlanItem]):
     Info: Optional[TPlanInfo] = Field(default=None, description="基础信息")
     ALL: Optional[TPlanItem] = Field(default=None, description="全局")
     Days: Dict[str, TPlanItem] = Field(
@@ -5064,7 +5071,7 @@ class MaaPlanConfig(WeeklyPlanConfig[MaaPlanConfig_Info, MaaPlanConfig_Item]):
     model_config = ConfigDict(extra="forbid")
 
 
-class MaaEndPlanConfig_Info(BaseModel):
+class MaaEndPlanConfig_Info(_SchemaModel):
     model_config = ConfigDict(extra="forbid")
 
     Name: str = Field(default="新 MaaEnd 计划表", description="计划表名称")
@@ -5079,7 +5086,7 @@ class MaaEndPlanConfig_Info(BaseModel):
     )
 
 
-class MaaEndProtocolSpacePlanKey(BaseModel):
+class MaaEndProtocolSpacePlanKey(_SchemaModel):
     model_config = ConfigDict(extra="forbid")
 
     SanityTaskType: Literal[
@@ -5103,7 +5110,7 @@ class MaaEndProtocolSpacePlanKey(BaseModel):
     )
 
 
-class MaaEndAutoEssencePlanKey(BaseModel):
+class MaaEndAutoEssencePlanKey(_SchemaModel):
     model_config = ConfigDict(extra="forbid")
 
     SanityTaskType: Literal["Essence"] = Field(
@@ -5126,7 +5133,7 @@ MaaEndPlanKey = Annotated[
 ]
 
 
-class MaaEndPlanConfig_Item(BaseModel):
+class MaaEndPlanConfig_Item(_SchemaModel):
     model_config = ConfigDict(extra="forbid")
 
     Key: MaaEndPlanKey = Field(
@@ -5142,7 +5149,7 @@ class MaaEndPlanConfig(WeeklyPlanConfig[MaaEndPlanConfig_Info, MaaEndPlanConfig_
 BAAH_PLAN_ROTATE_DAYS_DEFAULT = 3
 
 
-class BAAHPlanConfig_Info(BaseModel):
+class BAAHPlanConfig_Info(_SchemaModel):
     model_config = ConfigDict(extra="forbid")
 
     Name: str = Field(default="新 BAAH 计划表", description="计划表名称")
@@ -5272,7 +5279,7 @@ def fix_baah_plan_slot(field: str, index: int, value: int) -> int:
 BAAH_PLAN_KEY_MIN_LENGTH = 2
 
 
-class BAAHPlanKey(BaseModel):
+class BAAHPlanKey(_SchemaModel):
     """BAAH 计划表某一天要打的关卡。
 
     五类非活动关卡各自有三种状态，缺一不可地区分：
@@ -5346,7 +5353,7 @@ class BAAHPlanKey(BaseModel):
         return value
 
 
-class BAAHPlanConfig_Item(BaseModel):
+class BAAHPlanConfig_Item(_SchemaModel):
     model_config = ConfigDict(extra="forbid")
 
     Key: BAAHPlanKey = Field(
@@ -5359,7 +5366,7 @@ class BAAHPlanConfig(WeeklyPlanConfig[BAAHPlanConfig_Info, BAAHPlanConfig_Item])
     model_config = ConfigDict(extra="forbid")
 
 
-class MSSPlanConfig_Info(BaseModel):
+class MSSPlanConfig_Info(_SchemaModel):
     model_config = ConfigDict(extra="forbid")
 
     Name: str = Field(default="新 MSS 计划表", description="计划表名称")
@@ -5374,7 +5381,7 @@ class MSSPlanConfig_Info(BaseModel):
     )
 
 
-class MSSPlanKey(BaseModel):
+class MSSPlanKey(_SchemaModel):
     model_config = ConfigDict(extra="forbid")
 
     TribulationStage: str = Field(
@@ -5389,7 +5396,7 @@ class MSSPlanKey(BaseModel):
     FightTimes: int = Field(default=1, description="自定义快速作战次数")
 
 
-class MSSPlanConfig_Item(BaseModel):
+class MSSPlanConfig_Item(_SchemaModel):
     model_config = ConfigDict(extra="forbid")
 
     Key: MSSPlanKey = Field(
@@ -5406,7 +5413,7 @@ PlanCreateType = Literal["MaaPlan", "MaaEndPlan", "BAAHPlan", "MSSPlan"]
 PlanConfigData = MaaPlanConfig | MaaEndPlanConfig | BAAHPlanConfig | MSSPlanConfig
 
 
-class ReplayRecord(BaseModel):
+class ReplayRecord(_SchemaModel):
     replayId: str = Field(..., description="回放唯一标识")
     taskId: str | None = Field(default=None, description="调度任务标识")
     scriptId: str | None = Field(default=None, description="脚本标识")
@@ -5437,7 +5444,7 @@ class ReplayListOut(OutBase):
     directory: str = ""
 
 
-class HistoryIndexItem(BaseModel):
+class HistoryIndexItem(_SchemaModel):
     date: str = Field(..., description="日期")
     status: Literal["DONE", "SKIP", "ERROR"] = Field(
         ..., description="状态: DONE 完成, SKIP 跳过(如停服维护), ERROR 失败"
@@ -5448,7 +5455,7 @@ class HistoryIndexItem(BaseModel):
     )
 
 
-class PullCountStatistics(BaseModel):
+class PullCountStatistics(_SchemaModel):
     resource_pulls: int = Field(..., description="资源折算抽数")
     carry_over_pulls: int = Field(..., description="可留到下版本的凭证抽数")
     next_pool_shop_pulls: int = Field(..., description="下版本商店抽数")
@@ -5457,7 +5464,7 @@ class PullCountStatistics(BaseModel):
     next_pool_total: int = Field(..., description="下版本卡池预计总抽数")
 
 
-class HistoryData(BaseModel):
+class HistoryData(_SchemaModel):
     replays: list[ReplayRecord] = Field(
         default_factory=list, description="本轮失败回放"
     )
@@ -5485,7 +5492,7 @@ class HistoryData(BaseModel):
     )
 
 
-class ScriptCreateIn(BaseModel):
+class ScriptCreateIn(_SchemaModel):
     type: Literal[
         "MAA",
         "SRC",
@@ -5530,7 +5537,7 @@ class ScriptCreateOut(OutBase):
     ] = Field(..., description="脚本配置数据")
 
 
-class ScriptGetIn(BaseModel):
+class ScriptGetIn(_SchemaModel):
     scriptId: Optional[str] = Field(
         default=None, description="脚本ID, 未携带时表示获取所有脚本数据"
     )
@@ -5559,7 +5566,7 @@ class ScriptGetOut(OutBase):
     ] = Field(..., description="脚本数据字典, key来自于index列表的uid")
 
 
-class ScriptUpdateIn(BaseModel):
+class ScriptUpdateIn(_SchemaModel):
     scriptId: str = Field(..., description="脚本ID")
     data: Union[
         MaaConfig,
@@ -5579,21 +5586,21 @@ class ScriptUpdateIn(BaseModel):
     ] = Field(..., description="脚本更新数据")
 
 
-class ScriptDeleteIn(BaseModel):
+class ScriptDeleteIn(_SchemaModel):
     scriptId: str = Field(..., description="脚本ID")
 
 
-class ScriptReorderIn(BaseModel):
+class ScriptReorderIn(_SchemaModel):
     indexList: List[str] = Field(..., description="脚本ID列表, 按新顺序排列")
 
 
-class ShareTemplateListIn(BaseModel):
+class ShareTemplateListIn(_SchemaModel):
     page: int = Field(default=1, ge=1, description="页码, 从 1 开始")
     pageSize: int = Field(default=20, ge=1, le=100, description="每页条数")
     keyword: Optional[str] = Field(default=None, description="搜索关键字")
 
 
-class ShareTemplateItem(BaseModel):
+class ShareTemplateItem(_SchemaModel):
     projectKey: str = Field(..., description="配置中心项目标识")
     categoryKey: str = Field(..., description="配置中心分类标识")
     configKey: str = Field(..., description="配置中心配置标识")
@@ -5617,12 +5624,12 @@ class ShareTemplateListOut(OutBase):
     hasNext: bool = Field(default=False, description="是否还有下一页")
 
 
-class ScriptShareInspectIn(BaseModel):
+class ScriptShareInspectIn(_SchemaModel):
     scriptId: str = Field(..., description="脚本ID")
     config_name: str = Field(..., min_length=1, max_length=64, description="配置名称")
 
 
-class ScriptTemplateImportIn(BaseModel):
+class ScriptTemplateImportIn(_SchemaModel):
     scriptId: str = Field(..., description="脚本ID")
     configKey: str = Field(..., description="配置中心配置标识")
     versionNo: Optional[int] = Field(
@@ -5630,7 +5637,7 @@ class ScriptTemplateImportIn(BaseModel):
     )
 
 
-class ScriptUploadIn(BaseModel):
+class ScriptUploadIn(_SchemaModel):
     scriptId: str = Field(..., description="脚本ID")
     config_name: str = Field(..., min_length=1, max_length=64, description="配置名称")
     description: str = Field(..., min_length=1, max_length=500, description="描述")
@@ -5639,7 +5646,7 @@ class ScriptUploadIn(BaseModel):
     )
 
 
-class ShareRiskItem(BaseModel):
+class ShareRiskItem(_SchemaModel):
     field: str = Field(..., description="存在风险的配置项")
     reason: str = Field(..., description="风险说明")
 
@@ -5662,7 +5669,7 @@ class ShareAuthStatusOut(OutBase):
     interval: int = Field(default=5, description="建议的轮询间隔秒数")
 
 
-class ShareAppearanceCategoryIn(BaseModel):
+class ShareAppearanceCategoryIn(_SchemaModel):
     categoryKey: Literal["theme", "mascot"] = Field(
         default="theme", description="资源分类: theme 主题, mascot 独立桌宠"
     )
@@ -5720,7 +5727,7 @@ class ShareAppearanceUploadOut(OutBase):
     )
 
 
-class ShareAppearanceUploadItem(BaseModel):
+class ShareAppearanceUploadItem(_SchemaModel):
     appearanceId: str = Field(..., description="外观 ID")
     fileId: int = Field(..., description="分享站文件 ID")
     fileKey: str = Field(default="", description="分享站文件标识")
@@ -5734,7 +5741,7 @@ class ShareAppearanceUploadsOut(OutBase):
     )
 
 
-class ShareAppearanceMineItem(BaseModel):
+class ShareAppearanceMineItem(_SchemaModel):
     fileId: int = Field(..., description="分享站文件 ID")
     fileKey: str = Field(default="", description="分享站文件标识")
     displayName: str = Field(default="", description="外观名称")
@@ -5760,7 +5767,7 @@ class ShareAppearanceMineOut(OutBase):
     )
 
 
-class ShareAppearanceCoverIn(BaseModel):
+class ShareAppearanceCoverIn(_SchemaModel):
     fileId: int = Field(..., description="分享站文件 ID")
     versionNo: Optional[int] = Field(
         default=None,
@@ -5780,7 +5787,7 @@ class ShareAppearanceCoverOut(OutBase):
     )
 
 
-class ShareAppearanceDescriptionIn(BaseModel):
+class ShareAppearanceDescriptionIn(_SchemaModel):
     fileId: int = Field(..., description="分享站文件 ID")
     description: str = Field(..., max_length=2000, description="新的外观描述")
 
@@ -5791,7 +5798,7 @@ class ShareAppearanceDescriptionOut(OutBase):
     )
 
 
-class UserInBase(BaseModel):
+class UserInBase(_SchemaModel):
     scriptId: str = Field(..., description="所属脚本ID")
 
 
@@ -5891,7 +5898,7 @@ class UserSetIn(UserInBase):
     jsonFile: str = Field(..., description="JSON文件路径, 用于导入自定义基建文件")
 
 
-class UserInfrastPlanSelectIn(BaseModel):
+class UserInfrastPlanSelectIn(_SchemaModel):
     scriptId: str = Field(..., description="脚本ID")
     userId: str = Field(..., description="用户ID")
     index: int = Field(default=-1, ge=-1, description="基建班次索引（-1=按时段自动）")
@@ -5901,7 +5908,7 @@ class UserInfrastPlanSelectOut(OutBase):
     index: int = Field(..., description="当前基建班次索引（-1=按时段自动）")
 
 
-class UserInfrastPlanComboxItem(BaseModel):
+class UserInfrastPlanComboxItem(_SchemaModel):
     label: str = Field(..., description="班次展示名")
     value: str = Field(..., description="班次索引, 即 MAA PlanSelect 值")
     period: Optional[str] = Field(default=None, description="时段文本, 无时段为 None")
@@ -5914,7 +5921,7 @@ class UserInfrastPlanComboxOut(OutBase):
     data: List[UserInfrastPlanComboxItem] = Field(..., description="班次选项")
 
 
-class EmulatorGetIn(BaseModel):
+class EmulatorGetIn(_SchemaModel):
     emulatorId: Optional[str] = Field(
         default=None, description="模拟器ID, 未携带时表示获取所有模拟器数据"
     )
@@ -5932,16 +5939,16 @@ class EmulatorCreateOut(OutBase):
     data: EmulatorConfig = Field(..., description="模拟器配置数据")
 
 
-class EmulatorUpdateIn(BaseModel):
+class EmulatorUpdateIn(_SchemaModel):
     emulatorId: str = Field(..., description="模拟器 ID")
     data: EmulatorConfig = Field(..., description="模拟器更新数据")
 
 
-class EmulatorDeleteIn(BaseModel):
+class EmulatorDeleteIn(_SchemaModel):
     emulatorId: str = Field(..., description="模拟器 ID")
 
 
-class EmulatorOperateIn(BaseModel):
+class EmulatorOperateIn(_SchemaModel):
     emulatorId: str = Field(..., description="模拟器 ID")
     operate: Literal["open", "close", "show", "hide"] = Field(
         ..., description="操作类型"
@@ -5949,7 +5956,7 @@ class EmulatorOperateIn(BaseModel):
     index: str = Field(..., description="模拟器索引")
 
 
-class DeviceStatus(BaseModel):
+class DeviceStatus(_SchemaModel):
     """设备状态枚举"""
 
     ONLINE: int = Field(default=0, description="设备在线")
@@ -5961,7 +5968,7 @@ class DeviceStatus(BaseModel):
     UNKNOWN: int = Field(default=10, description="未知状态")
 
 
-class DeviceInfo(BaseModel):
+class DeviceInfo(_SchemaModel):
     """设备信息"""
 
     title: str = Field(..., description="设备标题/名称")
@@ -5976,7 +5983,7 @@ class EmulatorStatusOut(OutBase):
     )
 
 
-class EmulatorSearchResult(BaseModel):
+class EmulatorSearchResult(_SchemaModel):
     type: str = Field(..., description="模拟器类型")
     path: str = Field(..., description="模拟器路径")
     name: str = Field(..., description="模拟器名称")
@@ -5993,13 +6000,13 @@ class EmulatorSearchOut(OutBase):
 # 脚本绑定用的就是它; 模拟器自己的实例索引另外给出, 两者不一定对得上。
 
 
-class Emulator2SearchIn(BaseModel):
+class Emulator2SearchIn(_SchemaModel):
     emulatorId: Optional[str] = Field(
         default=None, description="配置ID, 携带时会标出已添加过的路径"
     )
 
 
-class Emulator2SearchItem(BaseModel):
+class Emulator2SearchItem(_SchemaModel):
     type: str = Field(..., description="模拟器类型")
     version: str = Field(default="", description="探测到的版本号")
     installPath: str = Field(..., description="安装目录")
@@ -6025,7 +6032,7 @@ class Emulator2SearchOut(OutBase):
     )
 
 
-class Emulator2DevicesIn(BaseModel):
+class Emulator2DevicesIn(_SchemaModel):
     emulatorId: str = Field(..., description="配置ID")
     withSettings: bool = Field(
         default=True,
@@ -6033,13 +6040,13 @@ class Emulator2DevicesIn(BaseModel):
     )
 
 
-class Emulator2PathAddIn(BaseModel):
+class Emulator2PathAddIn(_SchemaModel):
     emulatorId: str = Field(..., description="配置ID")
     installPath: str = Field(..., description="模拟器安装目录")
     alias: Optional[str] = Field(default=None, description="安装别名")
 
 
-class Emulator2SlotAssignment(BaseModel):
+class Emulator2SlotAssignment(_SchemaModel):
     slot: str = Field(..., description="设备号")
     nativeIndex: str = Field(..., description="模拟器自己的实例索引")
 
@@ -6059,12 +6066,12 @@ class Emulator2PathAddOut(OutBase):
     )
 
 
-class Emulator2PathRemoveIn(BaseModel):
+class Emulator2PathRemoveIn(_SchemaModel):
     emulatorId: str = Field(..., description="配置ID")
     pathId: str = Field(..., description="路径标识")
 
 
-class Emulator2AffectedScript(BaseModel):
+class Emulator2AffectedScript(_SchemaModel):
     scriptId: str = Field(..., description="脚本ID")
     name: str = Field(..., description="脚本名称")
     slot: str = Field(..., description="绑定的设备号")
@@ -6089,7 +6096,7 @@ class Emulator2PathRemoveOut(OutBase):
     )
 
 
-class Emulator2InstanceCreateIn(BaseModel):
+class Emulator2InstanceCreateIn(_SchemaModel):
     emulatorId: str = Field(..., description="配置ID")
     pathId: str = Field(..., description="在哪条模拟器安装下新建")
     name: Optional[str] = Field(
@@ -6119,12 +6126,12 @@ class Emulator2InstanceCreateOut(OutBase):
     nativeIndex: str = Field(default="", description="模拟器自己的实例索引")
 
 
-class Emulator2InstanceDeleteIn(BaseModel):
+class Emulator2InstanceDeleteIn(_SchemaModel):
     emulatorId: str = Field(..., description="配置ID")
     slot: str = Field(..., description="要删除的设备号")
 
 
-class Emulator2StoreOpenIn(BaseModel):
+class Emulator2StoreOpenIn(_SchemaModel):
     emulatorId: str = Field(..., description="配置ID")
     slot: str = Field(..., description="要打开游戏中心的设备号")
 
@@ -6153,7 +6160,7 @@ class Emulator2InstanceDeleteOut(OutBase):
     reason: str = Field(default="", description="失败原因枚举")
 
 
-class Emulator2SettingField(BaseModel):
+class Emulator2SettingField(_SchemaModel):
     """一个设置项的值和它的来历。
 
     ``state`` 必须四态分开：``.config`` 里没有 ``cpuCount`` 的实例照样跑在雷电默认的
@@ -6167,7 +6174,7 @@ class Emulator2SettingField(BaseModel):
     )
 
 
-class Emulator2SettingsApplyIn(BaseModel):
+class Emulator2SettingsApplyIn(_SchemaModel):
     emulatorId: str = Field(..., description="模拟器配置ID")
     slot: str = Field(..., description="设备号")
     changes: Dict[str, int] = Field(
@@ -6192,19 +6199,19 @@ class Emulator2GuardCaptureOut(OutBase):
     count: int = Field(default=0, description="记下基准的设备台数")
 
 
-class Emulator2StableModeIn(BaseModel):
+class Emulator2StableModeIn(_SchemaModel):
     emulatorId: str = Field(..., description="模拟器配置ID")
     slots: List[str] = Field(
         default_factory=list, description="要处理的设备号; 留空表示全部"
     )
 
 
-class Emulator2SettingsApplyAllIn(BaseModel):
+class Emulator2SettingsApplyAllIn(_SchemaModel):
     emulatorId: str = Field(..., description="模拟器配置ID")
     changes: Dict[str, int] = Field(..., description="要写到全部实例上的字段")
 
 
-class Emulator2BatchResult(BaseModel):
+class Emulator2BatchResult(_SchemaModel):
     slot: str = Field(..., description="设备号")
     ok: bool = Field(default=False, description="该设备是否写入成功")
     message: str = Field(default="", description="失败原因")
@@ -6218,7 +6225,7 @@ class Emulator2SettingsApplyAllOut(OutBase):
     failCount: int = Field(default=0, description="失败台数")
 
 
-class Emulator2PathItem(BaseModel):
+class Emulator2PathItem(_SchemaModel):
     pathId: str = Field(..., description="路径标识")
     installPath: str = Field(..., description="安装目录")
     alias: str = Field(default="", description="安装别名")
@@ -6227,7 +6234,7 @@ class Emulator2PathItem(BaseModel):
     slots: List[str] = Field(default_factory=list, description="该路径占用的设备号")
 
 
-class Emulator2DeviceItem(BaseModel):
+class Emulator2DeviceItem(_SchemaModel):
     slot: str = Field(..., description="设备号, 脚本绑定用它")
     pathId: str = Field(..., description="所属路径标识")
     alias: str = Field(default="", description="所属安装的别名")
@@ -6268,7 +6275,7 @@ class Emulator2DevicesOut(OutBase):
 # 组件齐了按普通路径 ``/paths/add`` 纳管 (installPath = 根目录)。
 
 
-class Emulator2AvdRootIn(BaseModel):
+class Emulator2AvdRootIn(_SchemaModel):
     root: str = Field(..., description="魔改 AVD 根目录 (解压好的模拟器内测包)")
 
 
@@ -6279,7 +6286,7 @@ class Emulator2AvdStatusIn(Emulator2AvdRootIn):
     )
 
 
-class Emulator2AvdComponentItem(BaseModel):
+class Emulator2AvdComponentItem(_SchemaModel):
     id: str = Field(
         ...,
         description="组件标识: platform-tools / emulator / system-image / launcher",
@@ -6312,7 +6319,7 @@ class Emulator2AvdComponentItem(BaseModel):
     )
 
 
-class Emulator2AvdPrecheckItem(BaseModel):
+class Emulator2AvdPrecheckItem(_SchemaModel):
     """魔改 AVD 开机前电脑检查的一项。拦截项不满足时开机直接被拒绝, 原因同 reason + advice。"""
 
     id: str = Field(
@@ -6355,7 +6362,7 @@ class Emulator2AvdStatusOut(OutBase):
     )
 
 
-class Emulator2AvdInstanceIn(BaseModel):
+class Emulator2AvdInstanceIn(_SchemaModel):
     emulatorId: str = Field(..., description="Emulator 2.0 配置 ID")
     slot: str = Field(..., description="设备号")
 
@@ -6383,7 +6390,7 @@ class Emulator2AvdInstanceOptionsOut(OutBase):
     grpcPort: int = Field(default=0, description="gRPC 端口 (带 token 鉴权)")
 
 
-class Emulator2AvdApkInstallIn(BaseModel):
+class Emulator2AvdApkInstallIn(_SchemaModel):
     emulatorId: str = Field(..., description="Emulator 2.0 配置 ID")
     slot: str = Field(..., description="设备号, 实例必须已开机")
     apkPath: str = Field(
@@ -6397,7 +6404,7 @@ class Emulator2AvdApkInstallOut(OutBase):
     result: str = Field(default="", description="adb install 的结果行 (Success)")
 
 
-class WebhookInBase(BaseModel):
+class WebhookInBase(_SchemaModel):
     scriptId: Optional[str] = Field(
         default=None, description="所属脚本ID, 获取全局设置的Webhook数据时无需携带"
     )
@@ -6437,11 +6444,11 @@ class WebhookTestIn(WebhookInBase):
     data: Webhook = Field(..., description="Webhook配置数据")
 
 
-class PlanCreateIn(BaseModel):
+class PlanCreateIn(_SchemaModel):
     type: PlanCreateType
 
 
-class PlanComboxIn(BaseModel):
+class PlanComboxIn(_SchemaModel):
     consumer: PlanComboxConsumer = Field(..., description="计划表消费方")
 
 
@@ -6450,7 +6457,7 @@ class PlanCreateOut(OutBase):
     data: PlanConfigData = Field(..., description="计划配置数据")
 
 
-class PlanGetIn(BaseModel):
+class PlanGetIn(_SchemaModel):
     planId: Optional[str] = Field(
         default=None, description="计划ID, 未携带时表示获取所有计划数据"
     )
@@ -6461,16 +6468,16 @@ class PlanGetOut(OutBase):
     data: Dict[str, PlanConfigData] = Field(..., description="计划列表或单个计划数据")
 
 
-class PlanUpdateIn(BaseModel):
+class PlanUpdateIn(_SchemaModel):
     planId: str = Field(..., description="计划ID")
     data: PlanConfigData = Field(..., description="计划更新数据")
 
 
-class PlanDeleteIn(BaseModel):
+class PlanDeleteIn(_SchemaModel):
     planId: str = Field(..., description="计划ID")
 
 
-class PlanReorderIn(BaseModel):
+class PlanReorderIn(_SchemaModel):
     indexList: List[str] = Field(..., description="计划ID列表, 按新顺序排列")
 
 
@@ -6479,7 +6486,7 @@ class QueueCreateOut(OutBase):
     data: QueueConfig = Field(..., description="队列配置数据")
 
 
-class QueueGetIn(BaseModel):
+class QueueGetIn(_SchemaModel):
     queueId: Optional[str] = Field(
         default=None, description="队列ID, 未携带时表示获取所有队列数据"
     )
@@ -6492,16 +6499,16 @@ class QueueGetOut(OutBase):
     )
 
 
-class QueueUpdateIn(BaseModel):
+class QueueUpdateIn(_SchemaModel):
     queueId: str = Field(..., description="队列ID")
     data: QueueConfig = Field(..., description="队列更新数据")
 
 
-class QueueDeleteIn(BaseModel):
+class QueueDeleteIn(_SchemaModel):
     queueId: str = Field(..., description="队列ID")
 
 
-class QueueSetInBase(BaseModel):
+class QueueSetInBase(_SchemaModel):
     queueId: str = Field(..., description="所属队列ID")
 
 
@@ -6567,7 +6574,7 @@ class QueueItemReorderIn(QueueSetInBase):
     indexList: List[str] = Field(..., description="队列项ID列表, 按新顺序排列")
 
 
-class DispatchIn(BaseModel):
+class DispatchIn(_SchemaModel):
     taskId: str = Field(
         ...,
         description="目标任务ID, 设置类任务可选对应脚本ID或用户ID, 代理类任务可选对应队列ID或脚本ID",
@@ -6609,7 +6616,7 @@ class TaskCreateOut(OutBase):
     taskId: str = Field(..., description="新创建的任务ID")
 
 
-class WSEnvelope(BaseModel):
+class WSEnvelope(_SchemaModel):
     """主 WebSocket 统一消息信封, 前后端均按 id + type 路由"""
 
     id: str = Field(
@@ -6636,7 +6643,7 @@ class WSEnvelope(BaseModel):
         return normalized
 
 
-class WSTaskNoticeData(BaseModel):
+class WSTaskNoticeData(_SchemaModel):
     """任务提示消息数据 (type=task.notice)"""
 
     level: Literal["info", "warning", "error"] = Field(..., description="提示级别")
@@ -6646,7 +6653,7 @@ class WSTaskNoticeData(BaseModel):
     )
 
 
-class WSTaskConfigDiscardedData(BaseModel):
+class WSTaskConfigDiscardedData(_SchemaModel):
     """配置会话改动被丢弃的消息数据 (type=task.config.discarded)
 
     reason 是机器可读原因，正文由前端按语言本地化：structure=队列结构或配置
@@ -6659,7 +6666,7 @@ class WSTaskConfigDiscardedData(BaseModel):
     )
 
 
-class WSSystemNoticeData(BaseModel):
+class WSSystemNoticeData(_SchemaModel):
     """系统通知数据 (type=system.notice, id=Main)：启动期攒下、主连接建立后发出。"""
 
     level: Literal["info", "warning", "error"] = Field(..., description="提示级别")
@@ -6667,7 +6674,7 @@ class WSSystemNoticeData(BaseModel):
     lines: List[str] = Field(default_factory=list, description="正文，每项一行")
 
 
-class WSEmulatorOperationData(BaseModel):
+class WSEmulatorOperationData(_SchemaModel):
     """模拟器操作结束通知 (type=emulator.operation.finished, id=EmulatorManager)
 
     启动 / 关闭是后台任务, 接口一调用就返回; 界面靠这条消息知道那一次操作什么时候真正结束。
@@ -6682,7 +6689,7 @@ class WSEmulatorOperationData(BaseModel):
     message: str = Field(default="", description="失败原因; 成功时为空")
 
 
-class WSTaskUserInfoData(BaseModel):
+class WSTaskUserInfoData(_SchemaModel):
     """任务快照中的用户状态。"""
 
     user_id: str = Field(..., description="用户 ID")
@@ -6690,7 +6697,7 @@ class WSTaskUserInfoData(BaseModel):
     status: str = Field(..., description="用户执行状态")
 
 
-class WSTaskScriptInfoData(BaseModel):
+class WSTaskScriptInfoData(_SchemaModel):
     """任务快照中的脚本状态。"""
 
     script_id: str = Field(..., description="脚本 ID")
@@ -6701,7 +6708,7 @@ class WSTaskScriptInfoData(BaseModel):
     )
 
 
-class WSTaskCyclePreviewData(BaseModel):
+class WSTaskCyclePreviewData(_SchemaModel):
     """循环运行的一个待运行条目。"""
 
     queueItemId: str = Field(..., description="队列项 ID")
@@ -6712,7 +6719,7 @@ class WSTaskCyclePreviewData(BaseModel):
     isRunning: bool = Field(default=False, description="是否正在运行")
 
 
-class WSTaskInfoUpdatedData(BaseModel):
+class WSTaskInfoUpdatedData(_SchemaModel):
     """任务信息全量快照 (type=task.info.updated)。"""
 
     task_info: List[WSTaskScriptInfoData] = Field(
@@ -6723,7 +6730,7 @@ class WSTaskInfoUpdatedData(BaseModel):
     )
 
 
-class WSTaskLogUpdatedData(BaseModel):
+class WSTaskLogUpdatedData(_SchemaModel):
     """任务日志更新 (type=task.log.updated), 按序号增量推送。"""
 
     log: str = Field(default="", description="append 为真时是新增片段, 否则是完整日志")
@@ -6735,14 +6742,14 @@ class WSTaskLogUpdatedData(BaseModel):
     )
 
 
-class WSTaskScriptIdentityData(BaseModel):
+class WSTaskScriptIdentityData(_SchemaModel):
     """任务关联的脚本静态标识。"""
 
     scriptId: str = Field(..., description="脚本 ID")
     scriptType: str = Field(..., description="脚本类型键")
 
 
-class TaskRuntimeSnapshotItem(BaseModel):
+class TaskRuntimeSnapshotItem(_SchemaModel):
     """一个运行中任务的 HTTP 初始快照。"""
 
     taskId: str = Field(..., description="任务 ID")
@@ -6768,6 +6775,7 @@ class TaskRuntimeSnapshotItem(BaseModel):
     logFirstLine: int = Field(default=1, description="快照日志首行在完整日志里的行号")
 
 
+# 首屏立即请求的快照提前构建，不把启动开销转移到首次状态查询。
 class TaskRuntimeSnapshot(BaseModel):
     """任务运行与定时队列 HTTP 初始快照。"""
 
@@ -6800,7 +6808,7 @@ class TaskStatusOut(OutBase):
     )
 
 
-class WSTaskCompletedData(BaseModel):
+class WSTaskCompletedData(_SchemaModel):
     """任务完成消息数据 (type=task.completed)"""
 
     result: str = Field(..., description="任务结果描述")
@@ -6811,7 +6819,7 @@ class WSTaskCompletedData(BaseModel):
     task_info: List[WSTaskScriptInfoData] = Field(..., description="任务信息全量快照")
 
 
-class WSTaskCreatedData(BaseModel):
+class WSTaskCreatedData(_SchemaModel):
     """新任务创建通知数据 (id=TaskManager, type=task.created)"""
 
     taskId: str = Field(..., description="新任务ID")
@@ -6826,7 +6834,7 @@ class WSTaskCreatedData(BaseModel):
     taskType: Optional[str] = Field(default=None, description="任务类型")
 
 
-class WSPowerCountdownData(BaseModel):
+class WSPowerCountdownData(_SchemaModel):
     """电源倒计时更新数据 (id=Main, type=power.countdown.updated)"""
 
     operation: str = Field(..., description="待执行的电源操作")
@@ -6841,13 +6849,13 @@ class PowerCountdownSnapshot(BaseModel):
     remaining: int = Field(default=0, ge=0, description="剩余秒数")
 
 
-class WSPowerSignData(BaseModel):
+class WSPowerSignData(_SchemaModel):
     """电源标志更新数据 (id=Main, type=power.sign.updated)"""
 
     signal: str = Field(..., description="电源操作信号")
 
 
-class WSDisplayMonitorRectData(BaseModel):
+class WSDisplayMonitorRectData(_SchemaModel):
     """一块显示器的工作区（去掉任务栏），物理像素、桌面坐标。"""
 
     left: int = Field(..., description="左边界")
@@ -6856,7 +6864,7 @@ class WSDisplayMonitorRectData(BaseModel):
     bottom: int = Field(..., description="下边界")
 
 
-class WSDisplayDetachPromptData(BaseModel):
+class WSDisplayDetachPromptData(_SchemaModel):
     """真实显示器回来了但有任务在跑, 问用户要不要拆虚拟屏 (id=Main, type=display.detach.prompt)
 
     虚拟屏是主显示器, 回来的真实屏只是第二块, 任务栏和主窗口都留在看不见的那块上,
@@ -6870,7 +6878,7 @@ class WSDisplayDetachPromptData(BaseModel):
     )
 
 
-class WSGameSignResultData(BaseModel):
+class WSGameSignResultData(_SchemaModel):
     """游戏签到结果广播数据 (id=GameSign, type=gamesign.result.updated)
 
     result 为 JSON 序列化后的签到结果合并数据, 与 GET 快照接口返回一致。
@@ -6879,7 +6887,7 @@ class WSGameSignResultData(BaseModel):
     result: str = Field(..., description="JSON 序列化的签到结果数据")
 
 
-class WSUpdateProgressData(BaseModel):
+class WSUpdateProgressData(_SchemaModel):
     """更新下载进度数据 (id=Update, type=update.progress)"""
 
     downloaded_size: int = Field(..., description="已下载字节数")
@@ -6888,7 +6896,7 @@ class WSUpdateProgressData(BaseModel):
     source: str = Field(..., description="下载源")
 
 
-class WSMaaFWEnvPrepareProgressData(BaseModel):
+class WSMaaFWEnvPrepareProgressData(_SchemaModel):
     """MFW 运行环境准备进度 (id=<scriptId>, type=maafw.env-prepare.progress)"""
 
     stage: str = Field(
@@ -6903,7 +6911,7 @@ class WSMaaFWEnvPrepareProgressData(BaseModel):
     log: Optional[str] = Field(default=None, description="本次事件附带的新增日志行")
 
 
-class WSMaaFWProjectUpdateProgressData(BaseModel):
+class WSMaaFWProjectUpdateProgressData(_SchemaModel):
     """MFW 项目手动更新过程 (id=<scriptId>, type=maafw.project-update.progress)
 
     检查与应用两条路径共用；``stage="log"`` 只带一行新增日志，其余阶段带
@@ -6956,19 +6964,19 @@ class WSMaaFWProjectUpdateProgressData(BaseModel):
     )
 
 
-class WSUpdateCompletedData(BaseModel):
+class WSUpdateCompletedData(_SchemaModel):
     """更新下载完成数据 (id=Update, type=update.completed)。"""
 
     file: str = Field(..., description="已下载更新包路径")
 
 
-class WSUpdateFailedData(BaseModel):
+class WSUpdateFailedData(_SchemaModel):
     """更新下载失败数据 (id=Update, type=update.failed)。"""
 
     message: str = Field(..., description="失败原因")
 
 
-class UpdateDownloadSnapshot(BaseModel):
+class UpdateDownloadSnapshot(_SchemaModel):
     """更新下载 HTTP 初始快照。"""
 
     status: Literal[
@@ -6988,7 +6996,7 @@ class UpdateDownloadSnapshot(BaseModel):
     message: Optional[str] = Field(default=None, description="失败或状态说明")
 
 
-class PowerIn(BaseModel):
+class PowerIn(_SchemaModel):
     signal: Literal[
         "NoAction",
         "Shutdown",
@@ -7016,7 +7024,7 @@ class PowerOut(OutBase):
     ] = Field(..., description="电源操作信号")
 
 
-class HistorySearchIn(BaseModel):
+class HistorySearchIn(_SchemaModel):
     mode: Literal["DAILY", "WEEKLY", "MONTHLY"] = Field(..., description="合并模式")
     start_date: str = Field(..., description="开始日期, 格式YYYY-MM-DD")
     end_date: str = Field(..., description="结束日期, 格式YYYY-MM-DD")
@@ -7029,7 +7037,7 @@ class HistorySearchOut(OutBase):
     )
 
 
-class HistoryDataGetIn(BaseModel):
+class HistoryDataGetIn(_SchemaModel):
     jsonPath: str = Field(..., description="需要提取数据的历史记录JSON文件")
 
 
@@ -7041,7 +7049,7 @@ class ToolsGetOut(OutBase):
     data: ToolsConfig = Field(..., description="工具配置数据")
 
 
-class ToolsUpdateIn(BaseModel):
+class ToolsUpdateIn(_SchemaModel):
     data: ToolsConfig = Field(..., description="工具配置需要更新的数据")
 
 
@@ -7049,11 +7057,11 @@ class SettingGetOut(OutBase):
     data: GlobalConfig = Field(..., description="全局设置数据")
 
 
-class SettingUpdateIn(BaseModel):
+class SettingUpdateIn(_SchemaModel):
     data: GlobalConfig = Field(..., description="全局设置需要更新的数据")
 
 
-class UpdateCheckIn(BaseModel):
+class UpdateCheckIn(_SchemaModel):
     current_version: str = Field(..., description="当前前端版本号")
     if_force: bool = Field(default=False, description="是否强制拉取更新信息")
 
@@ -7070,7 +7078,7 @@ class UpdateCheckOut(OutBase):
 # ============== 日志模式调试相关模型 ==============
 
 
-class PushLogPattern(BaseModel):
+class PushLogPattern(_SchemaModel):
     """推送日志采集模式配置（split/regex/multiline 三种模式按 type 区分，各模式使用对应字段）"""
 
     type: Literal["split", "regex", "multiline"] = Field(..., description="匹配类型")
@@ -7100,14 +7108,14 @@ class PushLogPattern(BaseModel):
     )
 
 
-class PatternDebugIn(BaseModel):
+class PatternDebugIn(_SchemaModel):
     """日志模式调试请求"""
 
     pattern: PushLogPattern = Field(..., description="待调试的推送日志模式配置")
     logText: str = Field(default="", description="待调试的多行日志文本")
 
 
-class PatternDebugResultItem(BaseModel):
+class PatternDebugResultItem(_SchemaModel):
     """单行/单窗口调试结果"""
 
     idx: int = Field(..., description="行号或窗口序号")
