@@ -6486,13 +6486,16 @@ class QueueCreateOut(OutBase):
     data: QueueConfig = Field(..., description="队列配置数据")
 
 
-class QueueGetIn(_SchemaModel):
+# 队列首屏立即使用，提前构建请求与响应，避免首次进入页面时额外等待。
+class QueueGetIn(BaseModel):
     queueId: Optional[str] = Field(
         default=None, description="队列ID, 未携带时表示获取所有队列数据"
     )
 
 
 class QueueGetOut(OutBase):
+    model_config = ConfigDict(defer_build=False)
+
     index: List[QueueIndexItem] = Field(..., description="队列索引列表")
     data: Dict[str, QueueConfig] = Field(
         ..., description="队列数据字典, key来自于index列表的uid"
