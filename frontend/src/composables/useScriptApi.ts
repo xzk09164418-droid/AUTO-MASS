@@ -99,9 +99,9 @@ export function useScriptApi() {
       }
 
       scriptListRequest = null
-      // 播放添加脚本成功音频
+      // 成功提示音异步播放，不阻塞已持久化的创建结果。
       const { playSound } = useAudioPlayer()
-      await playSound('add_script_instance')
+      void playSound('add_script_instance')
 
       return {
         scriptId: response.scriptId,
@@ -1534,9 +1534,9 @@ export function useScriptApi() {
       }
 
       scriptListRequest = null
-      // 播放删除脚本成功音频
+      // 成功提示音异步播放，不阻塞已持久化的删除结果。
       const { playSound } = useAudioPlayer()
-      await playSound('delete_script_instance')
+      void playSound('delete_script_instance')
 
       return true
     } catch (err) {
