@@ -20,20 +20,23 @@
 #   Contact: DLmaster_361@163.com
 
 
+from __future__ import annotations
+
 import re
 from collections.abc import Iterable
 from html import escape
 from html.parser import HTMLParser
 from io import BytesIO
 from pathlib import Path
-from typing import Literal
-
-from PIL import Image, ImageDraw, ImageFont
+from typing import TYPE_CHECKING, Literal
 
 from app.core import Config
 from app.core.notify import DispatchResult, NotifyTarget, dispatch, global_target
 from app.models.notification import NotificationImage, NotifyPayload
 from app.utils.logger import get_logger
+
+if TYPE_CHECKING:
+    from PIL import ImageDraw, ImageFont
 
 logger = get_logger("游戏社区通知")
 
@@ -173,6 +176,8 @@ _SYMBOL_FALLBACK = {"✅": "[OK]", "❌": "[X]", "📥": "[+]"}
 def _load_notification_font(size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
     """加载可显示中文的通知字体，缺失时回退到 Pillow 内置字体。"""
 
+    from PIL import ImageFont
+
     for path in _FONT_CANDIDATES:
         if path.is_file():
             return ImageFont.truetype(str(path), size)
@@ -181,6 +186,8 @@ def _load_notification_font(size: int) -> ImageFont.FreeTypeFont | ImageFont.Ima
 
 def _load_notification_symbol_font(size: int) -> ImageFont.FreeTypeFont | None:
     """加载通知符号字体，固定尺寸字体不可用时保留文字回退。"""
+
+    from PIL import ImageFont
 
     for path in _SYMBOL_FONT_CANDIDATES:
         if path.is_file():
@@ -281,6 +288,9 @@ def _community_notification_rows(
 
 def _community_notification_image(results: list[dict[str, object]]) -> bytes:
     """把社区签到结果渲染为适合聊天渠道展示的 PNG 图片。"""
+
+    # 文字通知不需要字体和绘图库，只在实际生成图片时加载。
+    from PIL import Image, ImageDraw, ImageFont
 
     width = 760
     card_margin = 16

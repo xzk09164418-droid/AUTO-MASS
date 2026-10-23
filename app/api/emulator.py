@@ -25,7 +25,7 @@ import asyncio
 
 from fastapi import APIRouter, Body
 
-from app.core import Config, EmulatorManager
+from app.core import Config
 from app.models.schema import (
     EmulatorConfig,
     EmulatorConfigIndexItem,
@@ -145,6 +145,8 @@ async def delete_emulator(emulator: EmulatorDeleteIn = Body(...)) -> OutBase:
 )
 async def operation_emulator(emulator: EmulatorOperateIn = Body(...)) -> OutBase:
     try:
+        from app.core import EmulatorManager
+
         await EmulatorManager.operate_emulator(
             emulator.operate, emulator.emulatorId, emulator.index
         )
@@ -167,6 +169,8 @@ async def operation_emulator(emulator: EmulatorOperateIn = Body(...)) -> OutBase
 )
 async def get_status(emulator: EmulatorGetIn = Body(...)) -> EmulatorStatusOut:
     try:
+        from app.core import EmulatorManager
+
         data = await EmulatorManager.get_status(emulator.emulatorId)
     except Exception as e:
         logger.opt(exception=True).warning(f"get_status失败: {type(e).__name__}: {e}")

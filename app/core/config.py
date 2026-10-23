@@ -47,10 +47,10 @@ import truststore
 # 仅用于类型标注的顶层依赖移到 TYPE_CHECKING，避免启动导入开销
 if TYPE_CHECKING:
     import uvicorn
+    from jinja2 import Environment
 
     from app.models.ConfigBase import ConfigBase
     from app.utils.config_restore import ConfigRestorePool, ConfigRestoreService
-from jinja2 import Environment, FileSystemLoader
 
 from app.models.config import (
     CLASS_BOOK,
@@ -200,6 +200,9 @@ def normalize_proxy_address(raw: str | None) -> str | None:
 class AppConfig(GlobalConfig):
     VERSION = "v5.7.0"
 
+    if TYPE_CHECKING:
+        notify_env: Environment
+
     def __init__(self) -> None:
         super().__init__()
 
@@ -253,26 +256,29 @@ class AppConfig(GlobalConfig):
 
         self._inject_truststore()
 
-        self.notify_env = Environment(
-            loader=FileSystemLoader(str(resource_path("html")))
-        )
+    def __getattr__(self, name: str) -> Any:
+        # ConfigBase 初始化会遍历属性；用缺失属性入口避免 property 提前加载模板库。
+        if name != "notify_env":
+            raise AttributeError(f"{type(self).__name__!r} object has no attribute {name!r}")
+
+        from jinja2 import Environment, FileSystemLoader
+
+        self.notify_env = Environment(loader=FileSystemLoader(str(resource_path("html"))))
+        return self.notify_env
 
     @staticmethod
     def _inject_truststore() -> None:
         """等效 truststore.inject_into_ssl()，但避免其内部导入 requests (约 460ms)。
 
-        requests 未加载时无需 patch：注入后再导入的 requests 会基于
-        已替换的 ssl.SSLContext 创建预加载上下文，效果一致。
+        requests / urllib3 未加载时无需 patch：后续导入会使用已替换的
+        ssl.SSLContext，不必为注入证书支持提前加载 HTTP 客户端。
         """
         import ssl
 
         ssl.SSLContext = truststore.SSLContext  # type: ignore[misc]
-        try:
-            import urllib3.util.ssl_ as urllib3_ssl
-
+        urllib3_ssl = sys.modules.get("urllib3.util.ssl_")
+        if urllib3_ssl is not None:
             urllib3_ssl.SSLContext = truststore.SSLContext  # type: ignore[assignment]
-        except ImportError:
-            pass
         requests_adapters = sys.modules.get("requests.adapters")
         if requests_adapters is not None and (
             getattr(requests_adapters, "_preloaded_ssl_context", None) is not None

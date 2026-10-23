@@ -58,7 +58,6 @@ from app.models.task import (
     UserItem,
 )
 from app.runtime_tasks import RuntimeTasks
-from app.task.general.tools import execute_script_task
 from app.tools.push_log import build_task_result_text
 from app.utils import LazyProxy, get_logger
 from app.utils.constants import UTC4
@@ -1128,6 +1127,9 @@ class Task(TaskExecuteBase):
         )
         if self.stopped_manually or self.is_closing:
             return False
+        # 只有配置了前后置脚本才加载执行工具，避免启动时连带加载通用专项。
+        from app.task.general.tools import execute_script_task
+
         script_task = asyncio.create_task(execute_script_task(Path(script_path), label))
         self._queue_script_task = script_task
         try:
