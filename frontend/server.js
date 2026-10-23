@@ -353,17 +353,36 @@ function startFrontendServer(opts, runtimeLogs) {
 
     const ext = path.extname(filePath).toLowerCase();
     const contentType = MIME_TYPES[ext] || 'application/octet-stream';
-    fs.readFile(filePath, (err, content) => {
+    fs.stat(filePath, (err, stat) => {
       if (err) {
         res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });
         res.end('500 Internal Server Error');
         return;
       }
-      res.writeHead(200, {
+      // 每次核对文件版本，未变化时复用浏览器缓存；更新部署后立即重新加载。
+      const etag = `W/"${stat.size.toString(16)}-${stat.mtimeMs.toString(16)}"`;
+      const headers = {
         'Content-Type': contentType,
         'Cache-Control': 'no-cache',
+        ETag: etag,
+      };
+      const ifNoneMatch = req.headers['if-none-match'];
+      if ((req.method === 'GET' || req.method === 'HEAD') && ifNoneMatch &&
+          ifNoneMatch.split(',').some(value => value.trim() === '*' ||
+            value.trim().replace(/^W\//, '') === etag.replace(/^W\//, ''))) {
+        res.writeHead(304, headers);
+        res.end();
+        return;
+      }
+      fs.readFile(filePath, (readError, content) => {
+        if (readError) {
+          res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });
+          res.end('500 Internal Server Error');
+          return;
+        }
+        res.writeHead(200, headers);
+        res.end(content);
       });
-      res.end(content);
     });
   });
 
