@@ -347,7 +347,9 @@ def main(argv: list[str] | None = None):
             async def mount_mcp() -> None:
                 from app.api.mcp import mount_mcp as mount_mcp_server
 
-                await mount_mcp_server(app)
+                await mount_mcp_server(
+                    app, backend_url=f"http://127.0.0.1:{Config.server.config.port}"
+                )
 
             async def start_desktop_guard() -> None:
                 from app.core.desktop_guard import DesktopGuard
@@ -448,14 +450,7 @@ def main(argv: list[str] | None = None):
                 await run_optional_step("启动参数直接运行任务", run_cli_startup_tasks)
 
                 if timer_error is None:
-                    logger.info("后端核心服务已就绪，继续在后台加载 MCP 服务")
-                # 先送出核心健康响应；纯后端启动没有探测客户端时只短暂让行。
-                try:
-                    await asyncio.wait_for(
-                        app.state.core_api_served.wait(), timeout=1.0
-                    )
-                except asyncio.TimeoutError:
-                    pass
+                    logger.info("后端核心服务已就绪，继续配置按需服务入口")
                 await run_optional_step("MCP 服务挂载", mount_mcp)
 
                 if (Path.cwd() / "AUTO-MAS-Setup.exe").exists():
@@ -494,7 +489,6 @@ def main(argv: list[str] | None = None):
                 logger.exception(f"后台初始化失败: {app.state.background_error}")
 
         app.state.background_status = "starting"
-        app.state.core_api_served = asyncio.Event()
         app.state.background_error = None
         app.state.background_warnings = []
         background_task = asyncio.create_task(initialize_background_services())
@@ -503,6 +497,10 @@ def main(argv: list[str] | None = None):
             from app.core.ws import Dispatcher, MainConnection
             from app.runtime_tasks import RuntimeTasks
             from app.services import Matomo, System, Updater
+
+            mcp_runtime = getattr(app.state, "mcp_runtime", None)
+            if mcp_runtime is not None:
+                await mcp_runtime.close()
 
             if background_task is not None and not background_task.done():
                 background_task.cancel()
