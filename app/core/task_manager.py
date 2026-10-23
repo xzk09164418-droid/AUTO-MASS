@@ -592,6 +592,11 @@ class Task(TaskExecuteBase):
             return False
         self._pending_nav_offset = offset
         if self._active_child_task is not None and not self._active_child_task.done():
+            from app.utils.platform.common.process_scope import (
+                request_task_process_stop,
+            )
+
+            request_task_process_stop(self._active_child_task)
             self._active_child_task.cancel()
             return True
         return False
@@ -1918,6 +1923,10 @@ class _TaskManager:
                 Config.power_sign = "NoAction"
                 Config.power_delay = 0
                 try:
+                    # 先取消当前任务并发出受管进程强制清理，再等待其他调度收尾。
+                    for task_item in list(self.task_handler.values()):
+                        if not task_item.is_closing and task_item.cancel():
+                            task_item.is_closing = True
                     await self.cancel_pending_timed_queue_runs()
                     if System.power_task is not None and not System.power_task.done():
                         await System.cancel_power_task()

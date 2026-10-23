@@ -694,9 +694,9 @@ class AutoProxyTask(ScriptAutoProxyBase):
         if self.check_result != "Pass":
             return
 
+        await self.kill_managed_process()
         if self.general_log_monitor is not None:
             await self.general_log_monitor.stop()
-        await self.kill_managed_process()
         if hasattr(self, "general_process_manager"):
             del self.general_process_manager
         if hasattr(self, "general_log_monitor"):
