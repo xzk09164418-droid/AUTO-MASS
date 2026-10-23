@@ -2,6 +2,7 @@
 const fs = require('node:fs')
 const path = require('node:path')
 const http = require('node:http')
+const terminalCodes = new RegExp(`${String.fromCharCode(27)}\\[[0-?]*[ -/]*[@-~]`, 'g')
 
 function createStartupStatus(root, backendPort, launchError) {
   const files = ['app.log', 'backend-launcher.log'].map(name => {
@@ -33,7 +34,8 @@ function createStartupStatus(root, backendPort, launchError) {
       const lines = text.split(/\r?\n/)
       state.carry = lines.pop().slice(-4096)
       state.position = stat.size
-      logs = [...logs, ...lines].slice(-60)
+      // 标准流可能带终端颜色码；仅清理小窗展示，原日志和级别保持原样。
+      logs = [...logs, ...lines.map(line => line.replace(terminalCodes, ''))].slice(-60)
     }
     const health = await new Promise(resolve => {
       const req = http.get(
