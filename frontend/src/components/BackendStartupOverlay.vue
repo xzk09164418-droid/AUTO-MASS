@@ -1,98 +1,106 @@
 <template>
   <Teleport to="body">
-    <div v-if="visible" class="backend-startup-overlay">
-      <div class="startup-card">
-        <LaunchStatus
-          :title="t('launch.starting')"
-          :hint="slow ? t('launch.slowHint') : ''"
-          :action-label="slow ? t('launch.viewLog') : ''"
-          @action="openLaunchLogWindow('后端启动遮罩')"
-        />
+    <section v-if="visible" class="backend-startup-panel" :aria-label="t('launch.statusLabel')">
+      <div class="startup-heading">
+        <strong>{{
+          error ? t('launch.failed') : coreReady ? t('launch.coreReady') : t('launch.starting')
+        }}</strong>
+        <a-button type="link" size="small" @click="collapsed = !collapsed">{{
+          collapsed ? t('launch.expandLogs') : t('launch.collapseLogs')
+        }}</a-button>
       </div>
-    </div>
+      <div v-if="error" role="alert">{{ error }}</div>
+      <pre v-if="!collapsed" class="startup-logs" role="log">{{
+        logs || t('launch.waitingLogs')
+      }}</pre>
+      <a-space>
+        <a-button type="link" size="small" @click="openLaunchLogWindow('后端启动面板')">{{
+          t('launch.viewLog')
+        }}</a-button>
+        <a-button v-if="error" size="small" :loading="isBootstrapping" @click="retry">{{
+          t('launch.reconnect')
+        }}</a-button>
+      </a-space>
+    </section>
   </Teleport>
 </template>
 
 <script setup lang="ts">
-import { onUnmounted, ref, watch } from 'vue'
+import { computed, onUnmounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import LaunchStatus from './LaunchStatus.vue'
-import { SLOW_LAUNCH_THRESHOLD_MS, openLaunchLogWindow } from '@/utils/launch'
+import { useAppInitialization } from '@/composables/useAppInitialization'
+import { openLaunchLogWindow } from '@/utils/launch'
+import { startSkippedInitializationStartup } from '@/utils/skippedInitializationStartup'
 
 defineOptions({ name: 'BackendStartupOverlay' })
-
-const props = defineProps<{
-  visible: boolean
-}>()
-
 const { t } = useI18n()
+const { isInitialized, isBootstrapping, startupError } = useAppInitialization()
+const coreReady = ref(false)
+const complete = ref(false)
+const statusError = ref('')
+const logs = ref('')
+const collapsed = ref(false)
+const error = computed(() => startupError.value || statusError.value)
+const visible = computed(
+  () =>
+    window.__AUTO_MAS_BROWSER_HOST__ && (!complete.value || !isInitialized.value || !!error.value)
+)
+let disposed = false
+let timer: ReturnType<typeof setTimeout> | undefined
 
-const slow = ref(false)
-let slowTimer: ReturnType<typeof setTimeout> | null = null
-
-function clearSlowTimer() {
-  if (!slowTimer) return
-  clearTimeout(slowTimer)
-  slowTimer = null
+async function poll() {
+  try {
+    const state = await window.hostAPI.getStartupStatus()
+    if (disposed) return
+    coreReady.value = state.coreReady
+    complete.value = state.backgroundStatus === 'ready'
+    statusError.value = state.error
+    logs.value = state.logs.slice(-20).join('\n')
+  } catch (cause) {
+    if (!disposed) statusError.value = t('launch.statusUnavailable', { detail: String(cause) })
+  }
+  if (!disposed && visible.value) timer = setTimeout(poll, 1000)
 }
 
-// 正常启动到不了这个阈值，超过了才提示，并给一个能点开日志的出口。
-watch(
-  () => props.visible,
-  isVisible => {
-    clearSlowTimer()
-    slow.value = false
-    if (!isVisible) return
-    slowTimer = setTimeout(() => {
-      slow.value = true
-    }, SLOW_LAUNCH_THRESHOLD_MS)
-  },
-  { immediate: true }
-)
+function retry() {
+  statusError.value = ''
+  void startSkippedInitializationStartup()
+}
 
-onUnmounted(clearSlowTimer)
+if (window.__AUTO_MAS_BROWSER_HOST__) void poll()
+onUnmounted(() => {
+  disposed = true
+  clearTimeout(timer)
+})
 </script>
 
 <style scoped>
-.backend-startup-overlay {
+.backend-startup-panel {
   position: fixed;
-  inset: 0;
+  top: 16px;
+  right: 16px;
   z-index: 9998;
+  width: min(480px, calc(100vw - 32px));
+  padding: 16px;
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 8px;
+  color: var(--ant-color-text);
+  background: var(--ant-color-bg-elevated);
+  box-shadow: var(--ant-box-shadow-secondary);
+}
+.startup-heading {
   display: flex;
   align-items: center;
-  justify-content: center;
-  background: var(--ant-color-bg-mask, rgba(0, 0, 0, 0.45));
-  backdrop-filter: blur(4px);
-  animation: overlay-fade-in 0.2s ease-out;
+  justify-content: space-between;
+  gap: 8px;
 }
-
-:global(body:has(.title-bar)) .backend-startup-overlay {
-  top: 32px;
-}
-
-.startup-card {
-  padding: 30px 34px;
-  border: 1px solid var(--ant-color-border-secondary);
-  border-radius: 12px;
-  background: var(--ant-color-bg-elevated);
-  box-shadow: 0 10px 36px rgba(0, 0, 0, 0.24);
-}
-
-@keyframes overlay-fade-in {
-  from {
-    opacity: 0;
-    transform: scale(0.98);
-  }
-
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .backend-startup-overlay {
-    animation: none;
-  }
+.startup-logs {
+  max-height: 220px;
+  overflow: auto;
+  margin: 8px 0;
+  color: var(--ant-color-text-secondary);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 12px;
 }
 </style>

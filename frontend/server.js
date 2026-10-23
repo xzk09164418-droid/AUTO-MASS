@@ -26,6 +26,7 @@ const ROOT_DIR = path.resolve(__dirname, '..');
 const DIST_DIR = path.join(__dirname, 'dist-browser');
 const { createBrowserHost } = require('./web/host.cjs');
 const { createRuntimeLogs } = require('./web/runtimeLogs.cjs');
+const { createStartupStatus } = require('./web/startupStatus.cjs');
 let backendStartPromise = null;
 let backendProcess = null;
 let backendLaunchError = null;
@@ -277,8 +278,10 @@ function resolveStaticFile(requestPath) {
 }
 
 function startFrontendServer(opts, runtimeLogs) {
+  const startupStatus = createStartupStatus(ROOT_DIR, opts.backendPort, () => backendLaunchError?.message);
   const handleHost = createBrowserHost(ROOT_DIR, opts.backendPort, {
     runtimeLogs,
+    startupStatus,
     stopFrontend() {
       // 先返回托盘请求，再关闭 HTTP 与 WebSocket；不触碰 Python 后端。
       setTimeout(() => process.exit(0), 250);

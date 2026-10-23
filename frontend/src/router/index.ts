@@ -391,6 +391,15 @@ router.beforeEach(async (to, from, next) => {
     return
   }
 
+  if (window.__AUTO_MAS_BROWSER_HOST__) {
+    if (!isInitialized.value && !isBootstrapping.value) {
+      void startSkippedInitializationStartup()
+    }
+    if (to.path === '/initialization') next('/home')
+    else next()
+    return
+  }
+
   if (to.path === '/initialization') {
     if (!isInitialized.value && !isBootstrapping.value) {
       const decision = await getInitializationDecision()
