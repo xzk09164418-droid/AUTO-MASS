@@ -525,9 +525,11 @@ class ProcessManager:
         if self.process is not None:
             proc_pid = self.process.pid
             if self.process.returncode is None:
-                with suppress(ProcessLookupError, Exception):
-                    self.process.terminate()
+                # 先保留父进程供 taskkill /T 枚举完整进程树，不能先 terminate 父进程。
                 await self._force_taskkill_three_times(proc_pid)
+                with suppress(ProcessLookupError, Exception):
+                    if self.process.returncode is None:
+                        self.process.terminate()
                 with suppress(ProcessLookupError, asyncio.TimeoutError, Exception):
                     await asyncio.wait_for(self.process.wait(), timeout=3)
             if self.process.returncode is not None:
