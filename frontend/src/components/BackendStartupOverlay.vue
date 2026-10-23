@@ -47,6 +47,9 @@ const visible = computed(
     window.__AUTO_MAS_BROWSER_HOST__ && (!complete.value || !isInitialized.value || !!error.value)
 )
 const STARTUP_POLL_INTERVAL_MS = 1000
+const FAST_STARTUP_POLL_INTERVAL_MS = 100
+const FAST_STARTUP_POLL_WINDOW_MS = 5000
+let fastPollUntil = performance.now() + FAST_STARTUP_POLL_WINDOW_MS
 let disposed = false
 let polling = false
 let refreshRequested = false
@@ -73,7 +76,10 @@ async function poll() {
     if (!disposed) statusError.value = t('launch.statusUnavailable', { detail: String(cause) })
   } finally {
     polling = false
-    const delay = refreshRequested ? 0 : STARTUP_POLL_INTERVAL_MS
+    // 启动前几秒及时发现就绪；失败或长时间未完成时恢复低频检查。
+    let delay = STARTUP_POLL_INTERVAL_MS
+    if (!error.value && performance.now() < fastPollUntil) delay = FAST_STARTUP_POLL_INTERVAL_MS
+    if (refreshRequested) delay = 0
     refreshRequested = false
     if (!disposed && visible.value) timer = setTimeout(poll, delay)
   }
@@ -90,6 +96,7 @@ watch(
 
 function retry() {
   statusError.value = ''
+  fastPollUntil = performance.now() + FAST_STARTUP_POLL_WINDOW_MS
   void startSkippedInitializationStartup()
 }
 
