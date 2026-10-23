@@ -34,6 +34,7 @@ import psutil
 from app.utils import get_logger
 from app.utils.platform import window
 from app.utils.platform.common.errors import UnsupportedPlatformError
+from app.utils.platform.common.process_scope import register_process
 from app.utils.platform.process import platform_process
 from app.utils.platform.windows.session import (
     EXECUTION_SESSION_ENV,
@@ -181,6 +182,8 @@ class ProcessManager:
         self._drain_tasks: list[asyncio.Task[None]] = []
         self.last_returncode: int | None = None
         self._launched_program: Path | None = None
+        self._kill_task: asyncio.Task | None = None
+        register_process(self)
 
     @property
     def main_pid(self) -> int | None:
@@ -246,6 +249,7 @@ class ProcessManager:
         当启用本地远程桌面（Child Session）时，自动通过包装器（Wrapper）在本地远程桌面中启动进程并跟踪状态与退出码。
         """
 
+        register_process(self)
         if await self.is_running():
             raise RuntimeError("无法同时管理多个进程")
 
@@ -403,6 +407,7 @@ class ProcessManager:
         min_create_time: float | None = None,
     ) -> None:
         """查找目标进程"""
+        register_process(self)
 
         def _scan() -> tuple[psutil.Process, float | None] | None:
             for proc in psutil.process_iter(
@@ -492,6 +497,12 @@ class ProcessManager:
             await asyncio.sleep(0.05)
 
     async def kill(self) -> None:
+        # 热键立即清理和正常收尾共用一次清理，不重复发出强杀命令。
+        if self._kill_task is None or self._kill_task.done():
+            self._kill_task = asyncio.create_task(self._kill())
+        await asyncio.shield(self._kill_task)
+
+    async def _kill(self) -> None:
         """停止监视器并中止所有跟踪的进程（按需求执行 taskkill /F /T 强杀 3 遍）"""
 
         if self.target_process is not None:
@@ -514,9 +525,11 @@ class ProcessManager:
         if self.process is not None:
             proc_pid = self.process.pid
             if self.process.returncode is None:
-                with suppress(ProcessLookupError, Exception):
-                    self.process.terminate()
+                # 先保留父进程供 taskkill /T 枚举完整进程树，不能先 terminate 父进程。
                 await self._force_taskkill_three_times(proc_pid)
+                with suppress(ProcessLookupError, Exception):
+                    if self.process.returncode is None:
+                        self.process.terminate()
                 with suppress(ProcessLookupError, asyncio.TimeoutError, Exception):
                     await asyncio.wait_for(self.process.wait(), timeout=3)
             if self.process.returncode is not None:

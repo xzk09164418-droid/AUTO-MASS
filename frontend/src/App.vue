@@ -36,7 +36,7 @@ const { antdLocale } = useLocale()
 const { updateVisible, updateData, latestVersion, onUpdateConfirmed } = useUpdateModal()
 const { isClosing } = useAppClosing()
 const { playSound } = useAudioPlayer()
-const { isInitialized, isBootstrapping, isAppReady } = useAppInitialization()
+const { isInitialized, isUiReady } = useAppInitialization()
 const cursorEffectStore = useCursorEffectStore()
 const performanceStore = usePerformanceStore()
 
@@ -90,7 +90,7 @@ onMounted(async () => {
       <router-view />
     </div>
     <!-- 其他页面使用带标题栏的应用布局 - 仅在初始化完成后挂载 -->
-    <div v-else-if="isAppReady && performanceStore.initialized" class="app-container">
+    <div v-else-if="isUiReady && performanceStore.initialized" class="app-container">
       <AppLayout />
     </div>
 
@@ -113,8 +113,8 @@ onMounted(async () => {
 
     <!-- 应用关闭遮罩 - 始终可用 -->
     <AppClosingOverlay :visible="isClosing" />
-    <BackendStartupOverlay :visible="isBootstrapping" />
-    <CursorEffectLayer v-if="isAppReady && performanceStore.initialized" />
+    <BackendStartupOverlay />
+    <CursorEffectLayer v-if="isUiReady && performanceStore.initialized" />
   </ConfigProvider>
 </template>
 

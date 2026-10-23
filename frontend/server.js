@@ -26,6 +26,7 @@ const ROOT_DIR = path.resolve(__dirname, '..');
 const DIST_DIR = path.join(__dirname, 'dist-browser');
 const { createBrowserHost } = require('./web/host.cjs');
 const { createRuntimeLogs } = require('./web/runtimeLogs.cjs');
+const { createStartupStatus } = require('./web/startupStatus.cjs');
 let backendStartPromise = null;
 let backendProcess = null;
 let backendLaunchError = null;
@@ -174,7 +175,9 @@ async function startBackendOnce(opts) {
       const logFd = fs.openSync(path.join(logDir, 'backend-launcher.log'), 'a');
       try {
         // 后端及其远程桌面桥接独立于 Node，不能继承随前端关闭的输出管道。
-        backendProc = spawn(pyExe, pyArgs, {
+        const agent = path.join(ROOT_DIR, 'res', 'BackendAgent', 'AutoMas.BackendAgent.exe');
+        const useAgent = process.platform === 'win32' && fs.existsSync(agent);
+        backendProc = spawn(useAgent ? agent : pyExe, useAgent ? ['--python', pyExe, '--', ...pyArgs] : pyArgs, {
           cwd: ROOT_DIR,
           detached: true,
           windowsHide: true,
@@ -277,8 +280,10 @@ function resolveStaticFile(requestPath) {
 }
 
 function startFrontendServer(opts, runtimeLogs) {
+  const startupStatus = createStartupStatus(ROOT_DIR, opts.backendPort, () => backendLaunchError?.message);
   const handleHost = createBrowserHost(ROOT_DIR, opts.backendPort, {
     runtimeLogs,
+    startupStatus,
     stopFrontend() {
       // 先返回托盘请求，再关闭 HTTP 与 WebSocket；不触碰 Python 后端。
       setTimeout(() => process.exit(0), 250);
@@ -353,22 +358,42 @@ function startFrontendServer(opts, runtimeLogs) {
 
     const ext = path.extname(filePath).toLowerCase();
     const contentType = MIME_TYPES[ext] || 'application/octet-stream';
-    fs.readFile(filePath, (err, content) => {
+    fs.stat(filePath, (err, stat) => {
       if (err) {
         res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });
         res.end('500 Internal Server Error');
         return;
       }
-      res.writeHead(200, {
+      // 每次核对文件版本，未变化时复用浏览器缓存；更新部署后立即重新加载。
+      const etag = `W/"${stat.size.toString(16)}-${stat.mtimeMs.toString(16)}"`;
+      const headers = {
         'Content-Type': contentType,
         'Cache-Control': 'no-cache',
+        ETag: etag,
+      };
+      const ifNoneMatch = req.headers['if-none-match'];
+      if ((req.method === 'GET' || req.method === 'HEAD') && ifNoneMatch &&
+          ifNoneMatch.split(',').some(value => value.trim() === '*' ||
+            value.trim().replace(/^W\//, '') === etag.replace(/^W\//, ''))) {
+        res.writeHead(304, headers);
+        res.end();
+        return;
+      }
+      fs.readFile(filePath, (readError, content) => {
+        if (readError) {
+          res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });
+          res.end('500 Internal Server Error');
+          return;
+        }
+        res.writeHead(200, headers);
+        res.end(content);
       });
-      res.end(content);
     });
   });
 
   // 透明代理 WebSocket 升级请求 (/api/core/ws 等)
   server.on('upgrade', (req, clientSocket, head) => {
+    clientSocket.setNoDelay(true);
     const backendSocket = net.connect(opts.backendPort, opts.backendHost, () => {
       const headers = [`${req.method} ${req.url} HTTP/${req.httpVersion}`];
       for (let i = 0; i < req.rawHeaders.length; i += 2) {
@@ -389,6 +414,7 @@ function startFrontendServer(opts, runtimeLogs) {
       backendSocket.pipe(clientSocket);
     });
 
+    backendSocket.setNoDelay(true);
     backendSocket.on('error', () => clientSocket.destroy());
     clientSocket.on('error', () => backendSocket.destroy());
   });

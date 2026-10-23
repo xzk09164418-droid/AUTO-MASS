@@ -28,7 +28,7 @@ Copy-Item -LiteralPath (Join-Path $root 'frontend\server.js') -Destination $fron
 $modulesTarget = Join-Path $frontendTarget 'node_modules'
 New-Item -ItemType Directory -Path $modulesTarget -Force | Out-Null
 Copy-Item -LiteralPath (Join-Path $root 'frontend\node_modules\adm-zip') -Destination $modulesTarget -Recurse
-foreach ($file in @('host.cjs', 'runtimeLogs.cjs')) {
+foreach ($file in @('host.cjs', 'runtimeLogs.cjs', 'startupStatus.cjs')) {
     Copy-Item -LiteralPath (Join-Path $root "frontend\web\$file") -Destination (Join-Path $frontendTarget 'web')
 }
 $node = (Get-Command node.exe -ErrorAction Stop).Source
@@ -46,6 +46,10 @@ $launcherOutput = Join-Path $target 'AUTO-MAS.exe'
 $launcherSource = Join-Path $root 'res\Launcher\AutoMasLauncher.cs'
 & $csc @common "/out:$launcherOutput" '/r:System.Web.Extensions.dll' $launcherSource
 if ($LASTEXITCODE -ne 0) { throw '托盘启动器编译失败' }
+$agentOutput = Join-Path $target 'res\BackendAgent\AutoMas.BackendAgent.exe'
+$agentSource = Join-Path $root 'res\BackendAgent\Program.cs'
+& $csc @common "/out:$agentOutput" '/r:System.Web.Extensions.dll' $agentSource
+if ($LASTEXITCODE -ne 0) { throw '后端启动代理编译失败' }
 @'
 本包使用 Node.js + 本机浏览器 + Python 3.12 后端。
 首次使用请先安装 Python 3.12，再运行 scripts\install_release.ps1 -NoLaunch 安装依赖。

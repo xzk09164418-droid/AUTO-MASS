@@ -16,6 +16,7 @@ import {
 } from '@/composables/useQueueCloseConfirmation'
 import { clearStageOptionsCache } from '@/composables/usePlanDataCoordinator'
 import { cancelBackgroundInitCheck, checkBackgroundInit } from '@/services/backgroundInitNotice'
+import { useAppInitialization } from '@/composables/useAppInitialization'
 import { realtimeSnapshotApi } from '@/services/realtimeSnapshotApi'
 import {
   bootstrapResidentResources,
@@ -283,6 +284,7 @@ const refreshLifecycleSnapshots = async (): Promise<void> => {
 }
 
 const handleConnected = async (): Promise<void> => {
+  if (window.__AUTO_MAS_BROWSER_HOST__) useAppInitialization().markAsInitialized()
   // 重新连上（系统恢复后重连、手动重连）说明后端实际可用：撤掉恢复失败终态和它的弹窗。
   // 自动重启计数不在这里清零，按时间窗累计
   dismissRestartFailure()
@@ -850,6 +852,11 @@ const recoverAfterDisconnect = (): Promise<void> => {
 }
 
 const handleDisconnected = (event: WSDisconnectEvent): void => {
+  if (window.__AUTO_MAS_BROWSER_HOST__ && useAppInitialization().isBootstrapping.value) {
+    logger.error(`启动期间 WebSocket 尚未连接: code=${event.code}, reason=${event.reason || '无'}`)
+    backendStatus.value = 'starting'
+    return
+  }
   if (isClosing() || closeRequestedByBackend) {
     // 关闭流程期间断开：连接层进入终态，禁止任何重连；
     // 未收到 ready 则立刻走 taskkill 分支

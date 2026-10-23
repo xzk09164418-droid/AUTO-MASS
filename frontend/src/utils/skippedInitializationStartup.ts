@@ -13,7 +13,8 @@ export function startSkippedInitializationStartup(): Promise<void> {
     return startupPromise
   }
 
-  const { beginBootstrap, finishBootstrap, resetInitializationStatus } = useAppInitialization()
+  const { beginBootstrap, finishBootstrap, resetInitializationStatus, startupError } =
+    useAppInitialization()
   beginBootstrap()
 
   startupPromise = (async () => {
@@ -34,13 +35,21 @@ export function startSkippedInitializationStartup(): Promise<void> {
         }
       }
 
-      const success = await enterApp('跳过初始化直接进入首页', true)
+      const success = await enterApp(
+        '跳过初始化直接进入首页',
+        !window.__AUTO_MAS_BROWSER_HOST__,
+        !!window.__AUTO_MAS_BROWSER_HOST__
+      )
       if (!success) {
         throw new Error('进入应用失败')
       }
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error)
       logger.error(`跳过初始化启动失败: ${errorMsg}`)
+      if (window.__AUTO_MAS_BROWSER_HOST__) {
+        startupError.value = errorMsg
+        return
+      }
       sessionStorage.setItem('disableInitializationSkip', 'true')
       message.error(t('misc.backendFailedStartSwitching'))
 

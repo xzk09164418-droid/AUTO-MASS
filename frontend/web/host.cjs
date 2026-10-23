@@ -60,6 +60,7 @@ function createBrowserHost(root, backendPort, lifecycle = {}) {
       child.once('spawn', () => resolve({ success: true }))
     })
   const api = {
+    getStartupStatus: () => lifecycle.startupStatus(),
     getRuntimeLogs: (...args) => lifecycle.runtimeLogs.read(...args),
     listLogArchives: () => lifecycle.runtimeLogs.list(),
     writeFrontendLog(level, module, args) {

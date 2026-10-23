@@ -116,6 +116,7 @@ function getLegacyThemePatch(): Partial<FrontendConfig> {
 
 // 保持渲染进程请求顺序；主进程保存时再合并最新文件，避免覆盖窗口等配置。
 let configQueue: Promise<void> = Promise.resolve()
+let pendingRead: Promise<FrontendConfig> | null = null
 
 function enqueueConfigOperation<T>(operation: () => Promise<T>): Promise<T> {
   const pending = configQueue.then(operation)
@@ -139,7 +140,7 @@ async function getConfigInternal(): Promise<FrontendConfig> {
   }
 
   // localStorage 读取故障要继续向上抛出，让启动层保留原有的迁移失败信号；
-  // Electron IPC 故障则按上面的兼容路径回落默认配置。
+  // Node 宿主请求故障则按上面的兼容路径回落默认配置。
   const localConfig = localStorage.getItem('app-config')
   const themeConfig = localStorage.getItem('theme-settings')
   const legacyThemePatch = getLegacyThemePatch()
@@ -181,7 +182,9 @@ async function getConfigInternal(): Promise<FrontendConfig> {
 
 // 读取配置（公共接口）
 export async function getConfig(): Promise<FrontendConfig> {
-  return enqueueConfigOperation(async () => {
+  // 仅合并同一读写区间内正在等待的读取，不缓存已经完成的磁盘快照。
+  if (pendingRead) return structuredClone(await pendingRead)
+  const read = enqueueConfigOperation(async () => {
     const config = await getConfigInternal()
 
     // 如果是从localStorage迁移的配置，保存到文件并清理localStorage
@@ -208,10 +211,17 @@ export async function getConfig(): Promise<FrontendConfig> {
 
     return config
   })
+  pendingRead = read
+  try {
+    return structuredClone(await read)
+  } finally {
+    if (pendingRead === read) pendingRead = null
+  }
 }
 
 // 保存配置
 export async function saveConfig(config: Partial<FrontendConfig>): Promise<void> {
+  pendingRead = null
   return enqueueConfigOperation(async () => {
     try {
       logger.info(`开始保存配置: 键=${Object.keys(config).join(',')}`)
@@ -231,6 +241,7 @@ export async function saveConfig(config: Partial<FrontendConfig>): Promise<void>
 
 // 重置配置
 export async function resetConfig(): Promise<void> {
+  pendingRead = null
   return enqueueConfigOperation(async () => {
     try {
       await window.hostAPI.resetConfig()

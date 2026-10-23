@@ -10,6 +10,8 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using System.Web.Script.Serialization;
+using System.ComponentModel;
+using System.Runtime.InteropServices;
 
 namespace AutoMas.Launcher
 {
@@ -23,6 +25,15 @@ namespace AutoMas.Launcher
     /// </summary>
     internal sealed class LauncherTrayContext : ApplicationContext
     {
+        [DllImport("wtsapi32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool WTSGetChildSessionId(out uint sessionId);
+
+        [DllImport("wtsapi32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool WTSLogoffSession(
+            IntPtr serverHandle, uint sessionId, [MarshalAs(UnmanagedType.Bool)] bool wait);
+
         private readonly string _rootDir;
         private readonly string[] _args;
         private readonly bool _headless;
@@ -415,6 +426,20 @@ namespace AutoMas.Launcher
                 }
                 if (!stopped) throw new InvalidOperationException("后端尚未完成清理，保留服务运行，请查看日志后重试。");
             }
+            // 后端已完成任务收尾；宿主可能已关闭，直接注销子会话以释放其中的进程和内存。
+            await Task.Run(() =>
+            {
+                uint childSessionId;
+                if (!WTSGetChildSessionId(out childSessionId))
+                {
+                    var error = Marshal.GetLastWin32Error();
+                    if (error == 1168) return; // 当前没有子会话。
+                    throw new Win32Exception(error, "无法取得远程桌面子会话，完全退出未完成。");
+                }
+                if (childSessionId == uint.MaxValue) return;
+                if (!WTSLogoffSession(IntPtr.Zero, childSessionId, true))
+                    throw new Win32Exception(Marshal.GetLastWin32Error(), "无法注销远程桌面子会话，完全退出未完成。");
+            });
             await StopFrontendAsync();
             if (_trayIcon != null)
             {

@@ -525,6 +525,13 @@ export interface HostAPI extends DesktopMascotHostAPI, DesktopMascotTaskHostAPI 
   backendStart: () => Promise<InstallStageResult>
   backendRestart: () => Promise<InstallStageResult>
   backendStatus: () => Promise<BackendStatus>
+  getStartupStatus: () => Promise<{
+    runId: string
+    coreReady: boolean
+    backgroundStatus: string
+    error: string
+    logs: string[]
+  }>
   checkRuntimeBackendUpdate: () => Promise<{
     updateAvailable: boolean
     staged?: boolean

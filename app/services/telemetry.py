@@ -25,13 +25,12 @@ import re
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from urllib.parse import urlsplit
 
-import sentry_sdk
-from sentry_sdk import metrics
-from sentry_sdk.integrations.logging import LoggingIntegration
-from sentry_sdk.integrations.loguru import LoguruIntegration
+if TYPE_CHECKING:
+    import sentry_sdk
+    from sentry_sdk import metrics
 
 from app.utils import get_logger
 
@@ -317,7 +316,13 @@ def resolve_sentry_dist(source_root: Path) -> str | None:
 def _start_sentry(release: str, dist: str | None = None) -> None:
     """使用固定的脱敏策略启动 Sentry。"""
 
-    global _sentry_started
+    global _sentry_started, metrics, sentry_sdk
+
+    # 开发环境或关闭遥测时不加载 SDK；启用时在调用线程完成导入再开放采集。
+    import sentry_sdk
+    from sentry_sdk import metrics
+    from sentry_sdk.integrations.logging import LoggingIntegration
+    from sentry_sdk.integrations.loguru import LoguruIntegration
 
     sentry_sdk.init(
         dsn=SENTRY_DSN,

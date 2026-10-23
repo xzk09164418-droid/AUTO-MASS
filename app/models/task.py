@@ -31,6 +31,10 @@ from typing import List, Literal, Optional
 
 from app.runtime_tasks import RuntimeTasks
 from app.utils.logger import get_logger
+from app.utils.platform.common.process_scope import (
+    managed_process_scope,
+    request_task_process_stop,
+)
 
 logger = get_logger("任务执行")
 
@@ -378,6 +382,13 @@ class TaskExecuteBase(ABC):
         await self.main_task()
 
     async def _execute_task(self, parent_tg: asyncio.TaskGroup):
+        try:
+            async with managed_process_scope():
+                await self._execute_scoped_task(parent_tg)
+        finally:
+            self.accomplish.set()
+
+    async def _execute_scoped_task(self, parent_tg: asyncio.TaskGroup):
         self._task_group = parent_tg
         try:
             await self._run_main_task()
@@ -403,7 +414,6 @@ class TaskExecuteBase(ABC):
                     f"任务收尾完成: {type(self).__name__} - 用时: "
                     f"{time.monotonic() - started_at:.3f}秒"
                 )
-                self.accomplish.set()
 
     async def _finalize_task(self) -> None:
         """收尾主体；由 _run_final_task 放进屏蔽取消的独立任务里执行。"""
@@ -493,4 +503,5 @@ class TaskExecuteBase(ABC):
     def cancel(self) -> bool:
         if self.task is None or self.task.done():
             return False
+        request_task_process_stop(self.task)
         return self.task.cancel()

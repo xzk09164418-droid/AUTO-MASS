@@ -48,7 +48,8 @@
 
     <a-layout style="flex: 1; min-width: 0; background: transparent">
       <a-layout-content class="content-area">
-        <router-view v-slot="{ Component, route: currentRoute }">
+        <a-result v-if="!isAppReady" status="info" :title="t('launch.starting')" />
+        <router-view v-else v-slot="{ Component, route: currentRoute }">
           <keep-alive :include="['SchedulerPage']">
             <component :is="Component" :key="currentRoute.path" />
           </keep-alive>
@@ -81,8 +82,10 @@ import { useRouteLock } from '../composables/useRouteLock.ts'
 import type { MenuProps } from 'ant-design-vue'
 import type { AppearanceMenuIconKey } from '@/types/appearance'
 import { createAppearanceMenuIcon } from './appearanceMenuIcon'
+import { useAppInitialization } from '@/composables/useAppInitialization'
 
 const { t } = useI18n()
+const { isAppReady } = useAppInitialization()
 
 const SIDER_WIDTH = 160
 

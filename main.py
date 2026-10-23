@@ -29,6 +29,7 @@ import sys
 import uuid
 from collections.abc import Awaitable, Callable
 from pathlib import Path
+from time import perf_counter
 from typing import Any
 
 current_dir = Path(__file__).resolve().parent
@@ -252,16 +253,6 @@ def main(argv: list[str] | None = None):
             "受监督模式下不自行提权，当前非管理员，依赖模拟器/窗口操作的功能可能受限"
         )
 
-    from app.core import Config
-    from app.core.restore_bindings import resolve_restore_pools
-    from app.services.telemetry import (
-        init_sentry,
-        is_telemetry_enabled,
-        resolve_sentry_dist,
-    )
-
-    Config.set_restore_pool_resolver(resolve_restore_pools)
-
     import asyncio
 
     from app.core.desktop_runtime import relay_to_execution_session
@@ -271,6 +262,17 @@ def main(argv: list[str] | None = None):
     )
     if relay_returncode is not None:
         raise SystemExit(relay_returncode)
+
+    # 主桌面只校验会话配置并转发，不重复加载实际后端使用的业务服务。
+    from app.core import Config
+    from app.core.restore_bindings import resolve_restore_pools
+    from app.services.telemetry import (
+        init_sentry,
+        is_telemetry_enabled,
+        resolve_sentry_dist,
+    )
+
+    Config.set_restore_pool_resolver(resolve_restore_pools)
 
     init_sentry(
         release=Config.VERSION,
@@ -318,6 +320,7 @@ def main(argv: list[str] | None = None):
             async def run_step(
                 name: str, step: Callable[[], Awaitable[Any]]
             ) -> str | None:
+                started = perf_counter()
                 try:
                     await step()
                 except asyncio.CancelledError:
@@ -328,6 +331,10 @@ def main(argv: list[str] | None = None):
                     if len(message) > BACKGROUND_ERROR_MESSAGE_MAX:
                         message = message[:BACKGROUND_ERROR_MESSAGE_MAX] + "…"
                     return f"{name}（{type(error).__name__}: {message}）"
+                finally:
+                    logger.info(
+                        f"后台初始化步骤结束: {name}，耗时 {perf_counter() - started:.3f} 秒"
+                    )
                 return None
 
             async def run_optional_step(
@@ -340,7 +347,9 @@ def main(argv: list[str] | None = None):
             async def mount_mcp() -> None:
                 from app.api.mcp import mount_mcp as mount_mcp_server
 
-                await mount_mcp_server(app)
+                await mount_mcp_server(
+                    app, backend_url=f"http://127.0.0.1:{Config.server.config.port}"
+                )
 
             async def start_desktop_guard() -> None:
                 from app.core.desktop_guard import DesktopGuard
@@ -360,6 +369,11 @@ def main(argv: list[str] | None = None):
             async def init_stage_info() -> None:
                 await Config.get_stage(wait_stale=False)
 
+            async def start_notifications() -> None:
+                from app.services.notification import Notify
+
+                await Notify.start()
+
             async def run_cli_startup_tasks() -> None:
                 """当通过启动参数传入 --run-queue / --run-script / --auto-run 时，无窗口直接启动对应任务。"""
                 target_queue = str(cli_args.run_queue or "").strip()
@@ -377,7 +391,9 @@ def main(argv: list[str] | None = None):
                         except ValueError:
                             pass
                     if target_id is not None and target_id in Config.QueueConfig:
-                        logger.info(f"启动参数触发队列直接运行 (无窗口模式): Queue={target_id}")
+                        logger.info(
+                            f"启动参数触发队列直接运行 (无窗口模式): Queue={target_id}"
+                        )
                         await TaskManager.add_task("AutoProxy", str(target_id))
                     else:
                         logger.warning(f"启动参数指定的队列不存在: {target_queue}")
@@ -388,15 +404,30 @@ def main(argv: list[str] | None = None):
                     except ValueError:
                         script_id = None
                     if script_id is not None and script_id in Config.ScriptConfig:
-                        logger.info(f"启动参数触发单脚本直接运行 (无窗口模式): Script={target_script}")
+                        logger.info(
+                            f"启动参数触发单脚本直接运行 (无窗口模式): Script={target_script}"
+                        )
                         await TaskManager.add_task("AutoProxy", target_script)
                     else:
                         logger.warning(f"启动参数指定的脚本不存在: {target_script}")
 
             app.state.background_status = "running"
             try:
-                await run_optional_step("MCP 服务挂载", mount_mcp)
-                await run_optional_step("活动关卡信息获取", init_stage_info)
+                # 先确认执行会话，再并发启动核心服务；调度器不依赖 MCP。
+                await run_optional_step("本地远程桌面分身", start_child_session)
+                async with asyncio.TaskGroup() as startup:
+                    startup.create_task(
+                        run_optional_step("桌面显示输出守卫", start_desktop_guard)
+                    )
+                    startup.create_task(
+                        run_optional_step("全局热键服务", start_hotkeys)
+                    )
+                    startup.create_task(
+                        run_optional_step("通知渠道", start_notifications)
+                    )
+                    startup.create_task(
+                        run_optional_step("活动关卡信息获取", init_stage_info)
+                    )
 
                 async def _maafw_startup_maintenance() -> None:
                     try:
@@ -415,15 +446,12 @@ def main(argv: list[str] | None = None):
                     _maafw_startup_maintenance()
                 )
 
-                await run_optional_step("桌面显示输出守卫", start_desktop_guard)
-                await run_optional_step("本地远程桌面分身", start_child_session)
-                await run_optional_step("全局热键服务", start_hotkeys)
                 timer_error = await run_step("主业务定时器", MainTimer.start)
-
-                from app.services.notification import Notify
-
-                await run_optional_step("通知渠道", Notify.start)
                 await run_optional_step("启动参数直接运行任务", run_cli_startup_tasks)
+
+                if timer_error is None:
+                    logger.info("后端核心服务已就绪，继续配置按需服务入口")
+                await run_optional_step("MCP 服务挂载", mount_mcp)
 
                 if (Path.cwd() / "AUTO-MAS-Setup.exe").exists():
                     try:
@@ -469,6 +497,10 @@ def main(argv: list[str] | None = None):
             from app.core.ws import Dispatcher, MainConnection
             from app.runtime_tasks import RuntimeTasks
             from app.services import Matomo, System, Updater
+
+            mcp_runtime = getattr(app.state, "mcp_runtime", None)
+            if mcp_runtime is not None:
+                await mcp_runtime.close()
 
             if background_task is not None and not background_task.done():
                 background_task.cancel()
@@ -599,6 +631,7 @@ def main(argv: list[str] | None = None):
 
     webui_dir = current_dir / "frontend" / "webui"
     if webui_dir.is_dir():
+
         @app.get("/", include_in_schema=False)
         async def serve_root_webui():
             return FileResponse(str(webui_dir / "index.html"))
@@ -611,9 +644,7 @@ def main(argv: list[str] | None = None):
 
     async def run_server():
         http_port = resolve_http_port(development_environment, cli_args.port)
-        logger.info(
-            f"后端监听端口: {http_port} (无窗口模式={bool(cli_args.headless)})"
-        )
+        logger.info(f"后端监听端口: {http_port} (无窗口模式={bool(cli_args.headless)})")
         config = uvicorn.Config(
             app,
             host="0.0.0.0",

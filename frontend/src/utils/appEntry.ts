@@ -68,7 +68,8 @@ function startVersionServices() {
  */
 export async function enterApp(
   reason: string = '正常进入',
-  forceEnter: boolean = true
+  forceEnter: boolean = true,
+  preserveRoute: boolean = false
 ): Promise<boolean> {
   logger.info(`${reason}：开始进入应用流程，尝试建立WebSocket连接...`)
 
@@ -104,7 +105,7 @@ export async function enterApp(
     preloadSchedulerView(reason)
 
     // 跳转到主页
-    if (router.currentRoute.value.path !== '/home') {
+    if (!preserveRoute && router.currentRoute.value.path !== '/home') {
       router.push('/home')
     }
     logger.info(`${reason}：已进入应用`)
