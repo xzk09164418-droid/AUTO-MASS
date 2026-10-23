@@ -4777,6 +4777,10 @@ class AppConfig(GlobalConfig):
         即孤儿；再加一道保护——刚动过的一律不碰，避免与正在准备环境的运行抢。
         """
 
+        root = Path.cwd() / "config" / "maafw_agent_venvs"
+        if not root.is_dir():
+            return
+
         from app.models.config import MaaFWConfig
         from app.task.MaaFW.tools.core.agent_env.planner import (
             collect_orphan_agent_venvs,
@@ -4784,10 +4788,6 @@ class AppConfig(GlobalConfig):
         from app.task.MaaFW.tools.embedded.embedded_project import (
             resolve_maafw_project_root,
         )
-
-        root = Path.cwd() / "config" / "maafw_agent_venvs"
-        if not root.is_dir():
-            return
 
         # 按有效根算存活集合：内嵌脚本的 venv 是按副本路径哈希的，拿来源目录去算
         # 会把副本的 venv 当孤儿删掉。
