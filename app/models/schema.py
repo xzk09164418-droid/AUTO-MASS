@@ -5542,6 +5542,8 @@ class ScriptGetIn(_SchemaModel):
         default=None, description="脚本ID, 未携带时表示获取所有脚本数据"
     )
 
+    includeUsers: bool = Field(default=False, description="同时返回各脚本的用户列表")
+
 
 class ScriptGetOut(OutBase):
     index: List[ScriptIndexItem] = Field(..., description="脚本索引列表")
@@ -5564,6 +5566,9 @@ class ScriptGetOut(OutBase):
             MSSConfig,
         ],
     ] = Field(..., description="脚本数据字典, key来自于index列表的uid")
+    users: Optional[Dict[str, "UserGetOut"]] = Field(
+        default=None, description="用户列表，key 为脚本 ID，仅按需返回"
+    )
 
 
 class ScriptUpdateIn(_SchemaModel):

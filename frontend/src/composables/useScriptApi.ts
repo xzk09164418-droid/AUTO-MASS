@@ -75,6 +75,15 @@ const resolveScriptType = (configType: string): ScriptType => {
   return SCRIPT_TYPE_BY_CONFIG_TYPE[configType] ?? 'General'
 }
 
+const scriptDetailsFromResponse = (response: ScriptGetOut): ScriptDetail[] =>
+  response.index.map(indexItem => ({
+    uid: indexItem.uid,
+    type: resolveScriptType(indexItem.type),
+    activityGame: indexItem.activityGame,
+    name: response.data[indexItem.uid]?.Info?.Name || `${indexItem.type}脚本`,
+    config: response.data[indexItem.uid],
+  }))
+
 export function useScriptApi() {
   const loading = ref(false)
   const error = ref<string | null>(null)
@@ -146,13 +155,7 @@ export function useScriptApi() {
       }
 
       // 将API响应转换为ScriptDetail数组
-      return response.index.map(indexItem => ({
-        uid: indexItem.uid,
-        type: resolveScriptType(indexItem.type),
-        activityGame: indexItem.activityGame,
-        name: response.data[indexItem.uid]?.Info?.Name || `${indexItem.type}脚本`,
-        config: response.data[indexItem.uid],
-      }))
+      return scriptDetailsFromResponse(response)
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : '获取脚本列表失败'
       error.value = errorMsg
@@ -173,17 +176,22 @@ export function useScriptApi() {
     error.value = null
 
     try {
-      // 首先获取脚本列表，但不在内部结束 loading
-      const scriptDetails = await getScripts(false)
+      // 一次读取脚本及其用户，避免列表为每个脚本再发起请求。
+      const response = await Service.getScriptApiScriptsGetPost({ includeUsers: true })
+      if (response.code !== 200) {
+        throw new Error(response.message || '获取脚本列表失败')
+      }
+      const scriptDetails = scriptDetailsFromResponse(response)
 
       // 为每个脚本获取用户数据
       const scriptsWithUsers = await Promise.all(
         scriptDetails.map(async script => {
           try {
             // 获取该脚本下的用户列表
-            const userResponse = await Service.getUserApiScriptsUserGetPost({
-              scriptId: script.uid,
-            })
+            // 连接旧后端时沿用逐脚本读取，不把缺失的新字段当成空用户列表。
+            const userResponse =
+              response.users?.[script.uid] ??
+              (await Service.getUserApiScriptsUserGetPost({ scriptId: script.uid }))
 
             if (userResponse.code === 200) {
               // 将用户数据转换为User格式

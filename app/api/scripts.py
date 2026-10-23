@@ -286,7 +286,12 @@ async def get_script(script: ScriptGetIn = Body(...)) -> ScriptGetOut:
             index=[],
             data={},
         )
-    return ScriptGetOut(index=index, data=data)
+    users = (
+        {item.uid: await _get_user_response(item.uid) for item in index}
+        if script.includeUsers
+        else None
+    )
+    return ScriptGetOut(index=index, data=data, users=users)
 
 
 @router.post(
@@ -609,14 +614,19 @@ async def get_maaend_options(options: ScriptDeleteIn = Body(...)) -> MaaEndOptio
     status_code=200,
 )
 async def get_user(user: UserGetIn = Body(...)) -> UserGetOut:
+    return await _get_user_response(user.scriptId, user.userId)
+
+
+async def _get_user_response(script_id: str, user_id: str | None = None) -> UserGetOut:
+    """共用单脚本与列表合并读取的用户序列化和错误契约。"""
 
     try:
-        index, data = await Config.get_user(user.scriptId, user.userId)
+        index, data = await Config.get_user(script_id, user_id)
         index = [UserIndexItem(**_) for _ in index]
         data = {
-            uid: USER_BOOK[
-                type(Config.ScriptConfig[uuid.UUID(user.scriptId)]).__name__
-            ](**cfg)
+            uid: USER_BOOK[type(Config.ScriptConfig[uuid.UUID(script_id)]).__name__](
+                **cfg
+            )
             for uid, cfg in data.items()
         }
     except Exception as e:

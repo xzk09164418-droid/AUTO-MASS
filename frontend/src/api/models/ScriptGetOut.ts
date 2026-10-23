@@ -15,6 +15,7 @@ import type { OkNteConfig } from './OkNteConfig';
 import type { OkwwConfig } from './OkwwConfig';
 import type { ScriptIndexItem } from './ScriptIndexItem';
 import type { SrcConfig } from './SrcConfig';
+import type { UserGetOut } from './UserGetOut';
 import type { WhimboxConfig } from './WhimboxConfig';
 import type { ZzzOdConfig } from './ZzzOdConfig';
 export type ScriptGetOut = {
@@ -38,5 +39,9 @@ export type ScriptGetOut = {
      * 脚本数据字典, key来自于index列表的uid
      */
     data: Record<string, (MaaConfig | SrcConfig | GeneralConfig | OkwwConfig | OkNteConfig | MaaEndConfig | M9AConfig | MaaFWConfig | HSRConfig | BetterGIConfig | ZzzOdConfig | BAAHConfig | WhimboxConfig | MSSConfig)>;
+    /**
+     * 用户列表，key 为脚本 ID，仅按需返回
+     */
+    users?: (Record<string, UserGetOut> | null);
 };
 
