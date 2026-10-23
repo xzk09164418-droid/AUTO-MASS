@@ -110,6 +110,11 @@ if ($CscExe) {
     throw "缺少可用的 .NET Framework C# 编译器；请安装 .NET Framework 开发工具后重试。"
 }
 
+$AgentDir = Join-Path $RootDir 'res\BackendAgent'
+$AgentOut = Join-Path $AgentDir 'AutoMas.BackendAgent.exe'
+& $CscExe /nologo /codepage:65001 /target:winexe /platform:x64 /optimize+ "/out:$AgentOut" /r:System.dll /r:System.Core.dll /r:System.Web.Extensions.dll (Join-Path $AgentDir 'Program.cs')
+if ($LASTEXITCODE -ne 0) { throw '后端启动代理编译失败' }
+
 # 2. 配置 Python 运行环境
 Write-Host "[3/4] 正在检查并配置 Python 依赖环境..." -ForegroundColor Yellow
 if (Get-Command uv -ErrorAction SilentlyContinue) {

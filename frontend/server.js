@@ -175,7 +175,9 @@ async function startBackendOnce(opts) {
       const logFd = fs.openSync(path.join(logDir, 'backend-launcher.log'), 'a');
       try {
         // 后端及其远程桌面桥接独立于 Node，不能继承随前端关闭的输出管道。
-        backendProc = spawn(pyExe, pyArgs, {
+        const agent = path.join(ROOT_DIR, 'res', 'BackendAgent', 'AutoMas.BackendAgent.exe');
+        const useAgent = process.platform === 'win32' && fs.existsSync(agent);
+        backendProc = spawn(useAgent ? agent : pyExe, useAgent ? ['--python', pyExe, '--', ...pyArgs] : pyArgs, {
           cwd: ROOT_DIR,
           detached: true,
           windowsHide: true,
