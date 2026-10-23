@@ -1211,7 +1211,7 @@ const updatePathsBasedOnRoot = (newRootPath: string) => {
     generalConfig.Script.TrackProcessExe = normalizedTrackProcessExePath
   }
 }
-const pageLoading = ref(false)
+const pageLoading = ref(true)
 const scriptId = route.params.id as string
 const {
   emulatorDeviceLoading,
