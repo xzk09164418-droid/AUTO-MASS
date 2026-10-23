@@ -1008,6 +1008,21 @@ export function initializeAppLifecycle(): void {
   logger.info('应用生命周期协调器已初始化')
 }
 
+export function resumeStartupConnection(): void {
+  // 启动面板已经确认后端可达时，不再等待连接层的退避定时器。
+  // 只加速尚未进入应用的重试，关闭、窗口让位和正常运行后的恢复仍走原流程。
+  if (
+    !initialized ||
+    useAppInitialization().isInitialized.value ||
+    closePromise !== null ||
+    isClosing() ||
+    connectionState().value !== 'reconnecting'
+  ) {
+    return
+  }
+  void connect()
+}
+
 /**
  * 建立主 WebSocket 连接，失败时按间隔重试。
  * 用于启动流程；连接失败不抛异常（初始化容错由调用方决定）。

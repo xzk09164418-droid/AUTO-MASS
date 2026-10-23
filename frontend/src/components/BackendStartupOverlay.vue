@@ -29,6 +29,7 @@
 import { computed, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppInitialization } from '@/composables/useAppInitialization'
+import { resumeStartupConnection } from '@/composables/useAppLifecycle'
 import { openLaunchLogWindow } from '@/utils/launch'
 import { startSkippedInitializationStartup } from '@/utils/skippedInitializationStartup'
 
@@ -62,10 +63,12 @@ async function poll() {
   try {
     const state = await window.hostAPI.getStartupStatus()
     if (disposed) return
+    const becameReady = state.coreReady && !coreReady.value
     coreReady.value = state.coreReady
     complete.value = state.backgroundStatus === 'ready'
     statusError.value = state.error
     logs.value = state.logs.slice(-20).join('\n')
+    if (becameReady) resumeStartupConnection()
   } catch (cause) {
     if (!disposed) statusError.value = t('launch.statusUnavailable', { detail: String(cause) })
   } finally {
