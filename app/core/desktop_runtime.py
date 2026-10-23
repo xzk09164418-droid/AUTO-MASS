@@ -40,8 +40,6 @@ async def relay_to_execution_session(argv: list[str]) -> int | None:
     if os.name != "nt":
         return None
 
-    from app.core import Config
-    from app.core.child_session import ChildSessionManager
     from app.utils.platform.windows.session import (
         EXECUTION_SESSION_ENV,
         get_process_session_id,
@@ -58,6 +56,9 @@ async def relay_to_execution_session(argv: list[str]) -> int | None:
             f"窗口检测、识别、点击与程序启动统一在 Session={actual_session} 执行"
         )
         return None
+
+    from app.core import Config
+    from app.core.child_session import ChildSessionManager
 
     # 桥接进程只加载全局设置，不启动定时器、不迁移脚本配置、不创建第二份任务队列。
     await Config.connect(Config.config_path / "Config.json")

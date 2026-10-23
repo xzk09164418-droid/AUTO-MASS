@@ -39,12 +39,6 @@ from app.models.schema import *
 from app.services import ConfigCenterError
 from app.services.endfield_launcher import discover_launcher_exe
 from app.services.wuthering_waves import resolve_wuthering_waves_process_path
-from app.task.MaaFW.api_service import agent_env as maafw_agent_env_api
-from app.task.MaaFW.api_service import embedded as maafw_embedded_api
-from app.task.MaaFW.api_service import interface as maafw_interface_api
-from app.task.MaaFW.api_service import shell_instances as maafw_shell_instances_api
-from app.task.MaaFW.api_service import update as maafw_update_api
-from app.task.MSS.api_service import defense_status as mss_defense_status
 from app.task.Whimbox.tools.upstream import WheelAssetsConfigSurface
 from app.utils import get_logger
 from app.utils.emulator2 import service as emulator2_service
@@ -1203,6 +1197,8 @@ async def delete_webhook(webhook: WebhookDeleteIn = Body(...)) -> OutBase:
 async def get_maafw_embedded_status(
     payload: MaaFWEmbeddedIn = Body(...),
 ) -> MaaFWEmbeddedStatusOut:
+    from app.task.MaaFW.api_service import embedded as maafw_embedded_api
+
     reply = await maafw_embedded_api.get_embedded_status(payload.scriptId)
     return MaaFWEmbeddedStatusOut(**reply.out_fields())
 
@@ -1221,6 +1217,7 @@ async def reimport_maafw_embedded(
 
     导入成功才把来源写进 Info.Path；失败时旧副本与旧来源都原样不动。
     """
+    from app.task.MaaFW.api_service import embedded as maafw_embedded_api
 
     reply = await maafw_embedded_api.reimport_embedded(
         payload.scriptId, payload.sourcePath
@@ -1243,6 +1240,7 @@ async def sync_maafw_embedded(
     只在跟随来源目录（开发者模式或源码形态）时可用；脚本运行中、项目正在更新或被占用时拒绝。
     ``message`` 是给用户看的结果：变了哪些文件 / 内容未变化。
     """
+    from app.task.MaaFW.api_service import embedded as maafw_embedded_api
 
     reply = await maafw_embedded_api.sync_embedded(payload.scriptId)
     return MaaFWEmbeddedStatusOut(**reply.out_fields())
@@ -1262,6 +1260,7 @@ async def list_maafw_embedded_sources(
 
     新建时脚本还没建出来，所以不要求 ``scriptId``；传了就把它自己排除掉。
     """
+    from app.task.MaaFW.api_service import embedded as maafw_embedded_api
 
     reply = await maafw_embedded_api.list_embedded_sources(payload.scriptId)
     return MaaFWEmbeddedSourcesOut(**reply.out_fields())
@@ -1284,6 +1283,8 @@ async def clone_maafw_embedded(
     ``Info.Path`` 与 ``Embedded.*`` 沿用源脚本的记录；类型随项目（M9A 项目 → M9A）。
     用户、任务队列与运行设置不带——那是「复制脚本」的事。
     """
+    from app.task.MaaFW.api_service import embedded as maafw_embedded_api
+
     # docstring 会进 OpenAPI 生成物，保持原文；现行的载荷 + 视图口径见 clone_embedded。
 
     reply = await maafw_embedded_api.clone_embedded(
@@ -1303,6 +1304,7 @@ async def list_maafw_shell_instances(
     payload: MaaFWShellInstancesIn = Body(...),
 ) -> MaaFWShellInstancesOut:
     """新建脚本引导最后一步用：外壳里配好的每份实例都可以导入成一个用户。只读外壳文件。"""
+    from app.task.MaaFW.api_service import shell_instances as maafw_shell_instances_api
 
     reply = await maafw_shell_instances_api.list_shell_instances(
         payload.scriptId, payload.path
@@ -1324,6 +1326,7 @@ async def get_mss_defense_status(
 
     「这一期」由后端按官网那一篇公告的开始时刻算，前端不复刻同一套口径。
     """
+    from app.task.MSS.api_service import defense_status as mss_defense_status
 
     data = await mss_defense_status(payload.scriptId, payload.userId)
     return MssDefenseStatusOut(data=MssDefenseStatusData(**data))
@@ -1343,6 +1346,7 @@ async def import_maafw_shell_instances(
 
     逐个实例独立处理，失败原因与当前项目里对不上而跳过的任务 / 选项写在各项结果里。
     """
+    from app.task.MaaFW.api_service import shell_instances as maafw_shell_instances_api
 
     reply = await maafw_shell_instances_api.import_shell_instances(
         payload.scriptId, payload.instanceIds
@@ -1365,6 +1369,7 @@ async def apply_maafw_shell_instance(
     与「导入成用户」共用同一套换算，所以当前项目里对不上的任务 / 选项同样会被跳过并列在结果里。
     覆盖的是任务队列与任务选项，用户名不动。
     """
+    from app.task.MaaFW.api_service import shell_instances as maafw_shell_instances_api
 
     reply = await maafw_shell_instances_api.apply_shell_instance_to_user(
         payload.scriptId, payload.userId, payload.instanceId, payload.path
@@ -1387,6 +1392,7 @@ async def resolve_maafw_game_package(
     只看 resource 的 pipeline，不带用户任务的 pipeline_override（编辑脚本时还没有
     运行计划）；推不出或多个候选都按原样返回，由前端决定不填。
     """
+    from app.task.MaaFW.api_service import interface as maafw_interface_api
 
     reply = await maafw_interface_api.resolve_project_game_package(
         payload.scriptId, payload.path, payload.resource
@@ -1405,6 +1411,7 @@ async def preview_maafw_interface(
     payload: MaaFWInterfacePreviewIn = Body(...),
 ) -> MaaFWInterfacePreviewOut:
     """读取 MaaFW 项目 interface，并返回 controller/resource/task 摘要。"""
+    from app.task.MaaFW.api_service import interface as maafw_interface_api
 
     reply = await maafw_interface_api.preview_project_interface(
         payload.scriptId, payload.path
@@ -1427,6 +1434,7 @@ async def update_maafw_project(
     ``action=check`` 只读取 interface 版本与更新源元数据，返回是否有新版本；
     ``action=apply`` 触发下载并原地应用更新包。失败时返回明确 ``message``。
     """
+    from app.task.MaaFW.api_service import update as maafw_update_api
 
     reply = await maafw_update_api.update_project(payload.scriptId, payload.action)
     return MaaFWProjectUpdateOut(**reply.out_fields())
@@ -1447,6 +1455,7 @@ async def query_maafw_mirror_cdk(
     带着 CDK 按「当前版本 = 最新版本」查一次 Mirror 酱，服务端只校验 CDK、不签发下载地址，
     不占当日下载额度。CDK 只放在请求体里。项目不支持或查询失败也按成功返回对应状态。
     """
+    from app.task.MaaFW.api_service import update as maafw_update_api
 
     reply = await maafw_update_api.query_mirror_cdk(payload.scriptId, payload.cdk)
     return MaaFWMirrorCdkOut(**reply.out_fields())
@@ -1472,6 +1481,7 @@ async def prepare_maafw_agent_env(
     准备的环境也还在盘上，就直接还回上次的结果，不再取锁起进程。用户手动重试
     时前端带 ``force``，跳过这层缓存。
     """
+    from app.task.MaaFW.api_service import agent_env as maafw_agent_env_api
 
     reply = await maafw_agent_env_api.prepare_agent_env(
         payload.scriptId, payload.path, payload.force
@@ -3881,6 +3891,7 @@ async def get_maafw_asset(
     前端侧对应 ``buildMaaFWAssetUrl``：它已经拦掉了绝对路径、UNC、上跳与远程 URL，
     但那只是省一次往返，安全边界在这里 —— 请求可以绕过前端直接打过来。
     """
+    from app.task.MaaFW.api_service import interface as maafw_interface_api
 
     try:
         file_path = maafw_interface_api.maafw_asset_file_path(root, path)

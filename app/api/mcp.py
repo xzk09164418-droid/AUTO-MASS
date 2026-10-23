@@ -30,7 +30,9 @@ import asyncio
 import importlib
 import os
 
+import httpx
 from fastapi import FastAPI
+from fastapi.routing import APIRoute
 
 from app.utils.logger import get_logger
 
@@ -179,76 +181,99 @@ def _patch_fastapi_mcp_ref_recursion(max_depth: int = 96) -> None:
 async def mount_mcp(app: FastAPI) -> None:
     """后台挂载配置工具，保持 /mcp 与 AUTO_MAS_ENABLE_MCP 开关兼容。"""
 
-    # MCP 构建需要遍历完整 OpenAPI schema (约 1s)，后移到后台
-    # 导入与构建均为重 CPU 操作，放入线程避免阻塞事件循环推迟 API 响应
-    # Starlette 支持运行期追加路由，首个 /mcp 请求前挂载完成即可
+    # 仅生成白名单工具所需的 schema；真实 HTTP 请求仍经过完整应用和原有中间件。
+    # 模块先在事件循环导入，线程仅负责已经解析好的构造函数，避免并发冷导入。
     if os.getenv("AUTO_MAS_ENABLE_MCP", "1") == "1":
-        fastapi_mcp = await asyncio.to_thread(importlib.import_module, "fastapi_mcp")
+        importlib.import_module("mcp")
+        await asyncio.sleep(0)
+        fastapi_mcp = importlib.import_module("fastapi_mcp")
+        await asyncio.sleep(0)
         _patch_fastapi_mcp_ref_recursion()
 
-        mcp = await asyncio.to_thread(
-            fastapi_mcp.FastApiMCP,
-            app,
-            name="AUTO-MAS MCP",
-            description=(
-                "配置已安装的 AUTO-MAS 脚本：创建脚本并设置安装路径，"
-                "查询专项动态选项后创建并配置用户，按专项支持情况创建计划，"
-                "建立队列、队列项和定时项，最后按需试运行。"
-                "创建接口返回新 ID 和默认配置；修改时只提交需要变更的字段，"
-                "并使用查询接口返回的真实 ID 与可选值。"
-                "MFW/M9A/MSS 的安装目录通过 embedded/reimport 导入，"
-                "用 preview 查询项目 controller/resource/task 后再配置用户。"
-                "HSR 先查询 capabilities 和 managed-config；"
-                "BetterGI、ZZZ-OD、奇想盒先查询任务目录与选项；"
-                "OK-NTE 先查询配置 schema，BAAH 先查询已有配置文件名。"
-                "保存后回读核对；检查业务 code，失败时不要猜测 ID、字段或选项。"
-                "任务创建成功仅表示已受理，不代表脚本运行成功。"
-                "运行快照只包含当前任务；任务结束后按 taskId 查任务状态取终态，"
-                "更早的结果查历史索引中的 DONE/ERROR，没有匹配记录时不能判定成功。"
-            ),
-            describe_full_response_schema=False,
-            describe_all_responses=False,
-            # 仅暴露通用配置与试运行能力；新增 HTTP 接口不会自动成为工具。
-            # fastapi-mcp 的操作与标签过滤取并集，白名单不能再搭配标签过滤。
-            include_operations=list(MCP_INCLUDED_OPERATIONS),
+        schema_app = FastAPI(
+            title=app.title, version=app.version, description=app.description
         )
-        # 0.4.0 在工具清单为空时不会清空调用映射，仍需按实际清单收敛。
-        tool_names = {tool.name for tool in mcp.tools}
-        missing_operations = set(MCP_INCLUDED_OPERATIONS) - tool_names
-        if missing_operations:
-            raise RuntimeError(
-                f"MCP 白名单包含不存在的 operation: {sorted(missing_operations)}"
+        schema_app.openapi_version = app.openapi_version
+        schema_app.router.routes = [
+            route
+            for route in app.routes
+            if isinstance(route, APIRoute)
+            and (route.operation_id or route.unique_id) in MCP_INCLUDED_OPERATIONS
+        ]
+        http_client = httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app, raise_app_exceptions=False),
+            base_url="http://apiserver",
+            timeout=10.0,
+        )
+        try:
+            mcp = await asyncio.to_thread(
+                fastapi_mcp.FastApiMCP,
+                schema_app,
+                http_client=http_client,
+                name="AUTO-MAS MCP",
+                description=(
+                    "配置已安装的 AUTO-MAS 脚本：创建脚本并设置安装路径，"
+                    "查询专项动态选项后创建并配置用户，按专项支持情况创建计划，"
+                    "建立队列、队列项和定时项，最后按需试运行。"
+                    "创建接口返回新 ID 和默认配置；修改时只提交需要变更的字段，"
+                    "并使用查询接口返回的真实 ID 与可选值。"
+                    "MFW/M9A/MSS 的安装目录通过 embedded/reimport 导入，"
+                    "用 preview 查询项目 controller/resource/task 后再配置用户。"
+                    "HSR 先查询 capabilities 和 managed-config；"
+                    "BetterGI、ZZZ-OD、奇想盒先查询任务目录与选项；"
+                    "OK-NTE 先查询配置 schema，BAAH 先查询已有配置文件名。"
+                    "保存后回读核对；检查业务 code，失败时不要猜测 ID、字段或选项。"
+                    "任务创建成功仅表示已受理，不代表脚本运行成功。"
+                    "运行快照只包含当前任务；任务结束后按 taskId 查任务状态取终态，"
+                    "更早的结果查历史索引中的 DONE/ERROR，没有匹配记录时不能判定成功。"
+                ),
+                describe_full_response_schema=False,
+                describe_all_responses=False,
+                # 仅暴露通用配置与试运行能力；新增 HTTP 接口不会自动成为工具。
+                # fastapi-mcp 的操作与标签过滤取并集，白名单不能再搭配标签过滤。
+                include_operations=list(MCP_INCLUDED_OPERATIONS),
             )
-        mcp.operation_map = {
-            name: operation
-            for name, operation in mcp.operation_map.items()
-            if name in tool_names
-        }
-        for tool in mcp.tools:
-            if tool.name == "get_maaend_options_api_scripts_maaend_options_post":
-                tool.description += (
-                    "\n\n先创建 MaaEnd 脚本并设置 Info.Path 为已安装的 MaaEnd 目录，"
-                    "再用该脚本的 scriptId 查询动态选项。"
-                    "根据 controllerTypes 判断控制器协议：Adb 需配置模拟器与实例，"
-                    "Win32 需配置游戏路径。控制器、基质与采集选项使用返回的真实值；"
-                    "检查返回的 code，查询失败时先处理错误，不要猜测选项。"
+            # 0.4.0 在工具清单为空时不会清空调用映射，仍需按实际清单收敛。
+            tool_names = {tool.name for tool in mcp.tools}
+            missing_operations = set(MCP_INCLUDED_OPERATIONS) - tool_names
+            if missing_operations:
+                raise RuntimeError(
+                    f"MCP 白名单包含不存在的 operation: {sorted(missing_operations)}"
                 )
-            elif tool.name == "get_task_status_api_dispatch_task__task_id__get":
-                tool.description += (
-                    "\n\n按 taskId 单点查询一个任务：运行中返回 running，已结束返回"
-                    "success/error/cancelled 及结果文本与错误信息，不返回日志。"
-                    "code=404 表示该 id 既不在运行中，也不在最近完成的记录里，"
-                    "结果未知，不要判成功。"
-                )
-            elif tool.name == "search_history_api_history_search_post":
-                tool.description += (
-                    "\n\n用于查询已结束运行的结果，建议按运行日期使用 DAILY 模式。"
-                    "按用户和记录时间核对 index 中的 status（DONE/ERROR）与 result。"
-                    "该接口不按 taskId 精确检索，按 taskId 取终态请用任务状态查询；"
-                    "记录缺失或无法唯一对应时，结果仍未知，"
-                    "不能把任务从运行快照消失视为成功。"
-                )
-        mcp.mount_http()
-        logger.info(f"MCP 服务已挂载，共 {len(mcp.tools)} 个工具")
+            mcp.operation_map = {
+                name: operation
+                for name, operation in mcp.operation_map.items()
+                if name in tool_names
+            }
+            for tool in mcp.tools:
+                if tool.name == "get_maaend_options_api_scripts_maaend_options_post":
+                    tool.description += (
+                        "\n\n先创建 MaaEnd 脚本并设置 Info.Path 为已安装的 MaaEnd 目录，"
+                        "再用该脚本的 scriptId 查询动态选项。"
+                        "根据 controllerTypes 判断控制器协议：Adb 需配置模拟器与实例，"
+                        "Win32 需配置游戏路径。控制器、基质与采集选项使用返回的真实值；"
+                        "检查返回的 code，查询失败时先处理错误，不要猜测选项。"
+                    )
+                elif tool.name == "get_task_status_api_dispatch_task__task_id__get":
+                    tool.description += (
+                        "\n\n按 taskId 单点查询一个任务：运行中返回 running，已结束返回"
+                        "success/error/cancelled 及结果文本与错误信息，不返回日志。"
+                        "code=404 表示该 id 既不在运行中，也不在最近完成的记录里，"
+                        "结果未知，不要判成功。"
+                    )
+                elif tool.name == "search_history_api_history_search_post":
+                    tool.description += (
+                        "\n\n用于查询已结束运行的结果，建议按运行日期使用 DAILY 模式。"
+                        "按用户和记录时间核对 index 中的 status（DONE/ERROR）与 result。"
+                        "该接口不按 taskId 精确检索，按 taskId 取终态请用任务状态查询；"
+                        "记录缺失或无法唯一对应时，结果仍未知，"
+                        "不能把任务从运行快照消失视为成功。"
+                    )
+            mcp.mount_http(router=app)
+            logger.info(f"MCP 服务已挂载，共 {len(mcp.tools)} 个工具")
+        except BaseException:
+            await http_client.aclose()
+            raise
+
     else:
         logger.info("MCP 服务未启用，跳过路由挂载")

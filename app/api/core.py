@@ -26,7 +26,7 @@ import os
 from contextlib import suppress
 from typing import Optional
 
-from fastapi import APIRouter, Request, WebSocket
+from fastapi import APIRouter, BackgroundTasks, Request, WebSocket
 from pydantic import BaseModel, Field
 
 from app.api.ws_command import ws_command
@@ -85,12 +85,22 @@ def _resolve_injected_identity(env_name: str) -> str | None:
     response_model=BackendHealthOut,
     status_code=200,
 )
-async def get_health(request: Request) -> BackendHealthOut:
+async def get_health(
+    request: Request, background_tasks: BackgroundTasks
+) -> BackendHealthOut:
     """返回核心 API 与后台初始化状态，供 AUTO-MAS-Runtime 等外部监督器判定就绪与身份。
 
     version/commit 受监督且监督器注入了期望值时原样回显，否则分别回退到本地版本号
     与空字符串；commit 不通过 Git 推断，只能来自监督器注入。
     """
+
+    api_served = getattr(request.app.state, "core_api_served", None)
+    if api_served is not None and not api_served.is_set():
+
+        async def mark_api_served() -> None:
+            api_served.set()
+
+        background_tasks.add_task(mark_api_served)
 
     return BackendHealthOut(
         ready=True,
