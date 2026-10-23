@@ -31,6 +31,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+import psutil
+
 from app.utils.logger import get_logger
 
 logger = get_logger("远程桌面分身")
@@ -382,7 +384,21 @@ class _ChildSessionManager:
         if os.name != "nt":
             return None
 
-        status = await self._http_call("/status", method="GET", timeout=2.0)
+        # 宿主未启动时，Windows 连接空端口会等满超时；先只读核对系统监听表。
+        # 无权读取或状态不明时仍走原查询，不用短超时把繁忙宿主误判成不存在。
+        host_is_listening = True
+        try:
+            connections = await asyncio.to_thread(psutil.net_connections, kind="tcp")
+            host_is_listening = any(
+                conn.status == psutil.CONN_LISTEN and conn.laddr.port == self.host_port
+                for conn in connections
+            )
+        except (psutil.Error, OSError, RuntimeError):
+            pass
+
+        status = None
+        if host_is_listening:
+            status = await self._http_call("/status", method="GET", timeout=2.0)
         if status is not None:
             return status
 
