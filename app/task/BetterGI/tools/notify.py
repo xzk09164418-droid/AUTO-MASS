@@ -119,7 +119,11 @@ async def push_notification(
                 html=message_html,
                 summary=NotificationSummary(text=message_text),
             ),
-            statistic_targets(user_config, compact_summary=True),
+            statistic_targets(
+                user_config,
+                failed=bool(message.get("notification_failed", False)),
+                compact_summary=True,
+            ),
         )
 
     if mode != "代理结果":

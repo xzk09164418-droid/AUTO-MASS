@@ -4396,9 +4396,11 @@ export default {
       contentSection: '通知の内容',
       sendTest: 'テスト通知を送信',
       resultTime: 'タスク結果の通知タイミング',
-      resultTimeTip: '選んだタイミングでタスクの実行結果を送信します',
+      resultTimeTip:
+        'アカウントごとの通知を制御します：送信しない・常に送信・失敗時のみ。集計レポートには影響しません。',
       statistics: '統計情報を送信',
-      statisticsTip: '自動代行の統計情報を通知します',
+      statisticsTip:
+        'スクリプト終了後の集計レポートを個別に制御します。アカウントごとの通知設定には影響しません。',
       recruit: '公開求人の高レア通知',
       recruitTip: '公開求人に『上級エリート』のタグが出たときに通知します',
       systemSection: 'システム通知',

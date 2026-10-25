@@ -3110,6 +3110,7 @@ class AutoProxyTask(ScriptAutoProxyBase):
                 self._cultivate_achievement_summary
             )
 
+        statistics["notification_failed"] = not if_success
         success_symbol = "√" if if_success else "X"
 
         # 任务被中止时，只要日志中已经完成过体力任务，也应发送掉落统计；
@@ -3139,7 +3140,7 @@ class AutoProxyTask(ScriptAutoProxyBase):
             or bool(cultivate_progress)
             or _has_completed_sanity_task(list(self.cur_user_item.log_record.values()))
         )
-        if should_send_statistics:
+        if should_send_statistics or not if_success:
             try:
                 await push_notification(
                     "统计信息",

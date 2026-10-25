@@ -5041,9 +5041,11 @@ export default {
       contentSection: 'Notification content',
       sendTest: 'Send a test notification',
       resultTime: 'Send task results',
-      resultTimeTip: 'Push the result of a task run at the selected moment',
+      resultTimeTip:
+        'Controls individual account reports: never, always, or only on failure. Does not affect summary reports.',
       statistics: 'Send statistics',
-      statisticsTip: 'Push a notification with automation statistics',
+      statisticsTip:
+        'Independently controls the summary report after a script finishes. Does not affect individual account notifications.',
       recruit: 'Send top-tier recruitment alerts',
       recruitTip: 'Push an alert when recruitment shows the Senior Operator tag',
       systemSection: 'System notifications',

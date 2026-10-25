@@ -61,14 +61,16 @@ async def push_notification(
 
         return await dispatch(
             NotifyPayload(title=title, text=message_text, html=message_html),
-            statistic_targets(user_config),
+            statistic_targets(
+                user_config, failed=bool(message.get("notification_failed", False))
+            ),
         )
 
     if mode == "云登录提醒":
         # 需人工介入的即时提醒：用户不在电脑前时靠它知道要去扫码/登录。
         return await dispatch(
             NotifyPayload(title=title, text=str(message.get("message", ""))),
-            statistic_targets(user_config),
+            statistic_targets(user_config, failed=True),
         )
 
     return DispatchResult()

@@ -183,7 +183,9 @@ async def push_notification(
                 signature_sep=SIGNATURE_SEP,
                 images=images,
             ),
-            statistic_targets(user_config),
+            statistic_targets(
+                user_config, failed=bool(message.get("notification_failed", False))
+            ),
         )
 
     if mode == "公招六星":

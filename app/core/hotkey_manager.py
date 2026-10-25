@@ -8,10 +8,10 @@ from __future__ import annotations
 
 import asyncio
 import ctypes
-from ctypes import wintypes
 import os
 import threading
-from typing import Callable, Coroutine, Any
+from ctypes import wintypes
+from typing import Any, Callable, Coroutine
 
 from app.task.MaaFW.tools.core.runner.hotkey import _canonical_key, _win32_keycode
 from app.utils.logger import get_logger
@@ -45,8 +45,8 @@ def parse_win32_hotkey(hotkey_str: str) -> tuple[int, int]:
     if not raw:
         raise ValueError("快捷键字符串为空")
 
-    parts = [_canonical_key(p) for p in raw.split("+") if p.strip()]
-    if not parts:
+    parts = [_canonical_key(p) for p in raw.split("+")]
+    if not parts or any(not part for part in parts) or parts[-1] in _MODIFIER_MAP:
         raise ValueError(f"无效的快捷键格式: {hotkey_str!r}")
 
     modifiers = MOD_NOREPEAT
@@ -68,6 +68,9 @@ class _HotkeyManager:
         self._thread_id: int | None = None
         self._running = False
         self._registered_bindings: dict[str, str] = {}
+        self._registration_errors: list[str] = []
+        self._reload_lock = asyncio.Lock()
+        self._action_lock = asyncio.Lock()
 
     @property
     def registered_bindings(self) -> dict[str, str]:
@@ -90,11 +93,8 @@ class _HotkeyManager:
             return
         self._loop = asyncio.get_running_loop()
         enabled, toggle_key, prev_key, next_key = self._read_config_bindings()
-        self._registered_bindings = {
-            "toggleStartStop": toggle_key,
-            "previousTask": prev_key,
-            "nextTask": next_key,
-        }
+        self._registered_bindings = {}
+        self._registration_errors = []
         if not enabled:
             logger.info("全局热键开关未启用，跳过注册")
             return
@@ -112,7 +112,13 @@ class _HotkeyManager:
             daemon=True,
         )
         self._thread.start()
-        await asyncio.to_thread(ready_event.wait, 3.0)
+        if not await asyncio.to_thread(ready_event.wait, 3.0):
+            await self.stop()
+            raise RuntimeError("等待全局热键注册超时")
+        if self._registration_errors:
+            errors = "；".join(self._registration_errors)
+            await self.stop()
+            raise RuntimeError(errors)
 
     async def stop(self) -> None:
         if not self._running:
@@ -132,11 +138,13 @@ class _HotkeyManager:
             await asyncio.to_thread(self._thread.join, 2.0)
         self._thread = None
         self._thread_id = None
+        self._registered_bindings = {}
         logger.info("全局热键服务已停止")
 
     async def reload(self) -> None:
-        await self.stop()
-        await self.start()
+        async with self._reload_lock:
+            await self.stop()
+            await self.start()
 
     def _win32_message_loop(
         self,
@@ -145,33 +153,56 @@ class _HotkeyManager:
         next_key: str,
         ready_event: threading.Event,
     ) -> None:
-        user32 = ctypes.windll.user32
+        user32 = ctypes.WinDLL("user32", use_last_error=True)
         kernel32 = ctypes.windll.kernel32
         self._thread_id = int(kernel32.GetCurrentThreadId())
 
         specs = [
-            (HOTKEY_ID_TOGGLE, "启停切换", toggle_key, self.trigger_toggle_start_stop),
-            (HOTKEY_ID_PREV, "上一个任务", prev_key, self.trigger_previous_task),
-            (HOTKEY_ID_NEXT, "下一个任务", next_key, self.trigger_next_task),
+            (
+                HOTKEY_ID_TOGGLE,
+                "toggleStartStop",
+                "启停切换",
+                toggle_key,
+                self.trigger_toggle_start_stop,
+            ),
+            (
+                HOTKEY_ID_PREV,
+                "previousTask",
+                "上一个任务",
+                prev_key,
+                self.trigger_previous_task,
+            ),
+            (
+                HOTKEY_ID_NEXT,
+                "nextTask",
+                "下一个任务",
+                next_key,
+                self.trigger_next_task,
+            ),
         ]
         actions: dict[int, Callable[[], Coroutine[Any, Any, Any]]] = {}
 
-        for hk_id, label, key_str, coro_fn in specs:
+        for hk_id, name, label, key_str, coro_fn in specs:
             if not key_str.strip():
                 continue
             try:
                 mods, vk = parse_win32_hotkey(key_str)
                 if user32.RegisterHotKey(None, hk_id, mods, vk):
                     actions[hk_id] = coro_fn
+                    self._registered_bindings[name] = key_str
                     logger.info(f"已注册全局热键 [{label}]: {key_str}")
                 else:
                     err = ctypes.get_last_error()
-                    logger.warning(f"注册全局热键 [{label}] ({key_str}) 失败, WinError={err}")
+                    raise OSError(err, ctypes.FormatError(err))
             except Exception as exc:
-                logger.warning(f"解析或注册全局热键 [{label}] ({key_str}) 失败: {exc}")
+                error = f"注册全局热键 [{label}] ({key_str}) 失败: {exc}"
+                self._registration_errors.append(error)
+                logger.warning(error)
 
-        ready_event.set()
+        # 先创建消息队列，再通知主线程就绪，保证紧接着的 stop/reload 能投递 WM_QUIT。
         msg = wintypes.MSG()
+        user32.PeekMessageW(ctypes.byref(msg), None, 0, 0, 0)
+        ready_event.set()
         try:
             while self._running:
                 ret = user32.GetMessageW(ctypes.byref(msg), None, 0, 0)
@@ -181,13 +212,25 @@ class _HotkeyManager:
                     hk_id = int(msg.wParam)
                     coro_fn = actions.get(hk_id)
                     if coro_fn is not None and self._loop is not None:
-                        asyncio.run_coroutine_threadsafe(coro_fn(), self._loop)
+                        asyncio.run_coroutine_threadsafe(
+                            self._run_action(coro_fn), self._loop
+                        )
         finally:
             for hk_id in actions:
                 try:
                     user32.UnregisterHotKey(None, hk_id)
                 except Exception:
                     pass
+
+    async def _run_action(self, action: Callable[[], Coroutine[Any, Any, Any]]) -> None:
+        if self._action_lock.locked():
+            return
+        async with self._action_lock:
+            try:
+                result = await action()
+                logger.info(f"全局热键操作完成: {result}")
+            except Exception:
+                logger.exception("全局热键操作失败")
 
     async def trigger_toggle_start_stop(self) -> dict[str, Any]:
         from app.core import TaskManager

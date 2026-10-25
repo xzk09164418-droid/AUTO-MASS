@@ -35,7 +35,7 @@ async def ensure_execution_session() -> None:
         raise RuntimeError("RDP 执行会话已改变，请重新启动主程序")
 
 
-async def relay_to_execution_session(argv: list[str]) -> int | None:
+async def relay_to_execution_session(argv: list[str], *, http_port: int) -> int | None:
     """主桌面启动后端并等待退出；已在目标会话或未启用时返回 None。"""
     if os.name != "nt":
         return None
@@ -84,7 +84,10 @@ async def relay_to_execution_session(argv: list[str]) -> int | None:
             PARENT_TIME_ENV: str(psutil.Process().create_time()),
         }
     )
+    from app.core.hotkey_relay import run_hotkey_relay
+
     process = None
+    hotkeys = None
     try:
         process = await ChildSessionManager.launch_in_child_session(
             sys.executable,
@@ -94,8 +97,13 @@ async def relay_to_execution_session(argv: list[str]) -> int | None:
             env=env,
         )
         logger.info(f"主桌面仅保留启动桥接，任务后端位于 Session={session_id}")
+        hotkeys = asyncio.create_task(run_hotkey_relay(http_port))
         return await process.wait()
     finally:
+        if hotkeys is not None:
+            hotkeys.cancel()
+            with suppress(asyncio.CancelledError):
+                await hotkeys
         if process is not None:
             if process.returncode is None:
                 process.terminate()

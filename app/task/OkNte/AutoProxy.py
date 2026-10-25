@@ -1186,7 +1186,7 @@ class AutoProxyTask(ScriptAutoProxyBase):
             await Config.save_general_log(log_path, log_item.content, log_item.status)
             user_logs_list.append(log_path.with_suffix(".json"))
 
-        if user_logs_list:
+        if user_logs_list or (not self.run_book and not self.cur_user_item.maintenance_skipped):
             statistics = await Config.merge_statistic_info(user_logs_list)
             statistics["user_info"] = self.cur_user_item.name
             statistics["start_time"] = self.user_start_time.strftime(
@@ -1197,6 +1197,9 @@ class AutoProxyTask(ScriptAutoProxyBase):
                 "OK-NTE 任务全部完成" if self.run_book else self.cur_user_item.result
             )
             # 维护跳过不是失败，统计标题用中性符号而非失败标记
+            statistics["notification_failed"] = (
+                not self.run_book and not self.cur_user_item.maintenance_skipped
+            )
             success_symbol = (
                 "√"
                 if self.run_book

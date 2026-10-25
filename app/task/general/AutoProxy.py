@@ -748,6 +748,7 @@ class AutoProxyTask(ScriptAutoProxyBase):
             "代理任务全部完成" if self.run_book else self.cur_user_item.result
         )
 
+        statistics["notification_failed"] = not self.run_book
         success_symbol = "√" if self.run_book else "X"
 
         try:

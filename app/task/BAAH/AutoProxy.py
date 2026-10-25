@@ -957,6 +957,7 @@ class AutoProxyTask(ScriptAutoProxyBase):
                 "代理任务全部完成" if self.run_book else self.cur_user_item.status
             ),
         }
+        statistics["notification_failed"] = not self.run_book
         success_symbol = "√" if self.run_book else "X"
         title = (
             f"{datetime.now().strftime('%m-%d')} |{success_symbol}|  "

@@ -1890,7 +1890,7 @@ class AutoProxyTask(ScriptAutoProxyBase):
                 f"用户 {self.cur_user_item.name} 未开启「统计掉落物品」，跳过掉落解析"
             )
 
-        if statistic_paths:
+        if statistic_paths or not self.run_book:
             try:
                 statistics = await Config.merge_statistic_info(statistic_paths)
                 if one_dragon_report:
@@ -1909,6 +1909,9 @@ class AutoProxyTask(ScriptAutoProxyBase):
                     statistics["user_result"] = (
                         f"代理任务完成（{self.partial_failed_steps} 个步骤失败已跳过）"
                     )
+                statistics["notification_failed"] = not self.run_book or bool(
+                    self.partial_failed_steps
+                )
                 success_symbol = "√" if self.run_book else "X"
                 # 统计通知的字段清单：用于确认分步表/掉落表这类可选区块到底有没有下发
                 logger.info(

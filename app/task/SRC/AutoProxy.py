@@ -755,6 +755,7 @@ class AutoProxyTask(ScriptAutoProxyBase):
         )
 
         # 判断是否成功
+        statistics["notification_failed"] = not self.run_book
         success_symbol = "√" if self.run_book else "X"
 
         try:

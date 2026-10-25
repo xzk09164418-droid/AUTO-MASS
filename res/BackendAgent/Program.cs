@@ -81,6 +81,7 @@ namespace AutoMas.BackendAgent
                 return RunPython(python, arguments, root, null, null);
             int port = (int)hints["HostPort"];
             Process ownedHost = null;
+            Process hotkeyRelay = null;
             try
             {
                 Dictionary<string, object> status = null;
@@ -136,6 +137,11 @@ namespace AutoMas.BackendAgent
                     using (var writer = new StreamWriter(pipe, Utf8, 16384, true) { AutoFlush = true })
                     {
                         writer.WriteLine(Json.Serialize(new { version = 1, python, arguments, root, sessionId, environment }));
+                        // 后端在分身中注册热键；主桌面需要自己的监听器转交同一组调度接口。
+                        hotkeyRelay = Process.Start(new ProcessStartInfo(python,
+                            "-m app.core.hotkey_relay --parent-pid " + Process.GetCurrentProcess().Id +
+                            " -- " + string.Join(" ", arguments.Skip(1).Select(Quote)))
+                        { UseShellExecute = false, CreateNoWindow = true, WorkingDirectory = root });
                         string line;
                         while ((line = reader.ReadLine()) != null)
                         {
@@ -152,6 +158,11 @@ namespace AutoMas.BackendAgent
             }
             finally
             {
+                if (hotkeyRelay != null)
+                {
+                    if (!hotkeyRelay.HasExited) hotkeyRelay.Kill();
+                    hotkeyRelay.Dispose();
+                }
                 // 只回收自己创建的宿主；前端关闭与此独立代理无关。
                 if (ownedHost != null && !ownedHost.HasExited) CallHost(port, "/shutdown", new Dictionary<string, object>(), 2000);
                 if (ownedHost != null) ownedHost.Dispose();

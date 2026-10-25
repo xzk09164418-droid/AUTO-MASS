@@ -258,7 +258,10 @@ def main(argv: list[str] | None = None):
     from app.core.desktop_runtime import relay_to_execution_session
 
     relay_returncode = asyncio.run(
-        relay_to_execution_session(list(sys.argv[1:] if argv is None else argv))
+        relay_to_execution_session(
+            list(sys.argv[1:] if argv is None else argv),
+            http_port=resolve_http_port(development_environment, cli_args.port),
+        )
     )
     if relay_returncode is not None:
         raise SystemExit(relay_returncode)

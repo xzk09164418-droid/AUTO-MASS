@@ -255,23 +255,7 @@ def user_target(user_config: Any) -> NotifyTarget:
 
 
 def should_send_result(message: dict, *, task_info: object | None = None) -> bool:
-    """判断代理结果是否满足全局推送时机。"""
-
-    if message.get("game_sign_summary", False):
-        return True
-
-    if task_info is not None:
-        from app.tools.community_notify import append_task_community_summary
-
-        if append_task_community_summary(task_info, ""):
-            return True
-        community_sign = getattr(task_info, "community_sign_notification", None)
-        if (
-            community_sign is not None
-            and not community_sign.completed.is_set()
-            and Config.ToolsConfig.get("GameSign", "NotifyEnabled")
-        ):
-            return True
+    """判断单项任务是否满足全局推送时机，签到通知由独立出口处理。"""
 
     result_time = Config.get("Notify", "SendTaskResultTime")
     if result_time == "任何时刻":
@@ -295,13 +279,14 @@ def user_statistic_targets(user_config: Any | None) -> list[NotifyTarget]:
 def statistic_targets(
     user_config: Any | None,
     *,
+    failed: bool = False,
     global_empty_policy: EmptyPolicy = "send",
     compact_summary: bool = False,
 ) -> list[NotifyTarget]:
-    """返回全局与用户级统计通知目标。"""
+    """返回单项任务报告的渠道；汇总开关不参与单项通知判断。"""
 
     targets = []
-    if Config.get("Notify", "IfSendStatistic"):
+    if should_send_result({"uncompleted_count": int(failed)}):
         targets.append(global_target(empty_policy=global_empty_policy))
     targets.extend(user_statistic_targets(user_config))
     if compact_summary:

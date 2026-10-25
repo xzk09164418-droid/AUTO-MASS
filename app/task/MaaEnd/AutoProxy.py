@@ -2787,9 +2787,10 @@ class AutoProxyTask(ScriptAutoProxyBase):
             "代理任务全部完成" if completed else self.cur_user_item.result
         )
 
+        statistics["notification_failed"] = not completed
         success_symbol = "√" if completed else "X"
 
-        if user_logs_list:
+        if user_logs_list or (not completed):
             try:
                 await push_notification(
                     "统计信息",

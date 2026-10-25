@@ -3214,6 +3214,9 @@ class MaaFWPluginAutoProxyTask(TaskExecuteBase):
                 image_id_prefix="maafw",
             )
             statistics["screenshots"] = screenshot_entries(images)
+            statistics["notification_failed"] = (
+                not self.run_complete and not self._is_maintenance_skip()
+            )
             signal_message = self._signal_user_message()
             # 有失效任务时照常算完成（次数、状态不动），但不能说成「全部完成」
             if self.run_complete and self.missing_task_names:

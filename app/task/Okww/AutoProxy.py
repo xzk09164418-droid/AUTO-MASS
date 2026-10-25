@@ -1052,7 +1052,7 @@ class AutoProxyTask(ScriptAutoProxyBase):
             await Config.save_general_log(log_path, log_item.content, log_item.status)
             statistic_paths.append(log_path.with_suffix(".json"))
 
-        if statistic_paths:
+        if statistic_paths or not self.run_book:
             try:
                 statistics = await Config.merge_statistic_info(statistic_paths)
                 statistics["user_info"] = self.cur_user_item.name
@@ -1063,6 +1063,7 @@ class AutoProxyTask(ScriptAutoProxyBase):
                     "代理任务全部完成" if self.run_book else self.cur_user_item.result
                 )
                 # 维护跳过不是失败，统计标题用中性符号而非失败标记
+                statistics["notification_failed"] = not self.run_book
                 success_symbol = (
                     "√"
                     if self.run_book

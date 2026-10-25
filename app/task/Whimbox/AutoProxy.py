@@ -579,7 +579,7 @@ class AutoProxyTask(ScriptAutoProxyBase):
             await Config.save_general_log(log_path, log_item.content, log_item.status)
             statistic_paths.append(log_path.with_suffix(".json"))
 
-        if statistic_paths:
+        if statistic_paths or not self.run_book:
             try:
                 statistics = await Config.merge_statistic_info(statistic_paths)
                 if self.result_block:
@@ -595,6 +595,7 @@ class AutoProxyTask(ScriptAutoProxyBase):
                 statistics["user_result"] = (
                     "一条龙任务已完成" if self.run_book else self.cur_user_item.result
                 )
+                statistics["notification_failed"] = not self.run_book
                 success_symbol = "√" if self.run_book else "X"
                 await push_notification(
                     "统计信息",

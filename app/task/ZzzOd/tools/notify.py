@@ -43,7 +43,9 @@ async def push_notification(
 
     if mode == "统计信息":
         # 统计信息遵循全局开关，并保留用户独立渠道。
-        targets = statistic_targets(user_config)
+        targets = statistic_targets(
+            user_config, failed=bool(message.get("notification_failed", False))
+        )
         if not targets:
             return DispatchResult()
 

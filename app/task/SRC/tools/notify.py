@@ -63,7 +63,9 @@ async def push_notification(
                 text=message_text,
                 html=template.render(message),
             ),
-            statistic_targets(user_config),
+            statistic_targets(
+                user_config, failed=bool(message.get("notification_failed", False))
+            ),
         )
 
     return DispatchResult()

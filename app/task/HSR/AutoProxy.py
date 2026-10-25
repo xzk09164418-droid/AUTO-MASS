@@ -548,6 +548,10 @@ class HSRAutoProxyTask(TaskExecuteBase):
             "end_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "user_result": user_result,
         }
+        statistics["notification_failed"] = self.cur_user_item.status not in (
+            "完成",
+            "跳过",
+        )
         success_symbol = "√" if self.cur_user_item.status == "完成" else "X"
 
         try:

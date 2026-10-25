@@ -42,7 +42,6 @@ export function useLocalControls() {
     const data: GlobalConfig & LocalConfig = { ...config }
     const result = await UpdateService.updateScriptApiSettingUpdatePost({ data })
     if (result.code !== 200) throw new Error(result.message)
-    await invokeBrowserHost('localControl', 'reloadHotkeys', {})
   }
   async function refreshStatus() {
     status.value = await invokeBrowserHost<DesktopStatus>('localControl', 'status', {})

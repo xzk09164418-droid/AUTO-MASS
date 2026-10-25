@@ -75,13 +75,13 @@ async def push_proxy_result(
         result_template: 结果 HTML 模板名，MAA 用 MAA_result.html。
         signature_sep: 签名分隔符，默认与 NotifyPayload 缺省一致；MAA 只空一行。
         logger: 调用方模块 logger，仅用于可选的跳过 debug 日志。
-        skip_debug_message: SendTaskResultTime 不满足时的 debug 文案，仅 M9A 传入。
+        skip_debug_message: 汇总通知关闭时的 debug 文案，仅 M9A 传入。
         images: 随报告提供的图片资源。HTML 模板通过稳定资源 ID 引用需要展示的图片。
         include_system: 是否弹系统通知。本轮已由专门的通知弹过（如 MaaFW 的停服维护 /
             需要更新）时传 False，免得同一件事弹两次。
     """
 
-    if not should_send_result(message, task_info=task_info):
+    if not Config.get("Notify", "IfSendStatistic"):
         if logger is not None and skip_debug_message:
             logger.debug(skip_debug_message)
         return DispatchResult()

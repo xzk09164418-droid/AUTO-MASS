@@ -3756,6 +3756,11 @@ class AppConfig(GlobalConfig):
             data = {**data, "Replay": replay}
         await self.update(data)
 
+        if "Hotkey" in data:
+            from app.core.hotkey_manager import HotkeyManager
+
+            await HotkeyManager.reload()
+
         logger.success("全局设置更新成功")
 
     async def get_webhook(
