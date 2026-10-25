@@ -22,13 +22,14 @@ function createStartupStatus(root, backendPort, launchError) {
         state.carry = ''
         state.identity = stat.ino
       }
+      if (stat.size === state.position) continue
       const start = Math.max(state.position, stat.size - 16384)
       const buffer = Buffer.alloc(stat.size - start)
-      const fd = fs.openSync(state.file, 'r')
+      const file = await fs.promises.open(state.file, 'r')
       try {
-        fs.readSync(fd, buffer, 0, buffer.length, start)
+        await file.read(buffer, 0, buffer.length, start)
       } finally {
-        fs.closeSync(fd)
+        await file.close()
       }
       const text = (start === state.position ? state.carry : '') + buffer.toString('utf8')
       const lines = text.split(/\r?\n/)
