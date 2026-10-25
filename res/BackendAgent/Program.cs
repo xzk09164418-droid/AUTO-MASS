@@ -248,7 +248,21 @@ namespace AutoMas.BackendAgent
                 using (var reader = new StreamReader(response.GetResponseStream(), Utf8))
                     return Json.Deserialize<Dictionary<string, object>>(reader.ReadToEnd());
             }
-            catch (WebException) { return null; }
+            catch (WebException error)
+            {
+                // 启动失败保留宿主的具体原因；状态探测仍允许宿主尚未就绪。
+                if ((path == "/launch" || path == "/connect") && error.Response != null)
+                {
+                    using (var response = error.Response)
+                    using (var reader = new StreamReader(response.GetResponseStream(), Utf8))
+                    {
+                        var detail = Json.Deserialize<Dictionary<string, object>>(reader.ReadToEnd());
+                        if (detail != null && detail.ContainsKey("error"))
+                            throw new InvalidOperationException("远程桌面宿主 " + path + " 失败: " + detail["error"]);
+                    }
+                }
+                return null;
+            }
         }
 
         private static string Quote(string value)

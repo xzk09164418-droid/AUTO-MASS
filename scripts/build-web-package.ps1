@@ -40,11 +40,11 @@ $icon = Join-Path $root 'res\icons\AUTO-MAS.ico'
 $common = @('/nologo', '/codepage:65001', '/target:winexe', '/platform:x64', '/optimize+', "/win32icon:$icon", '/r:System.dll', '/r:System.Core.dll', '/r:System.Drawing.dll', '/r:System.Windows.Forms.dll')
 $hostOutput = Join-Path $target 'res\ChildSessionHost\AutoMas.ChildSessionHost.exe'
 $hostSources = @(Get-ChildItem -LiteralPath (Join-Path $root 'res\ChildSessionHost') -Filter '*.cs' | ForEach-Object { $_.FullName })
-& $csc @common "/out:$hostOutput" '/r:Microsoft.CSharp.dll' @hostSources
+& $csc @common "/win32manifest:$(Join-Path $root 'res\ChildSessionHost\app.manifest')" "/out:$hostOutput" '/r:Microsoft.CSharp.dll' @hostSources
 if ($LASTEXITCODE -ne 0) { throw '远程桌面宿主编译失败' }
 $launcherOutput = Join-Path $target 'AUTO-MAS.exe'
 $launcherSource = Join-Path $root 'res\Launcher\AutoMasLauncher.cs'
-& $csc @common "/out:$launcherOutput" '/r:System.Web.Extensions.dll' $launcherSource
+& $csc @common "/win32manifest:$(Join-Path $root 'res\Launcher\app.manifest')" "/out:$launcherOutput" '/r:System.Web.Extensions.dll' $launcherSource
 if ($LASTEXITCODE -ne 0) { throw '托盘启动器编译失败' }
 $agentOutput = Join-Path $target 'res\BackendAgent\AutoMas.BackendAgent.exe'
 $agentSource = Join-Path $root 'res\BackendAgent\Program.cs'
