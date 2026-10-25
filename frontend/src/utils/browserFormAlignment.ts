@@ -70,7 +70,18 @@ export function installBrowserFormAlignment() {
       records.some(record => {
         const element =
           record.target instanceof Element ? record.target : record.target.parentElement
-        return element?.closest('.ant-row, .ant-modal, .ant-drawer, #app')
+        if (!element?.closest('.ant-row, .ant-modal, .ant-drawer, #app')) return false
+        // 只重新测量受表单行影响的变化；菜单、状态文字等更新不改变标签对齐。
+        return (
+          (record.type === 'attributes' && record.oldValue?.split(/\s+/).includes('ant-row')) ||
+          element.closest('.ant-row') !== null ||
+          element.querySelector('.ant-row') !== null ||
+          Array.from(record.removedNodes).some(
+            node =>
+              node instanceof Element &&
+              (node.matches('.ant-row') || node.querySelector('.ant-row') !== null)
+          )
+        )
       })
     ) {
       schedule()
@@ -81,6 +92,7 @@ export function installBrowserFormAlignment() {
     characterData: true,
     subtree: true,
     attributes: true,
+    attributeOldValue: true,
     attributeFilter: ['class'],
   })
   window.addEventListener('resize', schedule)
