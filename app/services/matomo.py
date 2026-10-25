@@ -25,6 +25,7 @@ import json
 import platform
 import time
 import uuid
+from importlib import import_module
 from typing import Any, Dict, Optional
 
 import httpx
@@ -46,21 +47,27 @@ class _MatomoHandler:
     def __init__(self):
 
         self.session: httpx.AsyncClient | None = None
+        self._session_lock = asyncio.Lock()
 
     async def _get_session(self) -> httpx.AsyncClient:
         """获取HTTP会话"""
 
-        if self.session is None or self.session.is_closed:
-            # 上下文仅归本客户端所有，避免各代理传输重复加载同一证书包。
-            self.session = httpx.AsyncClient(
-                timeout=10, verify=httpx.create_ssl_context()
-            )
-        return self.session
+        async with self._session_lock:
+            if self.session is None or self.session.is_closed:
+                # 在线程中加载证书，提前解析依赖以免并发冷导入。
+                for dependency in ("ssl", "warnings", "certifi"):
+                    import_module(dependency)
+                context = await asyncio.to_thread(httpx.create_ssl_context)
+                # 上下文仅归本客户端所有，避免各代理传输重复加载同一证书包。
+                self.session = httpx.AsyncClient(timeout=10, verify=context)
+            return self.session
 
     async def close(self):
         """关闭HTTP会话"""
-        if self.session is not None and not self.session.is_closed:
-            await self.session.aclose()
+        # 初始化与关闭串行，避免关闭返回后才创建出一个无人回收的会话。
+        async with self._session_lock:
+            if self.session is not None and not self.session.is_closed:
+                await self.session.aclose()
 
     def _build_base_params(self, custom_vars: Optional[Dict[str, Any]] = None):
         """构建基础参数"""
