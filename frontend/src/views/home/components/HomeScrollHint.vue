@@ -25,6 +25,7 @@ const visible = ref(false)
 const THRESHOLD = 200
 let scrollContainer: Element | null = null
 let observer: MutationObserver | null = null
+let checkFrame: number | null = null
 
 const checkScroll = () => {
   if (!scrollContainer) return
@@ -34,6 +35,15 @@ const checkScroll = () => {
   visible.value = scrollable && !atBottom
 }
 
+// 同一帧内的异步内容更新合并检查，避免每次 DOM 变动都强制重新布局。
+const scheduleCheckScroll = () => {
+  if (!scrollContainer || checkFrame !== null) return
+  checkFrame = requestAnimationFrame(() => {
+    checkFrame = null
+    checkScroll()
+  })
+}
+
 const scrollDown = () => {
   scrollContainer?.scrollBy({ top: 400, behavior: 'smooth' })
 }
@@ -41,15 +51,18 @@ const scrollDown = () => {
 onMounted(() => {
   scrollContainer = document.querySelector('.content-area')
   if (!scrollContainer) return
-  scrollContainer.addEventListener('scroll', checkScroll, { passive: true })
-  observer = new MutationObserver(checkScroll)
+  scrollContainer.addEventListener('scroll', scheduleCheckScroll, { passive: true })
+  observer = new MutationObserver(scheduleCheckScroll)
   observer.observe(scrollContainer, { childList: true, subtree: true })
   checkScroll()
 })
 
 onBeforeUnmount(() => {
-  scrollContainer?.removeEventListener('scroll', checkScroll)
+  scrollContainer?.removeEventListener('scroll', scheduleCheckScroll)
   observer?.disconnect()
+  if (checkFrame !== null) cancelAnimationFrame(checkFrame)
+  checkFrame = null
+  scrollContainer = null
 })
 </script>
 
