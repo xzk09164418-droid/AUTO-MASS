@@ -19,16 +19,23 @@
 #   Contact: DLmaster_361@163.com
 
 
-from .community import (
-    format_community_sign_results,
-    has_community_credentials,
-    run_community_sign_in,
-)
-from .skland import skland_sign_in
+from importlib import import_module
 
-__all__ = [
-    "format_community_sign_results",
-    "has_community_credentials",
-    "run_community_sign_in",
-    "skland_sign_in",
-]
+_LAZY_EXPORTS = {
+    "format_community_sign_results": (".community", "format_community_sign_results"),
+    "has_community_credentials": (".community", "has_community_credentials"),
+    "run_community_sign_in": (".community", "run_community_sign_in"),
+    "skland_sign_in": (".skland", "skland_sign_in"),
+}
+
+
+def __getattr__(name: str):
+    if name not in _LAZY_EXPORTS:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    module_name, attribute_name = _LAZY_EXPORTS[name]
+    value = getattr(import_module(module_name, __name__), attribute_name)
+    globals()[name] = value
+    return value
+
+
+__all__ = list(_LAZY_EXPORTS)
