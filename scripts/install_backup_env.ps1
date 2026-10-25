@@ -65,4 +65,5 @@ if ($LASTEXITCODE -ne 0) { throw '安装 Python 依赖失败，请检查网络�
 if ($LASTEXITCODE -ne 0) { throw 'Python 依赖验证失败。' }
 & $nodePath -e "require('./frontend/node_modules/adm-zip'); console.log('Node dependency OK')"
 if ($LASTEXITCODE -ne 0) { throw 'Node 运行依赖验证失败。' }
-Write-Host '环境安装完成。请双击 AUTO-MAS.exe，并允许管理员授权。不会自动运行队列。'
+& (Join-Path $PSScriptRoot 'configure_autostart.ps1')
+Write-Host '环境安装完成，已配置登录自启。可双击 AUTO-MAS.exe 立即启动，或运行 Disable-Autostart.cmd 关闭自启。'
