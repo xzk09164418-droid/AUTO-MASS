@@ -51,7 +51,10 @@ class _MatomoHandler:
         """获取HTTP会话"""
 
         if self.session is None or self.session.is_closed:
-            self.session = httpx.AsyncClient(timeout=10)
+            # 上下文仅归本客户端所有，避免各代理传输重复加载同一证书包。
+            self.session = httpx.AsyncClient(
+                timeout=10, verify=httpx.create_ssl_context()
+            )
         return self.session
 
     async def close(self):

@@ -293,17 +293,7 @@ def main(argv: list[str] | None = None):
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        from importlib import import_module
-
-        from httpx import create_ssl_context
-
         from app.core import Config, MainTimer, TaskManager
-
-        # HTTPX 按证书来源构建上下文；预热同一入口才能命中后续请求的缓存。
-        # 先在事件循环解析其函数内依赖，避免工作线程并发冷导入。
-        for dependency in ("ssl", "warnings", "certifi"):
-            import_module(dependency)
-        asyncio.create_task(asyncio.to_thread(create_ssl_context))
 
         await Config.init_config()
 

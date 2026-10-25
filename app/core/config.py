@@ -289,25 +289,6 @@ class AppConfig(GlobalConfig):
                 truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT),
             )
 
-        # 缓存 SSL 上下文：httpx 为每个 AsyncClient 都调用 create_default_context()，
-        # truststore 场景下会全量加载 Windows 证书库（实测一次 5~15s，且发生在
-        # 事件循环上时冻结全部请求）。按参数缓存后全程只加载一次，
-        # 首次加载由启动预热线程完成，见 main.py。
-        _original_create_default_context = ssl.create_default_context
-        _ssl_context_cache: dict[tuple, ssl.SSLContext] = {}
-
-        def _cached_create_default_context(
-            *args: object, **kwargs: object
-        ) -> ssl.SSLContext:
-            key = (args, tuple(sorted(kwargs.items())))
-            context = _ssl_context_cache.get(key)
-            if context is None:
-                context = _original_create_default_context(*args, **kwargs)
-                _ssl_context_cache[key] = context
-            return context
-
-        ssl.create_default_context = _cached_create_default_context
-
     def _get_repo(self) -> Any:
         """惰性初始化 Git 仓库，避免启动时导入 GitPython。"""
         if not self._repo_initialized:
