@@ -23,7 +23,10 @@ namespace BetterGenshinImpact.Service.ChildSession
         private void RememberFonts(Control control)
         {
             if (control == _rdpHost) return;
-            _designFonts[control] = control.Font;
+            // ActiveX 的 COM IFont 要求点单位字体。仅缩放文字控件，
+            // 不改变 Form/Panel 的继承字体，避免 RDP 激活时继承像素字体而崩溃。
+            if (control is Label || control is Button || control is ToolStrip)
+                _designFonts[control] = control.Font;
             foreach (Control child in control.Controls) RememberFonts(child);
         }
 
