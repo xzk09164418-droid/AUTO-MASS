@@ -24,7 +24,7 @@ namespace BetterGenshinImpact.Service.ChildSession
     /// 3. 常驻 Windows Child Session 远程桌面连接 + 计划任务 (`TASK_RUN_USE_SESSION_ID`) 子会话进程/包装器启动。
     /// 4. 外部程序借用远程桌面（Disconnect 让渡画面但保持 Child Session 存活）与停止使用后回传重连（Reconnect）。
     /// </summary>
-    public sealed class ChildSessionHostForm : Form
+    public sealed partial class ChildSessionHostForm : Form
     {
         private readonly RdpActiveXHost _rdpHost;
         private readonly HttpListener _httpListener;
@@ -98,7 +98,7 @@ namespace BetterGenshinImpact.Service.ChildSession
         private bool _audioMuted = true;
         private bool _smartSizingEnabled = true;
         private bool _sendShortcutsToRemote = true;
-        private bool _lockAspectRatio16By9 = false;
+        private bool _lockDesktopAspectRatio = false;
         private bool _miniWindowMode = false;
         private Rectangle _normalBounds;
         private bool _allowClose;
@@ -113,14 +113,16 @@ namespace BetterGenshinImpact.Service.ChildSession
             _desktopSize = new Size(width, height);
             _isHiddenToTray = startHidden;
 
+            AutoScaleMode = AutoScaleMode.None;
             Text = "BetterGI 桌面分身 · AUTO-MAS";
-            ClientSize = new Size(1280, 752);
             MinimumSize = new Size(415, 90);
             StartPosition = FormStartPosition.Manual;
             var screenArea = Screen.PrimaryScreen != null ? Screen.PrimaryScreen.WorkingArea : new Rectangle(0, 0, 1920, 1080);
+            ClientSize = new Size(Math.Min(1280, Math.Max(375, screenArea.Width - 40)),
+                Math.Min(752, Math.Max(200, screenArea.Height - 80)));
             _lastVisibleLocation = new Point(
-                Math.Max(20, (screenArea.Width - 1280) / 2),
-                Math.Max(20, (screenArea.Height - 752) / 2));
+                screenArea.Left + Math.Max(0, (screenArea.Width - Width) / 2),
+                screenArea.Top + Math.Max(0, (screenArea.Height - Height) / 2));
             Location = _lastVisibleLocation;
 
             BackColor = BgDark;
@@ -137,6 +139,7 @@ namespace BetterGenshinImpact.Service.ChildSession
 
             BuildBgiStyleInterface();
             BuildSystemTrayIcon();
+            InitializeResponsiveLayout();
 
             if (_isHiddenToTray)
             {
@@ -546,6 +549,7 @@ namespace BetterGenshinImpact.Service.ChildSession
             };
             _badgePanel.Paint += delegate(object s, PaintEventArgs e)
             {
+                e.Graphics.ScaleTransform(_badgePanel.Width / 68f, _badgePanel.Height / 68f);
                 e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
                 using (var brush = new SolidBrush(Color.FromArgb(38, 47, 164, 231)))
                 using (var pen = new Pen(Color.FromArgb(95, 47, 164, 231), 1.5f))
@@ -770,9 +774,7 @@ namespace BetterGenshinImpact.Service.ChildSession
             {
                 return;
             }
-            var x = Math.Max(12, (_overlayBackdrop.ClientSize.Width - _centerCard.Width) / 2);
-            var y = Math.Max(12, (_overlayBackdrop.ClientSize.Height - _centerCard.Height) / 2);
-            _centerCard.Location = new Point(x, y);
+            LayoutResponsiveControls();
         }
 
         private Button CreateToolbarButton(string text, int width)
@@ -820,10 +822,19 @@ namespace BetterGenshinImpact.Service.ChildSession
 
             // 分辨率子菜单
             var menuResolution = new ToolStripMenuItem("桌面分辨率") { Name = "MenuResolution", ForeColor = TextPrimary };
-            AddResolutionMenuItem(menuResolution, "1920 × 1080 (1080P)", 1920, 1080);
-            AddResolutionMenuItem(menuResolution, "1600 × 900 (900P)", 1600, 900);
-            AddResolutionMenuItem(menuResolution, "1280 × 720 (720P)", 1280, 720);
-            AddResolutionMenuItem(menuResolution, "2560 × 1440 (2K 默认)", 2560, 1440);
+            AddResolutionMenuItem(menuResolution, "1280 × 720 (16:9)", 1280, 720);
+            AddResolutionMenuItem(menuResolution, "1280 × 800 (16:10)", 1280, 800);
+            AddResolutionMenuItem(menuResolution, "1600 × 900 (16:9)", 1600, 900);
+            AddResolutionMenuItem(menuResolution, "1920 × 1080 (16:9)", 1920, 1080);
+            AddResolutionMenuItem(menuResolution, "1920 × 1200 (16:10)", 1920, 1200);
+            AddResolutionMenuItem(menuResolution, "2560 × 1440 (16:9 默认)", 2560, 1440);
+            AddResolutionMenuItem(menuResolution, "2560 × 1600 (16:10)", 2560, 1600);
+            AddResolutionMenuItem(menuResolution, "2880 × 1620 (16:9)", 2880, 1620);
+            AddResolutionMenuItem(menuResolution, "2880 × 1800 (16:10)", 2880, 1800);
+            AddResolutionMenuItem(menuResolution, "3200 × 1800 (16:9)", 3200, 1800);
+            AddResolutionMenuItem(menuResolution, "3200 × 2000 (16:10)", 3200, 2000);
+            AddResolutionMenuItem(menuResolution, "3840 × 2160 (16:9)", 3840, 2160);
+            AddResolutionMenuItem(menuResolution, "3840 × 2400 (16:10)", 3840, 2400);
 
             // 窗口缩放子菜单
             var menuScaling = new ToolStripMenuItem("窗口画面模式") { Name = "MenuScaling", ForeColor = TextPrimary };
@@ -831,27 +842,27 @@ namespace BetterGenshinImpact.Service.ChildSession
             itemSmartSizing.Click += delegate
             {
                 _smartSizingEnabled = true;
-                _lockAspectRatio16By9 = false;
+                _lockDesktopAspectRatio = false;
                 _rdpHost.SetSmartSizing(true);
             };
             var itemNative1To1 = new ToolStripMenuItem("1 : 1 原始像素") { Name = "Scale1To1", ForeColor = TextPrimary };
             itemNative1To1.Click += delegate
             {
                 _smartSizingEnabled = false;
-                _lockAspectRatio16By9 = false;
+                _lockDesktopAspectRatio = false;
                 _rdpHost.SetSmartSizing(false);
             };
-            var itemAspect16By9 = new ToolStripMenuItem("保持 16 : 9 窗口宽高比") { Name = "Scale16By9", ForeColor = TextPrimary };
-            itemAspect16By9.Click += delegate
+            var itemDesktopAspect = new ToolStripMenuItem("保持所选桌面宽高比") { Name = "ScaleDesktopAspect", ForeColor = TextPrimary };
+            itemDesktopAspect.Click += delegate
             {
                 _smartSizingEnabled = true;
-                _lockAspectRatio16By9 = true;
+                _lockDesktopAspectRatio = true;
                 _rdpHost.SetSmartSizing(true);
-                Enforce16By9ClientRatio();
+                EnforceDesktopClientRatio();
             };
             menuScaling.DropDownItems.Add(itemSmartSizing);
             menuScaling.DropDownItems.Add(itemNative1To1);
-            menuScaling.DropDownItems.Add(itemAspect16By9);
+            menuScaling.DropDownItems.Add(itemDesktopAspect);
 
             // 快捷键子菜单
             var menuShortcuts = new ToolStripMenuItem("快捷键") { Name = "MenuShortcuts", ForeColor = TextPrimary };
@@ -996,10 +1007,10 @@ namespace BetterGenshinImpact.Service.ChildSession
             {
                 var sSmart = menuScale.DropDownItems["ScaleSmart"] as ToolStripMenuItem;
                 var s1To1 = menuScale.DropDownItems["Scale1To1"] as ToolStripMenuItem;
-                var s16By9 = menuScale.DropDownItems["Scale16By9"] as ToolStripMenuItem;
-                if (sSmart != null) sSmart.Checked = _smartSizingEnabled && !_lockAspectRatio16By9;
+                var sDesktopAspect = menuScale.DropDownItems["ScaleDesktopAspect"] as ToolStripMenuItem;
+                if (sSmart != null) sSmart.Checked = _smartSizingEnabled && !_lockDesktopAspectRatio;
                 if (s1To1 != null) s1To1.Checked = !_smartSizingEnabled;
-                if (s16By9 != null) s16By9.Checked = _lockAspectRatio16By9;
+                if (sDesktopAspect != null) sDesktopAspect.Checked = _lockDesktopAspectRatio;
             }
 
             var menuShortcuts = _controlCenterMenu.Items["MenuShortcuts"] as ToolStripMenuItem;
@@ -1035,14 +1046,14 @@ namespace BetterGenshinImpact.Service.ChildSession
             UpdateToolbarButtonsVisualState();
         }
 
-        private void Enforce16By9ClientRatio()
+        private void EnforceDesktopClientRatio()
         {
-            if (!_lockAspectRatio16By9 || WindowState != FormWindowState.Normal || _isHiddenToTray)
+            if (!_lockDesktopAspectRatio || WindowState != FormWindowState.Normal || _isHiddenToTray)
             {
                 return;
             }
             var targetWidth = Math.Max(480, ClientSize.Width);
-            var targetRdpHeight = (int)Math.Round(targetWidth * 9.0 / 16.0);
+            var targetRdpHeight = (int)Math.Round(targetWidth * (double)_desktopSize.Height / _desktopSize.Width);
             var chromeHeight = _topBar.Height + (_infoBarPanel.Visible ? _infoBarPanel.Height : 0);
             ClientSize = new Size(targetWidth, targetRdpHeight + chromeHeight);
         }
@@ -1148,6 +1159,7 @@ namespace BetterGenshinImpact.Service.ChildSession
             if (connected && string.IsNullOrEmpty(_externalLeaseHolder))
             {
                 _overlayBackdrop.Visible = false;
+                LayoutResponsiveControls();
                 _rdpHost.BringToFront();
                 return;
             }
@@ -1194,6 +1206,7 @@ namespace BetterGenshinImpact.Service.ChildSession
                 ? "✓ Windows Child Session 与 RDP 端口环境预检通过。"
                 : envSummary;
             _lblEnvSummary.ForeColor = string.IsNullOrWhiteSpace(envSummary) ? StatusGreen : StatusYellow;
+            LayoutResponsiveControls();
         }
 
         private async void PromptAndLaunchInChildSession()
@@ -1273,9 +1286,9 @@ namespace BetterGenshinImpact.Service.ChildSession
             {
                 _lastVisibleLocation = Location;
             }
-            if (_lockAspectRatio16By9)
+            if (_lockDesktopAspectRatio)
             {
-                Enforce16By9ClientRatio();
+                EnforceDesktopClientRatio();
             }
         }
 
