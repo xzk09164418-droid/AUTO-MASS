@@ -1,7 +1,6 @@
 import type { ShareTemplateItem } from '@/composables/useTemplateApi'
 import type { MaaFWEmbeddedSourceItem } from '@/api'
 import {
-  MAAFW_FLAVORS,
   isMaaFWFamily,
   maafwRouteSuffix,
   type MaaFWFlavorType,
@@ -54,8 +53,7 @@ export type ScriptCreateRequest =
   | { kind: 'general-custom' }
   | { kind: 'general-template'; template: ShareTemplateItem }
 
-// MaaFW 与各特调的卡片不在这里：由特调注册表提供，按各自的 create.card.after 插回原位
-const BASE_SCRIPT_TYPE_OPTIONS: ScriptTypeOption[] = [
+export const SCRIPT_TYPE_OPTIONS: ScriptTypeOption[] = [
   {
     value: 'General',
     titleKey: 'scripts.type.General',
@@ -64,102 +62,7 @@ const BASE_SCRIPT_TYPE_OPTIONS: ScriptTypeOption[] = [
     group: 'general',
     icon: SCRIPT_LOGOS.General,
   },
-  {
-    value: 'MAA',
-    titleKey: 'scripts.type.MAA',
-    descriptionKey: 'scripts.create.typeDesc.MAA',
-    keywords: ['maa', '明日方舟'],
-    group: 'specialized',
-    icon: SCRIPT_LOGOS.MAA,
-  },
-  {
-    value: 'SRC',
-    titleKey: 'scripts.type.SRC',
-    descriptionKey: 'scripts.create.typeDesc.SRC',
-    keywords: ['src', '星穹铁道'],
-    group: 'specialized',
-    icon: SCRIPT_LOGOS.SRC,
-  },
-  {
-    value: 'MaaEnd',
-    titleKey: 'scripts.type.MaaEnd',
-    descriptionKey: 'scripts.create.typeDesc.MaaEnd',
-    keywords: ['maaend', 'maaframework', '终末地', 'endfield'],
-    group: 'specialized',
-    icon: SCRIPT_LOGOS.MaaEnd,
-  },
-  {
-    value: 'Okww',
-    titleKey: 'scripts.type.Okww',
-    descriptionKey: 'scripts.create.typeDesc.Okww',
-    keywords: ['okww', 'ok-ww', 'ok-script'],
-    group: 'specialized',
-    icon: SCRIPT_LOGOS.Okww,
-  },
-  {
-    value: 'OkNte',
-    titleKey: 'scripts.type.OkNte',
-    descriptionKey: 'scripts.create.typeDesc.OkNte',
-    keywords: ['oknte', 'ok-nte', '异环', 'ok-script'],
-    group: 'specialized',
-    icon: SCRIPT_LOGOS.OkNte,
-  },
-  {
-    value: 'HSR',
-    titleKey: 'scripts.type.HSR',
-    descriptionKey: 'scripts.create.typeDesc.HSR',
-    keywords: ['hsr', '三月七', 'sra'],
-    group: 'specialized',
-    icon: SCRIPT_LOGOS.HSR,
-  },
-  {
-    value: 'BetterGI',
-    titleKey: 'scripts.type.BetterGI',
-    descriptionKey: 'scripts.create.typeDesc.BetterGI',
-    keywords: ['bettergi', 'better-gi', '原神', 'genshin'],
-    group: 'specialized',
-    icon: SCRIPT_LOGOS.BetterGI,
-  },
-  {
-    value: 'ZzzOd',
-    titleKey: 'scripts.type.ZzzOd',
-    descriptionKey: 'scripts.create.typeDesc.ZzzOd',
-    keywords: ['zzz-od', 'zzz', '绝区零', 'zenless', '一条龙'],
-    group: 'specialized',
-    icon: SCRIPT_LOGOS.ZzzOd,
-  },
-  {
-    value: 'BAAH',
-    titleKey: 'scripts.type.BAAH',
-    descriptionKey: 'scripts.create.typeDesc.BAAH',
-    keywords: ['baah', '碧蓝档案', '蔚蓝档案', 'bluearchive', '爱丽丝助手'],
-    group: 'specialized',
-    icon: SCRIPT_LOGOS.BAAH,
-  },
-  {
-    value: 'Whimbox',
-    titleKey: 'scripts.type.Whimbox',
-    descriptionKey: 'scripts.create.typeDesc.Whimbox',
-    keywords: ['whimbox', '奇想盒', '无限暖暖', 'nikki'],
-    group: 'specialized',
-    icon: SCRIPT_LOGOS.Whimbox,
-  },
 ]
-
-const withMaaFWFlavorOptions = (base: readonly ScriptTypeOption[]): ScriptTypeOption[] => {
-  const options = [...base]
-  for (const flavor of MAAFW_FLAVORS) {
-    const { after, ...card } = flavor.create.card
-    const option: ScriptTypeOption = { value: flavor.type, ...card, icon: flavor.logo }
-    const index = after ? options.findIndex(item => item.value === after) : -1
-    if (index >= 0) options.splice(index + 1, 0, option)
-    else options.push(option)
-  }
-  return options
-}
-
-export const SCRIPT_TYPE_OPTIONS: ScriptTypeOption[] =
-  withMaaFWFlavorOptions(BASE_SCRIPT_TYPE_OPTIONS)
 
 /** 第二步列表里的一行「已导入的项目」：同一项目开了几个脚本只列一行，克隆源取其中一个 */
 export interface MfwReuseChoice {

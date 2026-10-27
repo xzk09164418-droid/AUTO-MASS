@@ -428,23 +428,6 @@ def main(argv: list[str] | None = None):
                         run_optional_step("活动关卡信息获取", init_stage_info)
                     )
 
-                async def _maafw_startup_maintenance() -> None:
-                    try:
-                        await Config.migrate_maafw_embedded_copies_to_payloads()
-                        await Config.clean_maafw_agent_venvs()
-                        await Config.clean_maafw_embedded_copies()
-                        await Config.clean_maafw_runtime_blobs()
-                        await Config.clean_maafw_update_cache()
-                        await Config.clean_maafw_runtime_pool()
-                    except asyncio.CancelledError:
-                        raise
-                    except Exception:
-                        logger.exception("MFW 启动期维护失败，下次启动再试")
-
-                app.state.maafw_startup_maintenance = asyncio.create_task(
-                    _maafw_startup_maintenance()
-                )
-
                 timer_error = await run_step("主业务定时器", MainTimer.start)
                 await run_optional_step("启动参数直接运行任务", run_cli_startup_tasks)
 

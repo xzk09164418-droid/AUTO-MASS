@@ -344,7 +344,7 @@ const emit = defineEmits<{
 const TEMPLATE_SEARCH_DEBOUNCE = 400
 
 const currentStep = ref<CreateStepKey>('type')
-const selectedType = ref<ScriptType>('MAA')
+const selectedType = ref<ScriptType>('General')
 const selectedConfigMode = ref<ConfigMode>('template')
 const selectedTemplateKey = ref<string | null>(null)
 const configView = ref<'choice' | 'templates'>('choice')
@@ -444,7 +444,7 @@ watch(
 const resetDialog = () => {
   cancelScheduledSearch()
   currentStep.value = 'type'
-  selectedType.value = 'MAA'
+  selectedType.value = 'General'
   selectedConfigMode.value = 'template'
   selectedTemplateKey.value = null
   configView.value = 'choice'

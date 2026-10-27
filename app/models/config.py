@@ -6176,22 +6176,7 @@ class WhimboxConfig(ConfigBase):
         super().__init__()
 
 
-CLASS_BOOK = {
-    "MAA": MaaConfig,
-    "MaaEnd": MaaEndConfig,
-    "SRC": SrcConfig,
-    "M9A": M9AConfig,
-    "MaaFW": MaaFWConfig,
-    "General": GeneralConfig,
-    "Okww": OkwwConfig,
-    "OkNte": OkNteConfig,
-    "HSR": HSRConfig,
-    "BetterGI": BetterGIConfig,
-    "ZzzOd": ZzzOdConfig,
-    "BAAH": BAAHConfig,
-    "Whimbox": WhimboxConfig,
-    "MSS": MSSConfig,
-}
+CLASS_BOOK = {"General": GeneralConfig}
 """配置类映射表: 脚本类型键 → 配置类, GlobalConfig 的脚本配置列表由此派生"""
 
 PLAN_BOOK = {

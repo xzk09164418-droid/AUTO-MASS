@@ -52,6 +52,7 @@ if TYPE_CHECKING:
     from app.models.ConfigBase import ConfigBase
     from app.utils.config_restore import ConfigRestorePool, ConfigRestoreService
 
+from app.core.general_only import retain_general_scripts
 from app.models.config import (
     CLASS_BOOK,
     PLAN_BOOK,
@@ -96,11 +97,6 @@ from app.models.config import (
     ZzzOdUserConfig,
 )
 from app.models.schema import PlanComboxConsumer
-from app.task.M9A.migration import (
-    migrate_legacy_m9a_scripts,
-    normalize_m9a_managed_entries,
-    repair_m9a_migration_losses,
-)
 from app.utils import get_logger, is_supervised, resource_path
 from app.utils.community import next_community_account_name
 from app.utils.constants import (
@@ -311,45 +307,13 @@ class AppConfig(GlobalConfig):
     async def init_config(self) -> None:
         """初始化配置管理"""
 
+        await asyncio.to_thread(retain_general_scripts, self.config_path)
         await self.check_data()
 
         await self.connect(self.config_path / "Config.json")
         await self.EmulatorConfig.connect(self.config_path / "EmulatorConfig.json")
         await self.PlanConfig.connect(self.config_path / "PlanConfig.json")
-        # 旧版 M9A 专项的配置形状 → MaaFW 形状，必须在 connect 之前改原始 JSON：
-        # ConfigBase.load 只认类里声明的条目，旧键在按新类加载那一刻就丢并写回盘。
-        m9a_migration = await asyncio.to_thread(
-            migrate_legacy_m9a_scripts,
-            self.config_path / "ScriptConfig.json",
-            global_mirror_cdk=str(self.get("Update", "MirrorChyanCDK") or ""),
-        )
-        # 按 v5.6.0-beta.1 迁过的配置，从迁移备份补回那版清空的输入值与丢掉的切号，只做一次
-        m9a_repair = await asyncio.to_thread(
-            repair_m9a_migration_losses,
-            self.config_path / "ScriptConfig.json",
-            skip_uids=set(m9a_migration.migrated_uids),
-        )
-        # 启动游戏 / 切换账号 / 关闭游戏由 MAS 控制，不留在用户队列里：每次启动整理一遍，幂等
-        m9a_managed = await asyncio.to_thread(
-            normalize_m9a_managed_entries, self.config_path / "ScriptConfig.json"
-        )
-        # HSR 旧直控快照（Direct.*）已删字段，同理必须在 connect 之前另存原始密文
-        await self._archive_legacy_hsr_direct_snapshots(
-            self.config_path / "ScriptConfig.json"
-        )
         await self.ScriptConfig.connect(self.config_path / "ScriptConfig.json")
-        # 正式版没有接管字段，早期公测版默认关闭；有 CDK 的存量脚本只迁移一次。
-        for script in self.ScriptConfig.values():
-            if isinstance(script, MaaConfig) and await script.migrate_update_takeover(
-                global_cdk=str(self.get("Update", "MirrorChyanCDK") or "")
-            ):
-                logger.info("MAA 更新接管迁移：已为配置 CDK 的旧脚本开启接管")
-        if m9a_migration.changed or m9a_migration.failure:
-            await self._settle_m9a_migration(m9a_migration)
-        if m9a_repair.needs_notice:
-            self.startup_notices.append(m9a_repair.notice())
-        if m9a_managed.needs_notice:
-            self.startup_notices.append(m9a_managed.notice())
         await self.QueueConfig.connect(self.config_path / "QueueConfig.json")
         await self.ToolsConfig.connect(self.config_path / "ToolsConfig.json")
 
@@ -782,6 +746,8 @@ class AppConfig(GlobalConfig):
         """添加脚本配置"""
 
         logger.info(f"添加脚本配置: {script}, 从 {script_id} 复制")
+        if script != "General":
+            raise ValueError("本版本仅支持通用脚本")
 
         if script_id is None:
             return await self.ScriptConfig.add(CLASS_BOOK[script])

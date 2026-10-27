@@ -45,6 +45,7 @@ SCRIPT_CALENDAR_GAMES = {
         "MSS": "stellasora",
         "Whimbox": "infinitynikki",
     }.items()
+    if script in CLASS_BOOK
 }
 BAAH_CALENDAR_SERVERS = {"CN": "cn", "JP": "jp", "Globle": "global"}
 

@@ -64,20 +64,12 @@ from app.utils.constants import UTC4
 
 from .config import (
     BAAHConfig,
-    BetterGIConfig,
     Config,
     GeneralConfig,
-    HSRConfig,
-    M9AConfig,
     MaaConfig,
     MaaEndConfig,
     MaaFWConfig,
-    MSSConfig,
-    OkNteConfig,
-    OkwwConfig,
     SrcConfig,
-    WhimboxConfig,
-    ZzzOdConfig,
 )
 from .queue_cycle import (
     SUCCESS_USER_STATUSES,
@@ -137,20 +129,7 @@ def _build_src_manager(
 _MANAGER_BOOK: dict[
     type, Callable[[ScriptItem, _ManagerBuildContext], TaskExecuteBase]
 ] = {
-    MaaConfig: lambda script_item, _ctx: task.MaaManager(script_item),
     GeneralConfig: lambda script_item, _ctx: task.GeneralManager(script_item),
-    OkwwConfig: lambda script_item, _ctx: task.OkwwManager(script_item),
-    OkNteConfig: lambda script_item, _ctx: task.OkNteManager(script_item),
-    MaaEndConfig: lambda script_item, _ctx: task.MaaEndManager(script_item),
-    M9AConfig: lambda script_item, _ctx: task.MaaFWEmbeddedManager(script_item),
-    MSSConfig: lambda script_item, _ctx: task.MaaFWEmbeddedManager(script_item),
-    HSRConfig: lambda script_item, _ctx: task.HSRManager(script_item),
-    BetterGIConfig: lambda script_item, _ctx: task.BetterGIManager(script_item),
-    ZzzOdConfig: lambda script_item, _ctx: task.ZzzOdManager(script_item),
-    BAAHConfig: lambda script_item, _ctx: task.BAAHManager(script_item),
-    MaaFWConfig: lambda script_item, _ctx: task.MaaFWEmbeddedManager(script_item),
-    WhimboxConfig: lambda script_item, _ctx: task.WhimboxManager(script_item),
-    SrcConfig: _build_src_manager,
 }
 
 logger = get_logger("业务调度")
