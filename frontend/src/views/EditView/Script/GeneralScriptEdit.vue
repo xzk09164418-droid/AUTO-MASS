@@ -97,6 +97,12 @@
           </a-row>
         </div>
 
+        <GeneralNativeConfigSection
+          :script-id="scriptId"
+          :config-path="generalConfig.Script.ConfigPath || ''"
+          :config-mode="generalConfig.Script.ConfigPathMode || 'File'"
+          @saved="patch => Object.assign(generalConfig.Script, patch)"
+        />
         <!-- 基础配置 -->
         <div class="form-section">
           <div class="section-header">
@@ -264,7 +270,7 @@
             type="info"
             show-icon
             style="margin-bottom: 16px"
-            message="精简控制与双模超时说明：已移除配置文件回写，仅通过上方「启动参数」控制外部程序启停；「日志路径」为可选项，留空时日志超时 (RunTimeLimit) 自动失效，只要在总上限时间 (HardTimeLimit，含全部重试) 内自行退出即视为成功，超时则调用 taskkill /F /T 强杀 3 遍。"
+            message="原生配置可通过上方入口编辑并保存；启动参数控制外部程序启停。「日志路径」为可选项，留空时日志超时 (RunTimeLimit) 自动失效，只要在总上限时间 (HardTimeLimit，含全部重试) 内自行退出即视为成功，超时则调用 taskkill /F /T 强杀 3 遍。"
           />
           <a-row :gutter="24">
             <a-col :span="12">
@@ -898,6 +904,7 @@
 </template>
 
 <script setup lang="ts">
+import GeneralNativeConfigSection from './components/GeneralNativeConfigSection.vue'
 import ScriptHardTimeoutField from '@/views/EditView/Script/components/ScriptHardTimeoutField.vue'
 import ConfigLockPanel from '@/components/ConfigLockPanel.vue'
 import { useI18n } from 'vue-i18n'

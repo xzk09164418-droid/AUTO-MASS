@@ -8,6 +8,15 @@
  * フォールバックします（i18n/index.ts の fallbackLocale を参照）。
  */
 export default {
+  generalNative: {
+    stopFailed: '設定セッションを終了できません',
+    startFailed: '元のアプリの設定を開けません',
+    setupFailed: '設定に失敗しました：{p0}',
+    opened: '元のアプリで変更を保存してください',
+    timeoutWarn: 'まもなく終了します。元のアプリで保存してください',
+    saved: 'セッションが終了しました。元の設定は保持されます',
+    saveFailed: '終了できませんでした。再試行してください',
+  },
   eventDepotPreview: {
     runtimeUnresolved:
       '一部のイベントステージ・素材・目標が利用できないため今回はスキップします。保存済み設定は保持されます。',

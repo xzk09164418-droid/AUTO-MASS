@@ -6,6 +6,15 @@
  * Keep the key structure identical to zh-CN.ts.
  */
 export default {
+  generalNative: {
+    stopFailed: 'Could not end settings session',
+    startFailed: 'Could not open native settings',
+    setupFailed: 'Native settings failed: {p0}',
+    opened: 'Native settings opened; save changes in the source application',
+    timeoutWarn: 'Session ending soon; save in the source application first',
+    saved: 'Session ended; native configuration retained',
+    saveFailed: 'Could not end session; please retry',
+  },
   eventDepotPreview: {
     runtimeUnresolved:
       'Some event stages, materials or targets are unavailable and skipped this run. Saved settings are retained.',

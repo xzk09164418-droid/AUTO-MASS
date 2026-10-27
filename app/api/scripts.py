@@ -28,6 +28,7 @@ from typing import Any, Literal
 from fastapi import APIRouter, Body, HTTPException, Query
 from fastapi.responses import FileResponse
 
+from app.api.general_config import router as general_config_router
 from app.core import Config
 from app.core.game_calendar import SCRIPT_CALENDAR_GAMES
 from app.models.config import BetterGIConfig as RuntimeBetterGIConfig
@@ -45,6 +46,7 @@ from app.utils.emulator2 import service as emulator2_service
 from app.utils.io import ConfigCorruptedError
 
 router = APIRouter(prefix="/api/scripts", tags=["脚本管理"])
+router.include_router(general_config_router)
 logger = get_logger("脚本管理 API")
 
 

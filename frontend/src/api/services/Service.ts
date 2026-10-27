@@ -23,6 +23,12 @@ import type { Body_batch_update_oknte_configs_api_scripts_oknte_configs_batch_up
 import type { Body_get_maa_cultivate_operators_api_scripts_maa_cultivate_operators_post } from '../models/Body_get_maa_cultivate_operators_api_scripts_maa_cultivate_operators_post';
 import type { Body_get_maa_depot_inventory_api_scripts_maa_depot_inventory_post } from '../models/Body_get_maa_depot_inventory_api_scripts_maa_depot_inventory_post';
 import type { Body_get_maa_depot_stage_candidates_api_scripts_maa_depot_stage_candidates_post } from '../models/Body_get_maa_depot_stage_candidates_api_scripts_maa_depot_stage_candidates_post';
+import type { ChildSessionLeaseAcquireIn } from '../models/ChildSessionLeaseAcquireIn';
+import type { ChildSessionLeaseAcquireOut } from '../models/ChildSessionLeaseAcquireOut';
+import type { ChildSessionLeaseReleaseIn } from '../models/ChildSessionLeaseReleaseIn';
+import type { ChildSessionLeaseReleaseOut } from '../models/ChildSessionLeaseReleaseOut';
+import type { ChildSessionStatusOut } from '../models/ChildSessionStatusOut';
+import type { ChildSessionWindowControlIn } from '../models/ChildSessionWindowControlIn';
 import type { ComboBoxOut } from '../models/ComboBoxOut';
 import type { CommunityActivityOut } from '../models/CommunityActivityOut';
 import type { CommunityActivityQueryIn } from '../models/CommunityActivityQueryIn';
@@ -51,6 +57,9 @@ import type { GameSignAccountDeleteIn } from '../models/GameSignAccountDeleteIn'
 import type { GameSignAccountReorderIn } from '../models/GameSignAccountReorderIn';
 import type { GameSignAccountsListOut } from '../models/GameSignAccountsListOut';
 import type { GameSignAccountUpdateIn } from '../models/GameSignAccountUpdateIn';
+import type { GeneralNativeConfigOut } from '../models/GeneralNativeConfigOut';
+import type { GeneralNativeConfigReadIn } from '../models/GeneralNativeConfigReadIn';
+import type { GeneralNativeConfigWriteIn } from '../models/GeneralNativeConfigWriteIn';
 import type { GetStageIn } from '../models/GetStageIn';
 import type { HistoryDataGetIn } from '../models/HistoryDataGetIn';
 import type { HistoryDataGetOut } from '../models/HistoryDataGetOut';
@@ -95,6 +104,7 @@ import type { MaaFWShellInstancesIn } from '../models/MaaFWShellInstancesIn';
 import type { MaaFWShellInstancesOut } from '../models/MaaFWShellInstancesOut';
 import type { MssDefenseStatusIn } from '../models/MssDefenseStatusIn';
 import type { MssDefenseStatusOut } from '../models/MssDefenseStatusOut';
+import type { NavigationActionOut } from '../models/NavigationActionOut';
 import type { NoticeOut } from '../models/NoticeOut';
 import type { NotifyChannelsOut } from '../models/NotifyChannelsOut';
 import type { ObsReplayCheckOut } from '../models/ObsReplayCheckOut';
@@ -270,6 +280,134 @@ export class Service {
         return __request(OpenAPI, {
             method: 'POST',
             url: '/api/core/close',
+        });
+    }
+    /**
+     * 查询本地远程桌面状态及外部程序借用情况
+     * @returns ChildSessionStatusOut Successful Response
+     * @throws ApiError
+     */
+    public static getChildSessionStatusApiChildSessionStatusGet(): CancelablePromise<ChildSessionStatusOut> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/child-session/status',
+        });
+    }
+    /**
+     * 外部程序申请使用本地远程桌面（别名接口）
+     * @param requestBody
+     * @returns ChildSessionLeaseAcquireOut Successful Response
+     * @throws ApiError
+     */
+    public static acquireChildSessionLeaseApiChildSessionRequestPost(
+        requestBody: ChildSessionLeaseAcquireIn,
+    ): CancelablePromise<ChildSessionLeaseAcquireOut> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/child-session/request',
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * 外部程序申请使用本地远程桌面（队列将在相邻子任务间隔让渡桌面）
+     * @param requestBody
+     * @returns ChildSessionLeaseAcquireOut Successful Response
+     * @throws ApiError
+     */
+    public static acquireChildSessionLeaseApiChildSessionAcquirePost(
+        requestBody: ChildSessionLeaseAcquireIn,
+    ): CancelablePromise<ChildSessionLeaseAcquireOut> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/child-session/acquire',
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * 外部程序停止使用本地远程桌面后的回传接口（别名）
+     * @param requestBody
+     * @returns ChildSessionLeaseReleaseOut Successful Response
+     * @throws ApiError
+     */
+    public static releaseChildSessionLeaseApiChildSessionCallbackPost(
+        requestBody: ChildSessionLeaseReleaseIn,
+    ): CancelablePromise<ChildSessionLeaseReleaseOut> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/child-session/callback',
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * 外部程序停止使用本地远程桌面后的回传接口（恢复 AUTO-MAS 队列执行）
+     * @param requestBody
+     * @returns ChildSessionLeaseReleaseOut Successful Response
+     * @throws ApiError
+     */
+    public static releaseChildSessionLeaseApiChildSessionReleasePost(
+        requestBody: ChildSessionLeaseReleaseIn,
+    ): CancelablePromise<ChildSessionLeaseReleaseOut> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/child-session/release',
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * 立即建立或重连常驻本地远程桌面连接
+     * @returns ChildSessionStatusOut Successful Response
+     * @throws ApiError
+     */
+    public static connectChildSessionApiChildSessionConnectPost(): CancelablePromise<ChildSessionStatusOut> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/child-session/connect',
+        });
+    }
+    /**
+     * 控制本地远程桌面窗口（显示/隐藏/观看模式/缩放/置顶/快捷键）
+     * @param requestBody
+     * @returns ChildSessionStatusOut Successful Response
+     * @throws ApiError
+     */
+    public static controlChildSessionWindowApiChildSessionWindowPost(
+        requestBody: ChildSessionWindowControlIn,
+    ): CancelablePromise<ChildSessionStatusOut> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/child-session/window',
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * 断开并注销本地远程桌面会话
+     * @returns OutBase Successful Response
+     * @throws ApiError
+     */
+    public static logoffChildSessionApiChildSessionLogoffPost(): CancelablePromise<OutBase> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/child-session/logoff',
         });
     }
     /**
@@ -582,6 +720,44 @@ export class Service {
         return __request(OpenAPI, {
             method: 'POST',
             url: '/api/info/stella/activity',
+        });
+    }
+    /**
+     * Read General Native Config
+     * @param requestBody
+     * @returns GeneralNativeConfigOut Successful Response
+     * @throws ApiError
+     */
+    public static readGeneralNativeConfigApiScriptsGeneralNativeReadPost(
+        requestBody: GeneralNativeConfigReadIn,
+    ): CancelablePromise<GeneralNativeConfigOut> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/scripts/general/native/read',
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Write General Native Config
+     * @param requestBody
+     * @returns GeneralNativeConfigOut Successful Response
+     * @throws ApiError
+     */
+    public static writeGeneralNativeConfigApiScriptsGeneralNativeWritePost(
+        requestBody: GeneralNativeConfigWriteIn,
+    ): CancelablePromise<GeneralNativeConfigOut> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/scripts/general/native/write',
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
         });
     }
     /**
@@ -1561,7 +1737,7 @@ export class Service {
     }
     /**
      * 获取 BetterGI 自动战斗策略选项
-     * 返回 BetterGI 可用自动战斗策略：内置「根据队伍自动选择」+ ``{RootPath}/User/AutoFight*.txt`` 文件名。
+     * 返回 BetterGI 可用自动战斗策略：内置「根据队伍自动选择」+ ``{RootPath}/User/AutoFight*.txt``、``*.json`` 文件名。
      * @param scriptId
      * @returns ComboBoxOut Successful Response
      * @throws ApiError
@@ -3550,6 +3726,50 @@ export class Service {
             errors: {
                 422: `Validation Error`,
             },
+        });
+    }
+    /**
+     * 控制程序启停（与全局启停热键同源）
+     * @returns NavigationActionOut Successful Response
+     * @throws ApiError
+     */
+    public static toggleStartStopApiDispatchNavigationTogglePost(): CancelablePromise<NavigationActionOut> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/dispatch/navigation/toggle',
+        });
+    }
+    /**
+     * 切换到上一个任务（与全局上一任务热键同源）
+     * @returns NavigationActionOut Successful Response
+     * @throws ApiError
+     */
+    public static navigatePreviousTaskApiDispatchNavigationPreviousPost(): CancelablePromise<NavigationActionOut> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/dispatch/navigation/previous',
+        });
+    }
+    /**
+     * 切换到下一个任务（与全局下一任务热键同源）
+     * @returns NavigationActionOut Successful Response
+     * @throws ApiError
+     */
+    public static navigateNextTaskApiDispatchNavigationNextPost(): CancelablePromise<NavigationActionOut> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/dispatch/navigation/next',
+        });
+    }
+    /**
+     * 重新加载全局热键绑定
+     * @returns NavigationActionOut Successful Response
+     * @throws ApiError
+     */
+    public static reloadHotkeysApiDispatchHotkeyReloadPost(): CancelablePromise<NavigationActionOut> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/dispatch/hotkey/reload',
         });
     }
     /**

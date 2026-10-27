@@ -7143,3 +7143,21 @@ class PatternDebugOut(OutBase):
     results: List[PatternDebugResultItem] = Field(
         default_factory=list, description="逐行/逐窗口调试结果"
     )
+
+class GeneralNativeConfigReadIn(_SchemaModel):
+    scriptId: str = Field(description="通用脚本 ID")
+    file: str = Field(
+        default="", description="配置目录内的相对文件名；单文件模式可留空"
+    )
+
+
+class GeneralNativeConfigWriteIn(GeneralNativeConfigReadIn):
+    content: str = Field(max_length=2 * 1024 * 1024, description="原生配置文本")
+    revision: str = Field(description="读取时的文件指纹，防止覆盖外部修改")
+
+
+class GeneralNativeConfigOut(OutBase):
+    files: list[str] = Field(default_factory=list)
+    file: str = ""
+    content: str = ""
+    revision: str = ""

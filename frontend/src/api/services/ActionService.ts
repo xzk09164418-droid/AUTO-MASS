@@ -18,6 +18,7 @@ import type { Emulator2StableModeIn } from '../models/Emulator2StableModeIn';
 import type { Emulator2StoreOpenIn } from '../models/Emulator2StoreOpenIn';
 import type { Emulator2StoreOpenOut } from '../models/Emulator2StoreOpenOut';
 import type { EmulatorOperateIn } from '../models/EmulatorOperateIn';
+import type { NavigationActionOut } from '../models/NavigationActionOut';
 import type { ObsReplaySaveOut } from '../models/ObsReplaySaveOut';
 import type { OutBase } from '../models/OutBase';
 import type { PatternDebugIn } from '../models/PatternDebugIn';
@@ -277,6 +278,50 @@ export class ActionService {
             errors: {
                 422: `Validation Error`,
             },
+        });
+    }
+    /**
+     * 控制程序启停（与全局启停热键同源）
+     * @returns NavigationActionOut Successful Response
+     * @throws ApiError
+     */
+    public static toggleStartStopApiDispatchNavigationTogglePost(): CancelablePromise<NavigationActionOut> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/dispatch/navigation/toggle',
+        });
+    }
+    /**
+     * 切换到上一个任务（与全局上一任务热键同源）
+     * @returns NavigationActionOut Successful Response
+     * @throws ApiError
+     */
+    public static navigatePreviousTaskApiDispatchNavigationPreviousPost(): CancelablePromise<NavigationActionOut> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/dispatch/navigation/previous',
+        });
+    }
+    /**
+     * 切换到下一个任务（与全局下一任务热键同源）
+     * @returns NavigationActionOut Successful Response
+     * @throws ApiError
+     */
+    public static navigateNextTaskApiDispatchNavigationNextPost(): CancelablePromise<NavigationActionOut> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/dispatch/navigation/next',
+        });
+    }
+    /**
+     * 重新加载全局热键绑定
+     * @returns NavigationActionOut Successful Response
+     * @throws ApiError
+     */
+    public static reloadHotkeysApiDispatchHotkeyReloadPost(): CancelablePromise<NavigationActionOut> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/dispatch/hotkey/reload',
         });
     }
     /**

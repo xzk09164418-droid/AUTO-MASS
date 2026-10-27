@@ -31,13 +31,14 @@ from app.models.emulator import DeviceBase
 from app.models.schema import WSTaskNoticeData
 from app.models.task import ScriptItem, TaskExecuteBase
 from app.services import System
+from app.task.general.tools.backup_archive import archive_native_backup
 from app.utils import ProcessManager, get_logger
 
 logger = get_logger("通用脚本设置")
 
 
 class ScriptConfigTask(TaskExecuteBase):
-    """脚本设置模式（已精简：不再注入或回写外部配置文件，仅通过外部程序自身的启动参数启动和关闭）"""
+    """打开源程序设置，保留源程序写入的原生配置。"""
 
     def __init__(
         self,
@@ -87,12 +88,17 @@ class ScriptConfigTask(TaskExecuteBase):
 
         self.script_arguments = arguments_list[0] if len(arguments_list) > 0 else []
         self.script_set_exe_path = (
-            path_list[1] if len(path_list) > 1 else self.script_path
+            path_list[1]
+            if len(path_list) > 1
+            else (path_list[0] if path_list else self.script_path)
         )
-        self.script_set_arguments = arguments_list[1] if len(arguments_list) > 1 else []
+        self.script_set_arguments = (
+            arguments_list[1] if len(arguments_list) > 1 else self.script_arguments
+        )
 
     async def main_task(self):
         await self.prepare()
+        await self.archive_native_config()
         await self.set_general()
         logger.info(
             f"运行脚本设置任务: {self.script_set_exe_path}, 参数: {self.script_set_arguments}"
@@ -104,6 +110,21 @@ class ScriptConfigTask(TaskExecuteBase):
         self.wait_event.clear()
         await self.wait_event.wait()
 
+    async def archive_native_config(self) -> None:
+        raw = str(self.script_config.get("Script", "ConfigPath") or "").strip()
+        if raw in ("", "."):
+            return
+        path = Path(raw)
+        if not path.is_absolute():
+            path = Path(str(self.script_config.get("Info", "RootPath") or ".")) / path
+        if path.exists():
+            await asyncio.to_thread(
+                archive_native_backup,
+                self.script_info.script_id,
+                path,
+                str(self.script_config.get("Script", "ConfigPathMode")),
+            )
+
     async def set_general(self) -> None:
         """清理残留进程（不再注入外部配置文件）"""
         logger.info(f"清理残留进程以启动脚本设置: {self.cur_user_item.user_id}")
@@ -113,8 +134,9 @@ class ScriptConfigTask(TaskExecuteBase):
         await self.general_process_manager.kill()
         await System.kill_process(self.script_set_exe_path, kill_tree=True)
         del self.general_process_manager
+        await self.archive_native_config()
         self.cur_user_item.status = "完成"
-        logger.success("通用脚本设置会话已结束（不执行配置回写）")
+        logger.success("通用脚本设置会话已结束，源程序写入的原生配置已保留")
 
     async def on_crash(self, e: Exception):
         self.cur_user_item.status = "异常"

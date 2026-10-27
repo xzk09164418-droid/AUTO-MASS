@@ -2,8 +2,10 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { GlobalConfig_ChildSession } from './GlobalConfig_ChildSession';
 import type { GlobalConfig_Display } from './GlobalConfig_Display';
 import type { GlobalConfig_Function } from './GlobalConfig_Function';
+import type { GlobalConfig_Hotkey } from './GlobalConfig_Hotkey';
 import type { GlobalConfig_Notify } from './GlobalConfig_Notify';
 import type { GlobalConfig_Replay } from './GlobalConfig_Replay';
 import type { GlobalConfig_Start } from './GlobalConfig_Start';
@@ -23,6 +25,14 @@ export type GlobalConfig = {
      * 显示器相关配置
      */
     Display?: (GlobalConfig_Display | null);
+    /**
+     * 本地远程桌面 (Child Session) 配置
+     */
+    ChildSession?: (GlobalConfig_ChildSession | null);
+    /**
+     * 全局热键配置
+     */
+    Hotkey?: (GlobalConfig_Hotkey | null);
     /**
      * 语音相关配置
      */

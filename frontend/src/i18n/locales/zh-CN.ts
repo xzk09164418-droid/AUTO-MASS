@@ -8,6 +8,15 @@
  * en-US.ts 缺失的 key 会自动回退到这里。
  */
 export default {
+  generalNative: {
+    stopFailed: '结束设置会话失败',
+    startFailed: '打开源程序设置失败',
+    setupFailed: '源程序设置失败：{p0}',
+    opened: '已打开源程序设置，请在源程序内保存修改',
+    timeoutWarn: '设置会话即将结束，请先在源程序内保存',
+    saved: '设置会话已结束，原生配置已保留',
+    saveFailed: '结束会话失败，请重试',
+  },
   browser: {
     nodeHost: '由 Node.js 宿主与独立 Python 后端运行',
     folder: '选择本机文件夹',
