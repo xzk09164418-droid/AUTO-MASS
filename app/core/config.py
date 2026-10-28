@@ -659,13 +659,9 @@ class AppConfig(GlobalConfig):
             logger.success("数据文件版本更新完成")
 
     async def get_git_version(self) -> tuple[bool, str, str]:
-        """获取Git版本信息，如果Git不可用则返回默认值。
+        """仅读取本地版本，不检查远端。
 
-        受 AUTO-MAS-Runtime 监督时后端不是更新主体：更新由 Runtime 整体替换
-        repo/ 完成、不在旧仓库上 fetch，比对远端分支判定“需要更新”没有意义，
-        一律视为最新。managed 模式直接回显 Runtime 从校验过的仓库注入的 HEAD，
-        不依赖 Runtime 布局里并不存在的 git 命令行；development 模式无注入
-        身份，仍从源码目录读取 Git 信息用于展示。
+        保留旧返回结构；首项 True 表示本构建不触发更新，不代表已验证远端最新版。
         """
 
         supervised = is_supervised()
@@ -678,7 +674,7 @@ class AppConfig(GlobalConfig):
             repo = self._get_repo()
             if repo is None:
                 logger.warning("Git仓库不可用，返回默认版本信息")
-                return False, "unknown", "unknown"
+                return True, "unknown", "unknown"
 
             # 获取当前 commit
             current_commit = repo.head.commit
@@ -687,19 +683,7 @@ class AppConfig(GlobalConfig):
             # 获取 commit 时间
             commit_time = datetime.fromtimestamp(current_commit.committed_date)
 
-            # 检查是否为最新 commit
-            try:
-                # 仅比对本地已缓存的远程引用，不在请求路径上调用 origin.fetch()。
-                # fetch 是联网操作（弱网/VPN 下耗时 5~15s），以同步 GitPython 子进程
-                # 形式执行会阻塞事件循环，期间所有请求排队无响应；远程引用由
-                # 版本更新等流程自行维护，此处只读本地。
-                remote_commit = repo.commit(f"origin/{repo.active_branch.name}")
-                is_latest = bool(current_commit.hexsha == remote_commit.hexsha)
-            except Exception as e:
-                logger.warning(f"无法获取远程分支信息: {e}")
-                is_latest = False
-
-            return is_latest, commit_hash, commit_time.strftime("%Y-%m-%d %H:%M:%S")
+            return True, commit_hash, commit_time.strftime("%Y-%m-%d %H:%M:%S")
 
         # 在线程池中执行 Git 操作
         is_latest, commit_hash, commit_time = await self.loop.run_in_executor(
@@ -4176,58 +4160,9 @@ class AppConfig(GlobalConfig):
     async def get_notice(self) -> tuple[bool, Dict[str, str]]:
         """获取公告信息"""
 
-        if datetime.now() - timedelta(hours=1) < datetime.strptime(
-            self.get("Data", "LastNoticeUpdated"), "%Y-%m-%d %H:%M:%S"
-        ):
-            logger.info("一小时内已进行过一次检查, 直接使用缓存的公告信息")
-            return False, json.loads(self.get("Data", "Notice")).get("notice_dict", {})
+        # 公告不属于活动内容；不再请求或展示上游公告，旧配置仍保留以便回退。
+        return False, {}
 
-        logger.info("开始从 AUTO-MAS 服务器获取公告信息")
-        try:
-            async with httpx.AsyncClient(
-                proxy=self.proxy, follow_redirects=True
-            ) as client:
-                response = await client.get(
-                    "https://data.auto-mas.top/api/v1/files/auto-mas/Client/notice/download",
-                    headers={"If-None-Match": self.get("Data", "NoticeETag")},
-                )
-                if response.status_code == 304:
-                    logger.info("公告未更新，使用本地缓存的公告信息")
-                    await self.set(
-                        "Data",
-                        "LastNoticeUpdated",
-                        datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                    )
-                elif response.status_code == 200:
-                    logger.info("公告已更新，要求展示公告信息")
-                    await self.set(
-                        "Data",
-                        "LastNoticeUpdated",
-                        datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                    )
-                    await self.set(
-                        "Data",
-                        "NoticeETag",
-                        response.headers.get("ETag")
-                        or response.headers.get("etag")
-                        or "",
-                    )
-                    await self.set("Data", "IfShowNotice", True)
-                    await self.set(
-                        "Data",
-                        "Notice",
-                        json.dumps(response.json(), ensure_ascii=False),
-                    )
-                else:
-                    logger.warning(
-                        f"无法从 AUTO-MAS 服务器获取公告信息:{response.text}"
-                    )
-        except Exception as e:
-            logger.warning(f"无法从 AUTO-MAS 服务器获取公告信息: {e}")
-
-        return self.get("Data", "IfShowNotice"), json.loads(
-            self.get("Data", "Notice")
-        ).get("notice_dict", {})
 
     def build_history_log_path(
         self, *, script_name: str, user_name: str, log_time: datetime

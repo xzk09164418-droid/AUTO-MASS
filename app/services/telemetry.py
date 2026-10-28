@@ -33,6 +33,7 @@ if TYPE_CHECKING:
     from sentry_sdk import metrics
 
 from app.utils import get_logger
+from app.utils.network_policy import network_feature_enabled
 
 logger = get_logger("遥测")
 
@@ -261,6 +262,8 @@ def sanitize_event(
 def is_telemetry_enabled(config_path: Path) -> bool:
     """读取遥测开关；缺失的旧配置按默认开启处理，损坏的配置按关闭处理。"""
 
+    if not network_feature_enabled("telemetry"):
+        return False
     try:
         text = config_path.read_text(encoding="utf-8")
     except OSError:
@@ -391,6 +394,7 @@ def set_telemetry_enabled(enabled: bool) -> None:
     """立即启用或停用后端遥测；开发环境下恒为空操作。"""
 
     global _sentry_started
+    enabled = enabled and network_feature_enabled("telemetry")
 
     if not enabled:
         if _sentry_started:

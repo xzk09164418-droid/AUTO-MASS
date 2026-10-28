@@ -8,22 +8,9 @@ function createBrowserHost(root, backendPort, lifecycle = {}) {
   const services = require('../dist-host/services.cjs')
   const configPath = path.join(root, 'config', 'frontend_config.json')
   const userData = path.join(root, 'data', 'browser')
-  const online = Object.fromEntries(
-    ['theme', 'mascot'].map(kind => [
-      kind,
-      services.createOnlineAppearanceService({
-        logger: services.getLogger('在线外观'),
-        fetch: (url, init) => fetch(url, { ...init, redirect: 'manual' }),
-        userDataPath: () => userData,
-        cacheDir: () => path.join(userData, 'cache', kind),
-        categoryKey: kind,
-        packageKind: kind,
-      }),
-    ])
-  )
-  const onlineService = category => {
-    if (category !== undefined && !Object.hasOwn(online, category)) throw new Error('无效资源分类')
-    return online[category || 'theme']
+  // 在线资源在本机构建中停用；本地外观导入、预览和删除仍走原来的服务。
+  const onlineService = () => {
+    throw new Error('本机构建已停用在线外观下载，请使用本地导入')
   }
   const exportZip = async (name, creator) => {
     const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'auto-mas-browser-export-'))

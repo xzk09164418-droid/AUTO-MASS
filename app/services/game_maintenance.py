@@ -8,7 +8,7 @@ import asyncio
 import json
 import time
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime
 
 import httpx
 
@@ -84,13 +84,8 @@ class GameMaintenanceClient:
         self, game: str, *, proxy: httpx.Proxy | None = None
     ) -> MaintenanceWindow | None:
         """查询当前维护；过期缓存刷新失败时放行，不沿用旧时段。"""
-        async with self._lock:
-            if time.monotonic() >= self._next_refresh:
-                await self._refresh(proxy=proxy)
-
-            window = self._windows.get(game)
-            now = datetime.now(timezone.utc)
-            return window if window is not None and window.contains(now) else None
+        # 维护服务器查询不属于公开活动内容；本机构建不再联网获取维护窗口。
+        return None
 
     async def _refresh(self, *, proxy: httpx.Proxy | None) -> None:
         # 与公告一样持久保存内容、ETag 和检查时间，重启后继续复用。

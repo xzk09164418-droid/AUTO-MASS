@@ -1,6 +1,6 @@
 ﻿#Requires -Version 5.1
 # 为已编译的本机备份安装环境；不启动程序或改写用户配置。
-param()
+param([string]$Wheelhouse)
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 Set-Location -LiteralPath $root
@@ -27,20 +27,9 @@ function Find-Python312 {
     return $null
 }
 
-function Install-WindowsPackage([string]$packageId) {
-    $winget = Get-Command winget.exe -ErrorAction SilentlyContinue
-    if (-not $winget) {
-        throw "缺少 winget。请先安装 Python 3.12（https://www.python.org/downloads/windows/）和 Node.js LTS（https://nodejs.org/），再运行本脚本。缺少的软件包：$packageId"
-    }
-    & $winget.Source install --id $packageId --exact --source winget --accept-source-agreements --accept-package-agreements
-    if ($LASTEXITCODE -ne 0) { throw "安装 $packageId 失败，退出码 $LASTEXITCODE" }
-}
-
 $python = Find-Python312
 if (-not $python) {
-    Install-WindowsPackage 'Python.Python.3.12'
-    $python = Find-Python312
-    if (-not $python) { throw '未找到 Python 3.12，请重新打开终端后重试。' }
+    throw '未找到 Python 3.12。本构建不自动联网下载，请先使用离线安装包安装。'
 }
 $node = Get-Command node.exe -ErrorAction SilentlyContinue
 $nodePath = if ($node) { $node.Source } else { Join-Path $env:ProgramFiles 'nodejs\node.exe' }
@@ -50,17 +39,21 @@ if (Test-Path -LiteralPath $nodePath) {
     $nodeReady = $LASTEXITCODE -eq 0
 }
 if (-not $nodeReady) {
-    Install-WindowsPackage 'OpenJS.NodeJS.LTS'
-    $nodePath = Join-Path $env:ProgramFiles 'nodejs\node.exe'
-    if (-not (Test-Path -LiteralPath $nodePath)) { throw '未找到 Node.js，请重新打开终端后重试。' }
+    throw '未找到 Node.js 22 或更高版本。本构建不自动联网下载，请先离线安装。'
 }
 $venv = Join-Path $root '.venv\Scripts\python.exe'
 if (-not (Test-Path -LiteralPath $venv)) {
     & $python -m venv (Join-Path $root '.venv')
     if ($LASTEXITCODE -ne 0) { throw '创建 Python 环境失败。' }
 }
-& $venv -m pip install -r (Join-Path $root 'requirements.txt')
-if ($LASTEXITCODE -ne 0) { throw '安装 Python 依赖失败，请检查网络及上方错误。' }
+if (-not $Wheelhouse) { $Wheelhouse = Join-Path $root 'offline-wheels' }
+& $venv -m pip --version
+if ($LASTEXITCODE -ne 0) {
+    & $venv -m ensurepip
+    if ($LASTEXITCODE -ne 0) { throw '当前 Python 缺少离线 pip，请补齐本地运行环境。' }
+}
+& $venv -m pip --disable-pip-version-check install --no-index --only-binary=:all: --find-links $Wheelhouse -r (Join-Path $root 'requirements.txt')
+if ($LASTEXITCODE -ne 0) { throw '离线依赖安装失败，请补齐 offline-wheels 中的依赖包并检查上方错误。' }
 & $venv -c "import fastapi,uvicorn,httpx,truststore,win32api; print('Python dependencies OK')"
 if ($LASTEXITCODE -ne 0) { throw 'Python 依赖验证失败。' }
 & $nodePath -e "require('./frontend/node_modules/adm-zip'); console.log('Node dependency OK')"

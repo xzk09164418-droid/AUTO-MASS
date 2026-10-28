@@ -35,6 +35,7 @@ import httpx
 from PIL import Image, ImageOps
 
 from app.utils import LazyProxy, get_logger
+from app.utils.network_policy import require_network_feature
 
 logger = get_logger("配置中心")
 
@@ -1198,6 +1199,7 @@ class ConfigCenterClient:
         请求钩子每一跳都会调用, 307 / 308 的请求体 (含 multipart) 由 httpx 原样重发。
         跳转链的状态记在钩子里, 所以一个客户端只发一个请求。
         """
+        require_network_feature("online-resources")
 
         event_hooks = None
         if token:

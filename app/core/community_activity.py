@@ -41,6 +41,7 @@ from app.tools.community_activity_transport import (
 from app.tools.community_contract import ActivityState, CommunityActivitySnapshot
 from app.utils.constants import UTC8
 from app.utils.logger import get_logger
+from app.utils.network_policy import require_network_feature
 
 __all__ = [
     "build_configured_community_activity_failures",
@@ -187,6 +188,7 @@ async def collect_configured_community_activity(
     max_concurrency: int = 4,
 ) -> tuple[CommunityActivitySnapshot, ...]:
     """读取已配置账号组并查询已登记社区的日常活动。"""
+    require_network_feature("community")
 
     from app.core import Config
     from app.tools.community_sign_provider import (

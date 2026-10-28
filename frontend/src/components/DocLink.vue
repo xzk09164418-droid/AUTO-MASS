@@ -1,5 +1,6 @@
 <template>
   <a
+    v-if="networkCapabilities.onlineResources"
     class="doc-link"
     :href="localizedUrl"
     target="_blank"
@@ -14,6 +15,7 @@
 </template>
 
 <script setup lang="ts">
+import { networkCapabilities } from '@/utils/networkCapabilities'
 import { useI18n } from 'vue-i18n'
 import { computed } from 'vue'
 import { BookOutlined, ExportOutlined } from '@ant-design/icons-vue'

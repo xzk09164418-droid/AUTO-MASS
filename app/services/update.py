@@ -41,6 +41,7 @@ from app.models.schema import (
     WSUpdateProgressData,
 )
 from app.utils import LazyProxy, ProcessRunner, get_logger
+from app.utils.network_policy import require_network_feature
 from app.utils.platform.process import platform_process
 
 from .system import System
@@ -200,6 +201,7 @@ class _UpdateHandler:
         )
 
     async def start_download(self, *, target_version: Optional[str] = None) -> bool:
+        require_network_feature("updates")
         if self.is_switching_source or self.is_locked:
             return False
 
@@ -412,6 +414,7 @@ class _UpdateHandler:
         Raises:
             Exception: Mirror 酱返回业务错误码或无法识别的响应时抛出。
         """
+        require_network_feature("updates")
 
         return await request_mirror_resource(
             "AUTO_MAS",
@@ -432,6 +435,7 @@ class _UpdateHandler:
         self, current_version: str, if_force: bool = False
     ) -> tuple[bool, str, Dict[str, Dict[str, List[str]]]]:
 
+        require_network_feature("updates")
         self.current_version = current_version
 
         # 标题栏每 10 分钟轮询一次, 非强制检查一小时内直接复用上次结果
@@ -476,6 +480,7 @@ class _UpdateHandler:
 
     async def download_update(self, *, job: Optional[_DownloadJob] = None) -> None:
 
+        require_network_feature("updates")
         download_job = job or self._create_download_job()
 
         logger.info("收到前端下载请求")
@@ -592,6 +597,7 @@ class _UpdateHandler:
 
     async def install_update(self):
 
+        require_network_feature("updates")
         if self.is_locked or self.is_switching_source:
             await Publisher.send(
                 id=protocol.ID_UPDATE,

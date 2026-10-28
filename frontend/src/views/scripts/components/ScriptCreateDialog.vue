@@ -115,7 +115,10 @@
               :description="t('scripts.create.sourceHeadingDesc')"
             />
             <a-radio-group v-model:value="selectedConfigMode" class="choice-list">
-              <label :class="['choice-row', { selected: selectedConfigMode === 'template' }]">
+              <label
+                v-if="networkCapabilities.onlineResources"
+                :class="['choice-row', { selected: selectedConfigMode === 'template' }]"
+              >
                 <a-radio value="template" />
                 <span class="choice-icon"><DatabaseOutlined /></span>
                 <span class="choice-copy">
@@ -270,6 +273,7 @@
 </template>
 
 <script setup lang="ts">
+import { networkCapabilities } from '@/utils/networkCapabilities'
 import { useI18n } from 'vue-i18n'
 import { computed, defineComponent, h, onBeforeUnmount, ref, watch } from 'vue'
 import {
@@ -345,7 +349,7 @@ const TEMPLATE_SEARCH_DEBOUNCE = 400
 
 const currentStep = ref<CreateStepKey>('type')
 const selectedType = ref<ScriptType>('General')
-const selectedConfigMode = ref<ConfigMode>('template')
+const selectedConfigMode = ref<ConfigMode>('custom')
 const selectedTemplateKey = ref<string | null>(null)
 const configView = ref<'choice' | 'templates'>('choice')
 /** 'new' = 新建一个别的项目（进引导页选目录）；否则是要复用的项目所属脚本的 id */
@@ -445,7 +449,7 @@ const resetDialog = () => {
   cancelScheduledSearch()
   currentStep.value = 'type'
   selectedType.value = 'General'
-  selectedConfigMode.value = 'template'
+  selectedConfigMode.value = 'custom'
   selectedTemplateKey.value = null
   configView.value = 'choice'
   selectedMfwChoice.value = 'new'

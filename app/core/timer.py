@@ -25,10 +25,9 @@ from datetime import date, datetime, timedelta, timezone
 from functools import partial
 from typing import Any
 
-from app.services import Matomo
-from app.services.telemetry import record_daily_active
 from app.utils import get_logger
 from app.utils.constants import UTC8
+from app.utils.network_policy import network_feature_enabled
 
 from .community_scheduler import (
     TASK_COMMUNITY_SOURCES,
@@ -106,9 +105,7 @@ class _MainTimer:
         self.calendar_timer = asyncio.create_task(self.calendar_task())
         self.started = True
 
-        if Config.ToolsConfig.get("GameSign", "Enabled") and (
-            Config.ToolsConfig.get("GameSign", "RunOnStartup")
-        ):
+        if Config.ToolsConfig.get("GameSign", "Enabled") and Config.ToolsConfig.get("GameSign", "RunOnStartup"):
             self.schedule_community_for_startup()
 
         logger.info("主业务定时器启动")
@@ -153,33 +150,6 @@ class _MainTimer:
 
         logger.info("每小时定期任务启动")
 
-        async def upload_statistics() -> None:
-            if (
-                datetime.strptime(
-                    Config.get("Data", "LastStatisticsUpload"), "%Y-%m-%d %H:%M:%S"
-                ).date()
-                != datetime.now().date()
-            ):
-                await Matomo.send_event(
-                    "App",
-                    "Version",
-                    Config.VERSION,
-                    1 if "beta" in Config.VERSION else 0,
-                )
-                await Config.set(
-                    "Data",
-                    "LastStatisticsUpload",
-                    datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                )
-
-        async def record_telemetry_active() -> None:
-            # 按 UTC 日期去重：Sentry 按 UTC 自然日聚合，跨日最多晚一小时记上
-            today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-            if Config.get("Data", "LastTelemetryActive") == today:
-                return
-            if record_daily_active():
-                await Config.set("Data", "LastTelemetryActive", today)
-
         async def clean_expired_data() -> None:
             # 每天一轮：把过期的历史记录、诊断文件与 MFW 原生日志备份清掉。
             # 清理本身幂等（只删超期的），守卫用内存日期即可，不必像统计上报那样
@@ -197,8 +167,6 @@ class _MainTimer:
                 await self._run_loop_step(name, partial(asyncio.to_thread, clean))
 
         while True:
-            await self._run_loop_step("统计上报", upload_statistics)
-            await self._run_loop_step("遥测日活", record_telemetry_active)
             await self._run_loop_step("日志清理", clean_expired_data)
             await asyncio.sleep(3600)
 
@@ -384,6 +352,8 @@ class _MainTimer:
     def schedule_community_for_startup(self) -> None:
         """Schedule one background community sign-in after application startup."""
 
+        if not network_feature_enabled("community-sign"):
+            return
         if not (
             Config.ToolsConfig.get("GameSign", "Enabled")
             and (Config.ToolsConfig.get("GameSign", "RunOnStartup"))
@@ -419,6 +389,9 @@ class _MainTimer:
     ) -> None:
         """与脚本并行签到，通过完成回调交付结果，复用现有后台任务所有权。"""
 
+        if not network_feature_enabled("community-sign"):
+            on_completed([])
+            return
         if not self._has_pending_community_sign(source=source):
             on_completed([])
             return

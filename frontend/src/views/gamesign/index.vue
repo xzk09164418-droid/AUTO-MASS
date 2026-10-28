@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
+import { networkCapabilities } from '@/utils/networkCapabilities'
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import type { ToolsConfig, ToolsConfig_GameSign } from '@/api'
@@ -61,7 +62,10 @@ let gameSignSubscriptionId: string | null = null
 let isMounted = true
 
 const activityEnabled = computed(
-  () => toolsLoaded.value && editingConfig.GameSign?.ActivityEnabled !== false
+  () =>
+    networkCapabilities.communityActivity &&
+    toolsLoaded.value &&
+    editingConfig.GameSign?.ActivityEnabled !== false
 )
 
 const activeTab = computed<CommunityTab>(() =>

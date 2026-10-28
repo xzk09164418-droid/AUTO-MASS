@@ -1,3 +1,4 @@
+import { networkCapabilities } from '@/utils/networkCapabilities'
 /**
  * 版本服务 - 统一管理前端和后端版本信息获取与定时检查
  * 包含两个独立的定时器：
@@ -48,6 +49,7 @@ export const getBackendVersion = async () => {
 }
 
 export const checkRuntimeBackendUpdate = async () => {
+  if (!networkCapabilities.updates) return
   try {
     const result = await window.hostAPI.checkRuntimeBackendUpdate?.()
     if (result?.staged === true) {
@@ -117,6 +119,7 @@ const pollTitlebarVersionOnce = async () => {
  * 暂停更新期间定时器照常待命（每次 tick 由 getAppVersion 门控跳过），到期后自动恢复
  */
 export const startTitlebarVersionCheck = async () => {
+  if (!networkCapabilities.updates) return
   if (titlebarPollTimer) {
     logger.warn('标题栏版本检查定时器已存在，跳过启动')
     return

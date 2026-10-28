@@ -287,7 +287,7 @@ def main(argv: list[str] | None = None):
     from contextlib import asynccontextmanager, suppress
 
     import uvicorn
-    from fastapi import FastAPI
+    from fastapi import Depends, FastAPI
     from fastapi.responses import FileResponse
     from fastapi.staticfiles import StaticFiles
 
@@ -575,8 +575,14 @@ def main(argv: list[str] | None = None):
         tools_router,
         update_router,
     )
+    from app.api.network_policy import (
+        enforce_network_policy,
+        network_feature_disabled_response,
+    )
+    from app.utils.network_policy import NetworkFeatureDisabled
 
     app = FastAPI(
+        dependencies=[Depends(enforce_network_policy)],
         title="AUTO-MAS",
         description="API for managing automation scripts, plans, and tasks",
         version="1.0.0",
@@ -591,6 +597,7 @@ def main(argv: list[str] | None = None):
         allow_headers=["*"],
     )
 
+    app.add_exception_handler(NetworkFeatureDisabled, network_feature_disabled_response)
     app.include_router(core_router)
     app.include_router(child_session_router)
     app.include_router(info_router)

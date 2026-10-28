@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { networkCapabilities } from '@/utils/networkCapabilities'
 import { useI18n } from 'vue-i18n'
 import { computed, onMounted, ref } from 'vue'
 import {
@@ -236,7 +237,7 @@ const { settings, historyRetentionOptions, voiceTypeOptions, handleSettingChange
         </a-col>
       </a-row>
       <a-row :gutter="24">
-        <a-col :span="12">
+        <a-col v-if="networkCapabilities.telemetry" :span="12">
           <div class="form-item-vertical">
             <div class="form-label-wrapper">
               <span class="form-label">{{ t('setting.func.telemetry') }}</span>

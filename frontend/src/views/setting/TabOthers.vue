@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { networkCapabilities, NETWORK_DISABLED_MESSAGE } from '@/utils/networkCapabilities'
 import { useI18n } from 'vue-i18n'
 import {
   HomeOutlined,
@@ -101,13 +102,14 @@ const copyAllInfo = async () => {
 </script>
 <template>
   <div class="tab-content">
+    <a-alert type="info" show-icon :message="NETWORK_DISABLED_MESSAGE" />
     <div class="form-section">
       <div class="section-header">
         <h3>
           {{ t(isBrowserHost ? 'setting.others.networkSection' : 'setting.others.updateSection') }}
         </h3>
         <a-button
-          v-if="!isBrowserHost"
+          v-if="networkCapabilities.updates && !isBrowserHost"
           type="primary"
           size="small"
           class="section-update-button"
@@ -125,14 +127,14 @@ const copyAllInfo = async () => {
       </div>
       <!-- 暂停中：显著状态条（含副标题提示）；日期选择器常驻，暂停期间也可改截止日期 -->
       <a-alert
-        v-if="!isBrowserHost && isPaused"
+        v-if="networkCapabilities.updates && !isBrowserHost && isPaused"
         type="info"
         show-icon
         class="pause-status-alert"
         :message="t('setting.others.pauseStatus', { date: pauseUntilDisplay })"
         :description="t('setting.others.pauseStatusHint')"
       />
-      <a-row v-if="!isBrowserHost" :gutter="24">
+      <a-row v-if="networkCapabilities.updates && !isBrowserHost" :gutter="24">
         <a-col :span="8">
           <div class="form-item-vertical">
             <div class="form-label-wrapper">
@@ -154,7 +156,7 @@ const copyAllInfo = async () => {
           </div>
         </a-col>
       </a-row>
-      <a-row v-if="!isBrowserHost" :gutter="24">
+      <a-row v-if="networkCapabilities.updates && !isBrowserHost" :gutter="24">
         <a-col :span="8">
           <div class="form-item-vertical">
             <div class="form-label-wrapper">
@@ -226,7 +228,7 @@ const copyAllInfo = async () => {
             />
           </div>
         </a-col>
-        <a-col :span="isBrowserHost ? 12 : 8">
+        <a-col v-if="networkCapabilities.updates" :span="isBrowserHost ? 12 : 8">
           <div class="form-item-vertical">
             <div class="form-label-wrapper">
               <span class="form-label">{{ t('setting.others.githubMirror') }}</span>
@@ -244,7 +246,7 @@ const copyAllInfo = async () => {
             />
           </div>
         </a-col>
-        <a-col v-if="!isBrowserHost" :span="8">
+        <a-col v-if="networkCapabilities.updates && !isBrowserHost" :span="8">
           <div class="form-item-vertical">
             <div class="form-label-wrapper">
               <span class="form-label">{{ t('setting.others.cdk') }}</span>

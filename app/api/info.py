@@ -182,6 +182,7 @@ async def get_git_version() -> VersionOut:
             current_hash="unknown",
         )
     return VersionOut(
+        message="已停用更新检查，仅显示本地版本信息",
         if_need_update=not is_latest,
         current_time=commit_time,
         current_hash=commit_hash,

@@ -1,5 +1,6 @@
 // appEntry.ts - 统一的应用进入逻辑
 import router from '@/router'
+import { networkCapabilities } from '@/utils/networkCapabilities'
 import { bootstrapRealtimeResidents } from '@/bootstrap/realtimeResidents'
 import { connectWithRetry, initializeAppLifecycle } from '@/composables/useAppLifecycle'
 import { startTitlebarVersionCheck } from '@/composables/useVersionService'
@@ -18,6 +19,7 @@ let versionServicesStarted = false
  * 2. 版本更新检查（4小时一次，带弹窗提醒）
  */
 function startVersionServices() {
+  if (!networkCapabilities.updates) return
   if (window.__AUTO_MAS_BROWSER_HOST__) return
   if (versionServicesStarted) {
     logger.info('版本检查服务已启动，跳过重复启动')

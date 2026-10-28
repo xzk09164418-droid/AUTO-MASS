@@ -62,6 +62,7 @@ from app.runtime_tasks import RuntimeTasks
 from app.tools.push_log import build_task_result_text
 from app.utils import LazyProxy, get_logger
 from app.utils.constants import UTC4
+from app.utils.network_policy import require_network_feature
 
 from .config import (
     BAAHConfig,
@@ -1812,6 +1813,8 @@ class _TaskManager:
         view_only: bool = False,
         instance_idx: int | None = None,
     ) -> uuid.UUID:
+        if mode == "Update":
+            require_network_feature("updates")
         from app.core.desktop_runtime import ensure_execution_session
 
         await ensure_execution_session()

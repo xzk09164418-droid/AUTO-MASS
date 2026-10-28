@@ -1,3 +1,4 @@
+import { networkCapabilities, NETWORK_DISABLED_MESSAGE } from '@/utils/networkCapabilities'
 /**
  * Runtime 链路的后端更新
  *
@@ -135,6 +136,7 @@ export function useBackendRuntimeUpdate() {
   const stageOrder = computed(() => UPDATE_STAGE_ORDER)
 
   async function start(version: string): Promise<void> {
+    if (!networkCapabilities.updates) throw new Error(NETWORK_DISABLED_MESSAGE)
     if (running.value) return
 
     resetProgress()
@@ -159,6 +161,7 @@ export function useBackendRuntimeUpdate() {
   }
 
   async function retry(action: RuntimeUpdateRetryAction): Promise<void> {
+    if (!networkCapabilities.updates) throw new Error(NETWORK_DISABLED_MESSAGE)
     if (running.value) return
 
     outcome.value = null

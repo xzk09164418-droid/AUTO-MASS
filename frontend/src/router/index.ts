@@ -142,7 +142,7 @@ const routes = [
   {
     path: '/theme-store',
     name: 'ThemeStore',
-    component: () => import('../views/themeStore/index.vue'),
+    component: () => import('../views/OnlineResourcesDisabled.vue'),
     meta: { title: '主题商店' },
   },
   {

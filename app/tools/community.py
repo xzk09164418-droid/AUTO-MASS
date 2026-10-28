@@ -24,6 +24,8 @@
 
 from contextlib import asynccontextmanager
 
+from app.utils.network_policy import require_network_feature
+
 from .community_activity_parser import parse_activity_snapshot
 from .community_activity_provider import (
     CommunityActivityProvider,
@@ -95,6 +97,7 @@ async def run_community_sign_in(
     force: bool = False,
 ) -> list[dict[str, object]]:
     """延迟调用核心社区签到编排。"""
+    require_network_feature("community-sign")
 
     from app.core.community_sign import run_community_sign_in as core_run
 

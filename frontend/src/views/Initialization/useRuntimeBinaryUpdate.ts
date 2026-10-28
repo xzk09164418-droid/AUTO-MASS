@@ -1,3 +1,4 @@
+import { networkCapabilities } from '@/utils/networkCapabilities'
 import { computed, onUnmounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { message } from 'ant-design-vue'
@@ -22,6 +23,7 @@ export function useRuntimeBinaryUpdate(onUpdated: () => void) {
   let disposed = false
 
   async function checkForUpdate() {
+    if (!networkCapabilities.updates) return
     const api = window.hostAPI
     try {
       const result = await api.checkRuntimeBinaryUpdate()
@@ -32,6 +34,7 @@ export function useRuntimeBinaryUpdate(onUpdated: () => void) {
   }
 
   async function updateRuntime() {
+    if (!networkCapabilities.updates) return
     if (updating.value || !canUpdateRuntime.value) return
     updating.value = true
     updateMessage.value = t('init.failure.runtimeUpdating')

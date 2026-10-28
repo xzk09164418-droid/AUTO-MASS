@@ -1,3 +1,4 @@
+import { networkCapabilities, NETWORK_DISABLED_MESSAGE } from '@/utils/networkCapabilities'
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { message } from 'ant-design-vue'
@@ -401,6 +402,8 @@ export function useInitializationFlow() {
     let failure: RuntimeFailureFields = {}
 
     try {
+      if (!networkCapabilities.updates && stepKey !== 'backend')
+        throw new Error(NETWORK_DISABLED_MESSAGE)
       const api = window.hostAPI
       let result: InstallStageResult
 
@@ -673,6 +676,12 @@ export function useInitializationFlow() {
   }
 
   async function resolveStartIndex(): Promise<number> {
+    if (!networkCapabilities.updates) {
+      sessionStorage.removeItem('forceBackendUpdate')
+      flowKind.value = 'startup'
+      markStepsBefore(steps.length - 1)
+      return steps.length - 1
+    }
     const api = window.hostAPI
     const forceBackendUpdate = sessionStorage.getItem('forceBackendUpdate') === 'true'
     if (forceBackendUpdate) {

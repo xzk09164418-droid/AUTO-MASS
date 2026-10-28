@@ -20,119 +20,20 @@
 #   Contact: DLmaster_361@163.com
 
 
-import asyncio
-import json
-import platform
-import time
-import uuid
-from importlib import import_module
-from typing import Any, Dict, Optional
-
-import httpx
-
-from app.utils import LazyProxy, get_logger
-
-logger = get_logger("信息上报")
-
-# 延迟加载 Config，避免 app.services 初始化期间触发 app.core 循环导入
-Config = LazyProxy("app.core", "Config")
-
-
 class _MatomoHandler:
-    """Matomo统计上报服务"""
+    """本机构建停用统计上报，保留异步接口供现有业务调用。
 
-    base_url = "https://statistics.auto-mas.top/matomo.php"
-    site_id = "3"
-
-    def __init__(self):
-
-        self.session: httpx.AsyncClient | None = None
-        self._session_lock = asyncio.Lock()
-
-    async def _get_session(self) -> httpx.AsyncClient:
-        """获取HTTP会话"""
-
-        async with self._session_lock:
-            if self.session is None or self.session.is_closed:
-                # 在线程中加载证书，提前解析依赖以免并发冷导入。
-                for dependency in ("ssl", "warnings", "certifi"):
-                    import_module(dependency)
-                context = await asyncio.to_thread(httpx.create_ssl_context)
-                # 上下文仅归本客户端所有，避免各代理传输重复加载同一证书包。
-                self.session = httpx.AsyncClient(timeout=10, verify=context)
-            return self.session
-
-    async def close(self):
-        """关闭HTTP会话"""
-        # 初始化与关闭串行，避免关闭返回后才创建出一个无人回收的会话。
-        async with self._session_lock:
-            if self.session is not None and not self.session.is_closed:
-                await self.session.aclose()
-
-    def _build_base_params(self, custom_vars: Optional[Dict[str, Any]] = None):
-        """构建基础参数"""
-        params = {
-            "idsite": self.site_id,
-            "rec": "1",
-            "action_name": "AUTO-MAS后端",
-            "_id": Config.get("Data", "UID")[:16],
-            "uid": Config.get("Data", "UID"),
-            "rand": str(uuid.uuid4().int)[:10],
-            "apiv": "1",
-            "h": time.strftime("%H"),
-            "m": time.strftime("%M"),
-            "s": time.strftime("%S"),
-            "ua": f"AUTO-MAS/{Config.VERSION} ({platform.system()} {platform.release()})",
-        }
-
-        # 添加自定义变量
-        if custom_vars is not None:
-            cvar = {}
-            for i, (key, value) in enumerate(custom_vars.items(), 1):
-                if i <= 5:
-                    cvar[str(i)] = [str(key), str(value)]
-            if cvar:
-                params["_cvar"] = json.dumps(cvar)
-
-        return params
+    不创建 HTTP/TLS 客户端，不把停用伪装成上传成功。本地任务日志、错误记录和
+    通知不经过此接口，不受统计功能移除影响。
+    """
 
     async def send_event(
-        self,
-        category: str,
-        action: str,
-        name: Optional[str] = None,
-        value: Optional[float] = None,
-        custom_vars: Optional[Dict[str, Any]] = None,
+        self, category, action, name=None, value=None, custom_vars=None
     ):
-        """发送事件数据到Matomo
+        return None
 
-        Args:
-            category: 事件类别，如 "Script", "Config", "User"
-            action: 事件动作，如 "Execute", "Update", "Login"
-            name: 事件名称，如具体的脚本名称
-            value: 事件值，如执行时长、文件大小等数值
-            custom_vars: 自定义变量字典
-        """
-        try:
-            session = await self._get_session()
-            if session is None:
-                return
-
-            params = self._build_base_params(custom_vars)
-            params.update({"e_c": category, "e_a": action, "e_n": name, "e_v": value})
-            params = {k: v for k, v in params.items() if v is not None}
-
-            async with asyncio.timeout(10):
-                response = await session.get(self.base_url, params=params)
-            if response.status_code == 200:
-                logger.debug(f"Matomo事件上报成功: {category}/{action}")
-            else:
-                logger.warning(f"Matomo事件上报失败: {response.status_code}")
-
-        except (asyncio.TimeoutError, httpx.TimeoutException):
-            logger.warning("Matomo事件上报超时")
-        except Exception as e:
-            logger.error(f"Matomo事件上报错误: {e}")
+    async def close(self):
+        return None
 
 
 Matomo = _MatomoHandler()
