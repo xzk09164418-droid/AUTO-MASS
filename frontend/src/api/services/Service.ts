@@ -50,6 +50,12 @@ import type { EmulatorOperateIn } from '../models/EmulatorOperateIn';
 import type { EmulatorSearchOut } from '../models/EmulatorSearchOut';
 import type { EmulatorStatusOut } from '../models/EmulatorStatusOut';
 import type { EmulatorUpdateIn } from '../models/EmulatorUpdateIn';
+import type { ExternalControlContractOut } from '../models/ExternalControlContractOut';
+import type { ExternalControlSettingsIn } from '../models/ExternalControlSettingsIn';
+import type { ExternalControlSnapshotOut } from '../models/ExternalControlSnapshotOut';
+import type { ExternalHoldEnvelopeIn } from '../models/ExternalHoldEnvelopeIn';
+import type { ExternalHoldForceReleaseIn } from '../models/ExternalHoldForceReleaseIn';
+import type { ExternalHoldOut } from '../models/ExternalHoldOut';
 import type { GameCalendarActivitiesOut } from '../models/GameCalendarActivitiesOut';
 import type { GameCalendarActivityCompletionIn } from '../models/GameCalendarActivityCompletionIn';
 import type { GameSignAccountCreateOut } from '../models/GameSignAccountCreateOut';
@@ -4617,6 +4623,134 @@ export class Service {
             errors: {
                 422: `Validation Error`,
             },
+        });
+    }
+    /**
+     * 申请脚本外部占用
+     * @param requestBody
+     * @returns ExternalHoldOut Successful Response
+     * @throws ApiError
+     */
+    public static acquireExternalHoldApiDispatchExternalHoldsAcquirePost(
+        requestBody: ExternalHoldEnvelopeIn,
+    ): CancelablePromise<ExternalHoldOut> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/dispatch/external-holds/acquire',
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * 释放自己的脚本占用
+     * @param requestBody
+     * @returns ExternalHoldOut Successful Response
+     * @throws ApiError
+     */
+    public static releaseExternalHoldApiDispatchExternalHoldsReleasePost(
+        requestBody: ExternalHoldEnvelopeIn,
+    ): CancelablePromise<ExternalHoldOut> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/dispatch/external-holds/release',
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * 查询自己的脚本占用
+     * @param requestBody
+     * @returns ExternalHoldOut Successful Response
+     * @throws ApiError
+     */
+    public static getExternalHoldStatusApiDispatchExternalHoldsStatusPost(
+        requestBody: ExternalHoldEnvelopeIn,
+    ): CancelablePromise<ExternalHoldOut> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/dispatch/external-holds/status',
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * 本机外部控制设置与状态
+     * @returns ExternalControlSnapshotOut Successful Response
+     * @throws ApiError
+     */
+    public static getExternalControlSnapshotApiDispatchExternalHoldsManagementGet(): CancelablePromise<ExternalControlSnapshotOut> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/dispatch/external-holds/management',
+        });
+    }
+    /**
+     * 保存本机邮箱与调用方设置
+     * @param requestBody
+     * @returns OutBase Successful Response
+     * @throws ApiError
+     */
+    public static saveExternalControlSettingsApiDispatchExternalHoldsSettingsPost(
+        requestBody: ExternalControlSettingsIn,
+    ): CancelablePromise<OutBase> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/dispatch/external-holds/settings',
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * 用户手动解除占用
+     * @param requestBody
+     * @returns OutBase Successful Response
+     * @throws ApiError
+     */
+    public static forceReleaseExternalHoldApiDispatchExternalHoldsForceReleasePost(
+        requestBody: ExternalHoldForceReleaseIn,
+    ): CancelablePromise<OutBase> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/dispatch/external-holds/force-release',
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * 当前外部控制字段说明
+     * @returns ExternalControlContractOut Successful Response
+     * @throws ApiError
+     */
+    public static getExternalControlContractApiDispatchExternalHoldsContractGet(): CancelablePromise<ExternalControlContractOut> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/dispatch/external-holds/contract',
+        });
+    }
+    /**
+     * 验证 QQ 邮箱连接
+     * @returns OutBase Successful Response
+     * @throws ApiError
+     */
+    public static testExternalMailConnectionApiDispatchExternalHoldsMailTestPost(): CancelablePromise<OutBase> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/dispatch/external-holds/mail-test',
         });
     }
 }

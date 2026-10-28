@@ -1,9 +1,13 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
+import { computed, defineAsyncComponent, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { message, Modal } from 'ant-design-vue'
 import { t } from '@/i18n'
 import { useLocalControls } from '@/composables/useLocalControls'
 import type { LocalConfig } from '@/types/localControls'
+
+const ExternalControlPanel = defineAsyncComponent(
+  () => import('./local-controls/ExternalControlPanel.vue')
+)
 
 const { loading, error, status, getConfig, saveConfig, refreshStatus, action } = useLocalControls()
 const saving = ref(false)
@@ -300,6 +304,9 @@ onUnmounted(() => clearInterval(timer))
             ></a-table-column
           >
         </a-table>
+      </a-tab-pane>
+      <a-tab-pane key="external" tab="外部程序接口">
+        <ExternalControlPanel v-if="tab === 'external'" />
       </a-tab-pane>
     </a-tabs>
     <a-modal
