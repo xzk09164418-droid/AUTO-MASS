@@ -106,6 +106,7 @@ namespace BetterGenshinImpact.Service.ChildSession
         private string _statusMessage = "桌面分身宿主已初始化（默认托盘常驻运行）";
         private string _externalLeaseHolder;
         private TaskCompletionSource<bool> _loginTcs;
+        private readonly ChildSessionConnectionAttempt _connectionAttempt = new ChildSessionConnectionAttempt();
 
         public ChildSessionHostForm(int port = 36165, int width = 2560, int height = 1440, bool startHidden = true)
         {
@@ -1386,7 +1387,12 @@ namespace BetterGenshinImpact.Service.ChildSession
             return tcs.Task;
         }
 
-        public async Task<bool> EnsureConnectedAsync()
+        public Task<bool> EnsureConnectedAsync()
+        {
+            return _connectionAttempt.Run(ConnectOnceAsync);
+        }
+
+        private async Task<bool> ConnectOnceAsync()
         {
             var issues = ChildSessionEnvironmentCheck.Collect();
             try
