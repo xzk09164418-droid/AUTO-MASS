@@ -214,11 +214,7 @@ namespace AutoMas.Launcher
                     CreateNoWindow = true
                 };
                 Process.Start(psi);
-                for (int i = 0; i < 120; i++)
-                {
-                    if (CheckPortReady(_frontendPort, "/__frontend_config")) return;
-                    await Task.Delay(500);
-                }
+                if (await WaitForServiceAsync(_frontendPort, "/__frontend_config", 60000)) return;
                 throw new InvalidOperationException("前端启动超时，请检查 Node.js 启动日志。");
             }
 
@@ -240,15 +236,23 @@ namespace AutoMas.Launcher
 
             if (!_headless)
             {
-                for (int i = 0; i < 60; i++)
-                {
-                    if (CheckPortReady(_backendPort))
-                    {
-                        break;
-                    }
-                    await Task.Delay(500);
-                }
+                await WaitForServiceAsync(_backendPort, "/api/core/health", 30000);
             }
+        }
+
+        private static async Task<bool> WaitForServiceAsync(int port, string path, int timeoutMs)
+        {
+            var elapsed = Stopwatch.StartNew();
+            while (elapsed.ElapsedMilliseconds < timeoutMs)
+            {
+                if (CheckPortReady(port, path)) return true;
+                var remaining = timeoutMs - elapsed.ElapsedMilliseconds;
+                if (remaining <= 0) break;
+                // 初始窗口快速发现就绪；慢启动恢复低频探测，避免持续增加请求。
+                var interval = elapsed.ElapsedMilliseconds < 5000 ? 100 : 500;
+                await Task.Delay((int)Math.Min(interval, remaining));
+            }
+            return false;
         }
 
         private static bool CanRunCommand(string exe, string args)
