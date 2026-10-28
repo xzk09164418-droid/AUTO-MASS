@@ -31,13 +31,14 @@ from pathlib import Path
 from typing import Optional
 
 from app.core import Config
+from app.core.general_ownership import general_ownership
 from app.core.ws import Publisher, protocol
 from app.log_box.hooks import make_line_hook
 from app.log_box.markers import parse_marker
 from app.models.config import GeneralConfig, GeneralUserConfig
 from app.models.ConfigBase import MultipleConfig
 from app.models.emulator import DeviceBase
-from app.models.schema import WSTaskNoticeData
+from app.models.schema import GeneralConfig_Script, WSTaskNoticeData
 from app.models.task import LogRecord, ScriptItem
 from app.services import Notify, System
 from app.task.base import ScriptAutoProxyBase
@@ -56,6 +57,14 @@ from app.utils import (
 from app.utils.constants import UTC4
 from app.utils.LogPatternExtractor import LOG_TYPE_NORMAL
 
+from .recovery import (
+    EXIT_STABLE_SECONDS,
+    RECOVERY_SECONDS,
+    CleanupFailed,
+    GeneralProcessManager,
+    ProcessTracker,
+    split_restart_arguments,
+)
 from .tools import push_notification
 from .tools.launch import launch_commands
 
@@ -106,7 +115,7 @@ def _format_to_prefix_regex(fmt: str) -> re.Pattern[str]:
 
 
 class AutoProxyTask(ScriptAutoProxyBase):
-    """自动代理模式（支持无日志路径退出码模式 + 有日志路径双模判定，移除配置回写，强杀 3 遍）"""
+    """通用脚本自动代理，支持自定义清理、有序恢复和一次限时补跑。"""
 
     def __init__(
         self,
@@ -131,12 +140,21 @@ class AutoProxyTask(ScriptAutoProxyBase):
         self.check_result = "-"
         self.has_log_path = False
         self.general_log_monitor: LogMonitor | None = None
+        self._cleanup_task: asyncio.Task | None = None
+        self._cleanup_error = ""
+        self._prepared = False
+        self._recovery_used = False
+        self._first_failure = ""
+        self._recovery_result = ""
+        self._finished = False
+        self._ownership_warning = ""
 
     async def check(self) -> str:
         # 单独运行脚本是用户主动指定的一次性运行，不受单日代理次数上限约束
         if (
             self.task_info.is_queue_task
-            and self.script_info.script_id not in self.task_info.external_restart_script_ids
+            and self.script_info.script_id
+            not in self.task_info.external_restart_script_ids
             and self.script_config.get("Run", "ProxyTimesLimit") != 0
             and self.cur_user_config.get("Data", "ProxyTimes")
             >= self.script_config.get("Run", "ProxyTimesLimit")
@@ -147,7 +165,19 @@ class AutoProxyTask(ScriptAutoProxyBase):
         return "Pass"
 
     async def prepare(self):
-        self.general_process_manager = ProcessManager()
+        recovery_config = GeneralConfig_Script.model_validate(
+            {
+                "TaskKill": self.script_config.get("Script", "TaskKill"),
+                "TaskKillMode": self.script_config.get("Script", "TaskKillMode"),
+                "Restart": self.script_config.get("Script", "Restart"),
+            }
+        )
+        self.cleanup_targets = recovery_config.TaskKill or []
+        self.cleanup_mode = recovery_config.TaskKillMode or "Force"
+        self.restart_entries = recovery_config.Restart or []
+        self.process_tracker = ProcessTracker()
+        self.general_process_manager = self._new_process_manager()
+        self._launch_managers: list[ProcessManager] = []
         self.wait_event = asyncio.Event()
         self.user_start_time = datetime.now()
         self.log_start_time = datetime.now()
@@ -250,6 +280,13 @@ class AutoProxyTask(ScriptAutoProxyBase):
             self.general_log_monitor = None
 
         self.run_book = False
+        if self.cleanup_targets and isinstance(self.game_manager, ProcessManager):
+            self.game_manager = self._new_process_manager()
+        self._prepared = True
+        self._failure_kind = "error"
+        self.cur_user_item.log_record[self.log_start_time] = self.cur_user_log = (
+            LogRecord()
+        )
 
     def _resolve_log_file_path(self) -> Path:
         return self.script_log_path
@@ -259,307 +296,456 @@ class AutoProxyTask(ScriptAutoProxyBase):
         if arguments:
             logger.info(f"检测到游戏已在运行，本轮不会应用启动参数（{arguments}）")
 
-    async def _wait_without_log_until_exit(self) -> None:
-        """无日志模式：当未填写日志路径时，日志超时（RunTimeLimit）自动失效，
-        仅受总上限时间（HardTimeLimit）约束；只要进程在上限时间内自行退出（不限返回码）即视为成功。
-        """
-        logger.info("当前未填写日志路径：启用无日志退出判定模式（日志超时已自动失效，仅受总上限时间约束）")
-        self.script_info.log = "无日志模式：正在等待外部脚本进程执行完成..."
+    async def _run_main_task(self) -> None:
+        # General 自己管理首轮与补跑预算，其他专项仍使用基类总时限。
+        self._task_started_monotonic = time.monotonic()
+        await self.main_task()
 
-        while True:
-            if not await self.general_process_manager.is_running():
-                exit_code = self.general_process_manager.returncode
-                msg = f"外部脚本进程已在上限时间内自行退出 (退出码: {exit_code})"
-                logger.success(msg)
-                self.cur_user_log.content = [msg]
-                self.cur_user_log.status = "Success!"
-                self.script_info.log = msg
-                self.wait_event.set()
-                return
-            await asyncio.sleep(0.5)
+    def _new_process_manager(self) -> ProcessManager:
+        return GeneralProcessManager(
+            self.kill_managed_process if self.cleanup_targets else None
+        )
 
     async def main_task(self):
-        """自动代理模式主逻辑"""
-
         self.curdate = datetime.now(tz=UTC4).strftime("%Y-%m-%d")
         if self.cur_user_config.get("Data", "LastProxyDate") != self.curdate:
             await self.cur_user_config.set("Data", "LastProxyDate", self.curdate)
             await self.cur_user_config.set("Data", "ProxyTimes", 0)
-
         self.check_result = await self.check()
         if self.check_result != "Pass":
-            if self.cur_user_item.status == "异常":
-                await Publisher.send(
-                    id=self.task_info.task_id,
-                    type=protocol.TASK_NOTICE,
-                    data=WSTaskNoticeData(
-                        level="error",
-                        message=f"用户 {self.cur_user_item.name} 检查未通过: {self.check_result}",
-                    ),
-                )
             return
-
         await self.prepare()
-        await self.run_user_scripts_before()
-
-        logger.info(f"开始代理用户: {self.cur_user_uid}")
         self.cur_user_item.status = "运行"
-
-        for i in range(self.script_config.get("Run", "RunTimesLimit")):
-            if self.run_book:
-                break
-            if self.remaining_hard_timeout_seconds() <= 0:
-                logger.warning("已达到任务总上限时间，不再进行后续重试")
-                break
-
-            logger.info(
-                f"用户 {self.cur_user_item.name} - 尝试次数: {i + 1}/{self.script_config.get('Run', 'RunTimesLimit')} "
-                f"(剩余总上限时间: {self.remaining_hard_timeout_seconds():.1f}s)"
-            )
-            self.log_start_time = datetime.now()
-            self.log_start_at = time.monotonic()
-            self.cur_user_item.log_record[self.log_start_time] = self.cur_user_log = (
-                LogRecord()
-            )
-            self.push_log_buffer.clear()
-            self._push_log_processed = 0
-            self._process_seen = False
-            for _matcher in self.push_log_patterns_compiled:
-                _reset = getattr(_matcher, "reset", None)
-                if _reset is not None:
-                    _reset()
-
-            self.script_info.log = "正在启动游戏 / 模拟器"
-            if self.game_manager is not None:
-                try:
-                    if isinstance(self.game_manager, ProcessManager):
-                        if self.script_config.get("Game", "Type") == "URL":
-                            if self.game_process_name and is_process_running(
-                                self.game_process_name
-                            ):
-                                logger.info(
-                                    f"检测到游戏进程已在运行，跳过由 MAS 重复启动游戏: {self.game_process_name}"
-                                )
-                                self._note_launch_arguments_skipped()
-                                await asyncio.sleep(2)
-                            else:
-                                logger.info(
-                                    f"启动游戏: {self.game_process_name}, 参数{self.game_url}"
-                                )
-                                await self.game_manager.open_protocol(
-                                    self.game_url,
-                                    ProcessInfo(name=self.game_process_name),
-                                )
-                                await asyncio.sleep(2)
-                        else:
-                            game_process_name = self.game_path.name
-                            if game_process_name and is_process_running(
-                                game_process_name
-                            ):
-                                logger.info(
-                                    f"检测到游戏进程已在运行，跳过由 MAS 重复启动游戏: {game_process_name}"
-                                )
-                                self._note_launch_arguments_skipped()
-                                await asyncio.sleep(
-                                    self.script_config.get("Game", "WaitTime")
-                                )
-                            else:
-                                logger.info(
-                                    f"启动游戏: {self.game_path}, 参数: {self.script_config.get('Game', 'Arguments')}"
-                                )
-                                await self.game_manager.open_process(
-                                    self.game_path,
-                                    *str(
-                                        self.script_config.get("Game", "Arguments")
-                                    ).split(" "),
-                                    breakaway=True,
-                                )
-                                self.script_info.log = f"正在等待游戏完成启动\n请等待{self.script_config.get('Game', 'WaitTime')}s"
-                                await asyncio.sleep(
-                                    self.script_config.get("Game", "WaitTime")
-                                )
-                    elif isinstance(self.game_manager, DeviceBase):
-                        logger.info(
-                            f"启动模拟器: {self.script_config.get('Game', 'EmulatorIndex')}"
-                        )
-                        await self.game_manager.open(
-                            self.script_config.get("Game", "EmulatorIndex")
-                        )
-                except Exception as e:
-                    await self.handle_pre_script_error("游戏/模拟器启动失败", e)
-                    continue
-
-            await self.set_general()
-            logger.info(
-                f"通过启动参数运行外部脚本任务: {self.script_exe_path}, 参数: {self.script_arguments}"
-            )
-
-            self.wait_event.clear()
-            t = datetime.now()
-            await self.general_process_manager.open_process(
-                self.script_exe_path,
-                *self.script_arguments,
-                target_process=self.script_target_process_info,
-            )
-
-            if not self.has_log_path:
-                # 无日志路径模式：仅以在上限时间内自行退出作为成功条件
-                await self._wait_without_log_until_exit()
-            else:
-                # 有日志路径模式：保留原 Auto-MAS 日志监控与日志停滞超时逻辑
-                self.script_info.log = "正在等待脚本日志文件生成"
-                if_get_file = False
-                target_suffix: int | None = None
-                deadline = time.monotonic() + 60
-                if self.log_use_prefix:
-                    prefix_fmt = self.log_format[: -len(_PREFIX_SENTINEL)]
-                    pattern = _format_to_prefix_regex(prefix_fmt)
-                while time.monotonic() < deadline:
-                    if self.log_use_prefix:
-                        today = t.date()
-
-                        current_suffix = 0
-                        current_file: Path | None = None
-                        if self.script_log_path.parent.is_dir():
-                            for log_file in self.script_log_path.parent.iterdir():
-                                if not log_file.is_file():
-                                    continue
-                                m = pattern.match(log_file.name)
-                                if not m:
-                                    continue
-                                with suppress(ValueError):
-                                    file_time = strptime(m.group(0), prefix_fmt, t)
-                                if file_time.date() != today:
-                                    continue
-                                tail = log_file.name[m.end() :]
-                                num_match = re.search(
-                                    r"(\d+)\s*$", tail.rsplit(".", 1)[0]
-                                )
-                                suffix = int(num_match.group(1)) if num_match else 0
-                                if suffix > current_suffix:
-                                    current_suffix = suffix
-                                    current_file = log_file
-
-                        if target_suffix is None:
-                            target_suffix = current_suffix + 1
-
-                        if current_suffix >= target_suffix and current_file is not None:
-                            self.script_log_path = current_file
-                            logger.success(
-                                f"成功定位到日志文件（按日期前缀）: {self.script_log_path} "
-                                f"(suffix={current_suffix})"
-                            )
-                            if_get_file = True
-                            break
-
-                        self.script_info.log = (
-                            f"正在等待脚本日志文件生成（按日期前缀，"
-                            f"目标后缀 -{target_suffix}）"
-                        )
-                        await asyncio.sleep(1)
-                    else:
-                        if self.script_log_path.parent.is_dir():
-                            for log_file in self.script_log_path.parent.iterdir():
-                                if log_file.is_file():
-                                    with suppress(ValueError):
-                                        if (
-                                            strptime(log_file.name, self.log_format, t)
-                                            >= t
-                                        ):
-                                            self.script_log_path = log_file
-                                            logger.success(
-                                                f"成功定位到日志文件: {self.script_log_path}"
-                                            )
-                                            if_get_file = True
-                                            break
-                        if if_get_file:
-                            break
-                        await asyncio.sleep(1)
-                else:
-                    await self.handle_pre_script_error("未找到日志文件")
+        self._phase_deadline = time.monotonic() + self.run_timeout_seconds
+        try:
+            async with asyncio.timeout_at(self._phase_deadline):
+                await self.run_user_scripts_before()
+            for attempt in range(self.script_config.get("Run", "RunTimesLimit")):
+                if time.monotonic() >= self._phase_deadline:
+                    self._set_result("任务总时限已耗尽", kind="timeout")
                     break
+                try:
+                    async with asyncio.timeout_at(self._phase_deadline):
+                        await self._run_attempt(use_restart=attempt > 0)
+                except TimeoutError:
+                    self._set_result("任务总时限已耗尽", kind="timeout")
+                finally:
+                    await self._cleanup_before_recovery()
+                if (
+                    self.run_book
+                    or self._cleanup_error
+                    or self._failure_kind in {"configuration", "timeout"}
+                ):
+                    break
+        except TimeoutError:
+            self._set_result("任务总时限已耗尽", kind="timeout")
+        finally:
+            await self._cleanup_before_recovery()
 
-                assert self.general_log_monitor is not None
-                await self.general_log_monitor.start_monitor_file(
-                    self._resolve_log_file_path, self.log_start_time
-                )
-                await self.wait_event.wait()
-                await self.general_log_monitor.stop()
-
-            if self.cur_user_log.status == "Success!":
-                self.run_book = True
-                logger.info(f"用户: {self.cur_user_uid} - 通用脚本进程完成代理任务")
-                self.script_info.log = (
-                    "检测到通用脚本进程完成代理任务\n正在等待相关程序结束并执行强制清理"
-                )
-
-                await self.kill_managed_process()
-                await asyncio.sleep(10)
-            else:
-                logger.warning(
-                    f"用户: {self.cur_user_uid} - 代理任务异常: {self.cur_user_log.status}"
-                )
-                self.script_info.log = f"{self.cur_user_log.status}\n正在中止相关程序"
-
-                await self.kill_managed_process()
-
-                await Notify.push_plyer(
-                    "用户自动代理出现异常！",
-                    f"用户 {self.cur_user_item.name} 的自动代理出现一次异常",
-                    f"{self.cur_user_item.name}的自动代理出现异常",
-                    3,
-                )
-
-                await asyncio.sleep(10)
-
-            await asyncio.sleep(3)
-
-    async def handle_pre_script_error(
-        self, error_message: str, e: Exception | None = None
-    ):
-        if e is None:
-            logger.warning(f"用户: {self.cur_user_uid} - {error_message}")
-            await Publisher.send(
-                id=self.task_info.task_id,
-                type=protocol.TASK_NOTICE,
-                data=WSTaskNoticeData(level="error", message=error_message),
+        if (
+            not self.run_book
+            and not self._cleanup_error
+            and self._failure_kind in {"stalled", "timeout"}
+        ):
+            self._recovery_used = True
+            self._first_failure = self.cur_user_log.status
+            logger.warning(
+                f"首轮失败（{self._first_failure}），清理完成，开始唯一一次 30 分钟补跑"
             )
-        else:
-            logger.opt(exception=True).warning(
-                f"用户: {self.cur_user_uid} - {error_message}: {e}"
-            )
-            await Publisher.send(
-                id=self.task_info.task_id,
-                type=protocol.TASK_NOTICE,
-                data=WSTaskNoticeData(level="error", message=f"{error_message}: {e}"),
-            )
-        self.cur_user_log.content = [f"{error_message}, 无日志记录"]
-        self.cur_user_log.status = error_message
+            self._phase_deadline = time.monotonic() + RECOVERY_SECONDS
+            try:
+                async with asyncio.timeout_at(self._phase_deadline):
+                    await self._run_attempt(use_restart=True)
+            except TimeoutError:
+                self._set_result("补跑超过 30 分钟", kind="timeout")
+            finally:
+                await self._cleanup_before_recovery()
+            self._recovery_result = "补跑成功" if self.run_book else "补跑失败"
+        self._finished = True
 
-        await self.kill_managed_process()
+    async def _cleanup_before_recovery(self) -> None:
+        try:
+            await self.kill_managed_process()
+        except CleanupFailed as e:
+            self._cleanup_error = str(e)
+            logger.error(self._cleanup_error)
 
-        await Notify.push_plyer(
-            "用户自动代理出现异常！",
-            f"用户 {self.cur_user_item.name} 自动代理时{error_message}",
-            f"{self.cur_user_item.name}的自动代理出现异常",
-            3,
+    def _set_result(self, message: str, *, kind: str = "error") -> None:
+        self._failure_kind = kind
+        self.cur_user_log.status = message
+        self.script_info.log = message
+        self.wait_event.set()
+        self.run_book = message == "Success!"
+
+    async def _run_attempt(self, *, use_restart: bool) -> None:
+        self._cleanup_task = None
+        self._cleanup_error = ""
+        self.process_tracker = ProcessTracker()
+        self._launch_managers = []
+        self.general_process_manager = self._new_process_manager()
+        self.log_start_time = datetime.now()
+        self.log_start_at = time.monotonic()
+        self._attempt_wall_time = time.time()
+        self._failure_kind = "error"
+        self._process_seen = False
+        self._exit_since = None
+        self._startup_deadline = None
+        self._main_launched = False
+        self._ownership_warning = ""
+        self.wait_event.clear()
+        self.cur_user_item.log_record[self.log_start_time] = self.cur_user_log = (
+            LogRecord()
         )
+        self.cur_user_log.status = "通用脚本正常运行中"
+        self.push_log_buffer.clear()
+        self._push_log_processed = 0
+        for matcher in self.push_log_patterns_compiled:
+            reset = getattr(matcher, "reset", None)
+            if reset is not None:
+                reset()
+        self._body_path = (
+            next(
+                (Path(item.Path) for item in self.restart_entries if item.IsMain),
+                self.script_exe_path,
+            )
+            if use_restart
+            else self.script_exe_path
+        )
+        self._log_baseline = self._snapshot_log_files()
+        self._latest_log_time = None
+        self._latest_log_count = 0
+        self._log_observed = False
+        self._last_log_progress = time.monotonic()
+        watcher = asyncio.create_task(self._monitor_run())
+        log_watcher = (
+            asyncio.create_task(self._watch_log_files()) if self.has_log_path else None
+        )
+        try:
+            if use_restart and self.restart_entries:
+                await self._launch_restart()
+            else:
+                await self._launch_original()
+            await self.wait_event.wait()
+            self.run_book = self.cur_user_log.status == "Success!"
+        except (OSError, ValueError) as e:
+            self._set_result(f"启动配置错误: {e}", kind="configuration")
+        except Exception as e:
+            self._set_result(f"启动失败: {e}")
+        finally:
+            watcher.cancel()
+            if log_watcher is not None:
+                log_watcher.cancel()
+            await asyncio.gather(
+                watcher, *([log_watcher] if log_watcher else []), return_exceptions=True
+            )
+            if self.general_log_monitor is not None:
+                await self.general_log_monitor.stop()
+            if self._main_launched or self._startup_deadline is not None:
+                try:
+                    await general_ownership.record(
+                        self.script_info.script_id,
+                        self.script_config,
+                        confirmed=self._process_seen,
+                    )
+                    if not self._process_seen:
+                        self._ownership_warning = (
+                            "无法确认脚本主体归属，下次运行将提示检查设置"
+                        )
+                        self.cur_user_log.content.append(self._ownership_warning)
+                        logger.warning(self._ownership_warning)
+                except Exception as e:
+                    logger.warning(f"保存主体归属提示失败: {e}")
+
+    async def _launch_original(self) -> None:
+        await self._launch_game()
+        if isinstance(self.game_manager, ProcessManager) and self.game_manager.main_pid:
+            self.process_tracker.remember(self.game_manager.main_pid)
+        if self.wait_event.is_set():
+            return
+        await self.set_general()
+        self._startup_deadline = time.monotonic() + _PROCESS_START_GRACE_SECONDS
+        await self._launch_program(
+            self.script_exe_path, self.script_arguments, main=True
+        )
+
+    async def _launch_program(
+        self, path: Path, arguments: list[str], *, main: bool, cwd: Path | None = None
+    ) -> None:
+        manager = self.general_process_manager if main else self._new_process_manager()
+        self._launch_managers.append(manager)
+        # 主体追踪由并行观察负责，避免启动器阻塞 60 秒导致错过日志或短命进程。
+        await manager.open_process(path, *arguments, cwd=cwd)
+        if manager.process is not None:
+            self.process_tracker.remember(manager.process.pid)
+        if main:
+            self._main_launched = True
+            if self.script_target_process_info is None:
+                self._process_seen = True
+
+    async def _launch_restart(self) -> None:
+        for entry in self.restart_entries:
+            if self.wait_event.is_set():
+                return
+            if entry.IsMain:
+                self._startup_deadline = time.monotonic() + entry.WaitSeconds - 5
+            try:
+                args = split_restart_arguments(entry.Arguments)
+                await self._launch_program(
+                    Path(entry.Path),
+                    args,
+                    main=entry.IsMain,
+                    cwd=Path(entry.WorkingDirectory)
+                    if entry.WorkingDirectory
+                    else None,
+                )
+            except Exception as e:
+                logger.warning(f"恢复启动失败，继续后续项目: {entry.Path}: {e}")
+                self.cur_user_log.content.append(f"启动失败: {entry.Path}: {e}")
+            try:
+                await asyncio.wait_for(
+                    self.wait_event.wait(), timeout=entry.WaitSeconds
+                )
+                return
+            except TimeoutError:
+                pass
+        if (
+            not self._main_launched
+            and not self._process_seen
+            and not self.wait_event.is_set()
+        ):
+            self._set_result("脚本主体未启动")
+
+    def _find_body(self) -> bool:
+        target = self.script_target_process_info or ProcessInfo(
+            name=self._body_path.name, exe=str(self._body_path)
+        )
+        matched = self.process_tracker.find_owned(target)
+        if matched:
+            self.general_process_manager.target_process = matched[0]
+        return bool(matched)
+
+    async def _monitor_run(self) -> None:
+        try:
+            while not self.wait_event.is_set():
+                await asyncio.to_thread(self.process_tracker.collect_children)
+                running = await asyncio.to_thread(self._find_body)
+                if self.script_target_process_info is None and self._main_launched:
+                    running = running or await self.general_process_manager.is_running()
+                if self.wait_event.is_set():
+                    return
+                now = time.monotonic()
+                if running:
+                    self._process_seen = True
+                    self._exit_since = None
+                elif self._process_seen:
+                    if self._exit_since is None:
+                        self._exit_since = now
+                    elif now - self._exit_since >= EXIT_STABLE_SECONDS:
+                        self._set_result("Success!", kind="success")
+                elif (
+                    self._startup_deadline is not None and now >= self._startup_deadline
+                ):
+                    self._set_result("未观测到脚本主体启动")
+                if (
+                    not self.wait_event.is_set()
+                    and self.has_log_path
+                    and now - self._last_log_progress
+                    >= self.script_config.get("Run", "RunTimeLimit") * 60
+                ):
+                    self._set_result("脚本日志停滞超时", kind="stalled")
+                await asyncio.sleep(0.2)
+        except Exception as e:
+            self._set_result(f"运行监控失败: {e}")
+
+    def _snapshot_log_files(self) -> dict[Path, tuple[int, int]]:
+        if not self.has_log_path:
+            return {}
+        return {
+            p: (p.stat().st_size, p.stat().st_mtime_ns) for p in self._log_candidates()
+        }
+
+    def _log_candidates(self) -> list[Path]:
+        if not self.script_log_path.parent.is_dir():
+            return []
+        if self.log_use_prefix:
+            pattern = _format_to_prefix_regex(self.log_format[: -len(_PREFIX_SENTINEL)])
+            return [
+                p
+                for p in self.script_log_path.parent.iterdir()
+                if p.is_file() and pattern.match(p.name)
+            ]
+        if "%" not in self.log_format:
+            return [self.script_log_path] if self.script_log_path.is_file() else []
+        paths = []
+        for path in self.script_log_path.parent.iterdir():
+            if path.is_file():
+                with suppress(ValueError):
+                    strptime(path.name, self.log_format, self.log_start_time)
+                    paths.append(path)
+        return paths
+
+    def _resolve_current_log(self) -> Path:
+        changed = []
+        for path in self._log_candidates():
+            try:
+                stat = path.stat()
+                if (stat.st_size, stat.st_mtime_ns) != self._log_baseline.get(path):
+                    changed.append((stat.st_mtime_ns, path))
+            except FileNotFoundError:
+                continue
+        if changed:
+            self._active_log_path = max(changed, key=lambda entry: entry[0])[1]
+        return self._active_log_path
+
+    async def _watch_log_files(self) -> None:
+        self._active_log_path = self.script_log_path
+        try:
+            self.general_log_monitor = LogMonitor(
+                self.log_time_range,
+                self.script_config.get("Script", "LogTimeFormat"),
+                self.check_log,
+                line_hook=self.log_line_hook,
+            )
+            await self.general_log_monitor.start_monitor_file(
+                self._resolve_current_log,
+                self.log_start_time,
+                initial_offsets={
+                    path: stat[0] for path, stat in self._log_baseline.items()
+                },
+            )
+            while not self.wait_event.is_set():
+                monitor_task = self.general_log_monitor.task
+                if monitor_task is not None and monitor_task.done():
+                    monitor_task.result()
+                    raise RuntimeError("日志监控意外结束")
+                await asyncio.sleep(0.2)
+        except Exception as e:
+            self._set_result(f"日志监控失败: {e}")
+
+    async def _launch_game(self) -> None:
+        self.script_info.log = "正在启动游戏 / 模拟器"
+        if self.game_manager is not None:
+            try:
+                if isinstance(self.game_manager, ProcessManager):
+                    if self.script_config.get("Game", "Type") == "URL":
+                        if self.game_process_name and is_process_running(
+                            self.game_process_name
+                        ):
+                            logger.info(
+                                f"检测到游戏进程已在运行，跳过由 MAS 重复启动游戏: {self.game_process_name}"
+                            )
+                            self._note_launch_arguments_skipped()
+                            await asyncio.sleep(2)
+                        else:
+                            logger.info(
+                                f"启动游戏: {self.game_process_name}, 参数{self.game_url}"
+                            )
+                            await self.game_manager.open_protocol(
+                                self.game_url,
+                                ProcessInfo(name=self.game_process_name),
+                            )
+                            await asyncio.sleep(2)
+                    else:
+                        game_process_name = self.game_path.name
+                        if game_process_name and is_process_running(game_process_name):
+                            logger.info(
+                                f"检测到游戏进程已在运行，跳过由 MAS 重复启动游戏: {game_process_name}"
+                            )
+                            self._note_launch_arguments_skipped()
+                            await asyncio.sleep(
+                                self.script_config.get("Game", "WaitTime")
+                            )
+                        else:
+                            logger.info(
+                                f"启动游戏: {self.game_path}, 参数: {self.script_config.get('Game', 'Arguments')}"
+                            )
+                            await self.game_manager.open_process(
+                                self.game_path,
+                                *str(self.script_config.get("Game", "Arguments")).split(
+                                    " "
+                                ),
+                                breakaway=True,
+                            )
+                            self.script_info.log = f"正在等待游戏完成启动\n请等待{self.script_config.get('Game', 'WaitTime')}s"
+                            await asyncio.sleep(
+                                self.script_config.get("Game", "WaitTime")
+                            )
+                elif isinstance(self.game_manager, DeviceBase):
+                    logger.info(
+                        f"启动模拟器: {self.script_config.get('Game', 'EmulatorIndex')}"
+                    )
+                    await self.game_manager.open(
+                        self.script_config.get("Game", "EmulatorIndex")
+                    )
+            except Exception as e:
+                raise RuntimeError(f"游戏/模拟器启动失败: {e}") from e
 
     async def update_config(self):
         """已精简移除配置回写功能：仅通过外部程序自身的启动参数控制启停。"""
         logger.debug("已精简移除配置回写功能，跳过 update_config")
 
-    async def kill_managed_process(self):
+    async def kill_managed_process(self) -> None:
+        if not self._prepared:
+            return
+        if self._cleanup_task is None:
+            self._cleanup_task = asyncio.create_task(self._cleanup_processes())
+        # 取消不能截断三轮清理，重复收尾也不会再清理三遍。
+        cancelled = False
+        while not self._cleanup_task.done():
+            try:
+                await asyncio.shield(self._cleanup_task)
+            except asyncio.CancelledError:
+                cancelled = True
+        try:
+            self._cleanup_task.result()
+        finally:
+            if cancelled:
+                raise asyncio.CancelledError
+
+    async def _cleanup_processes(self) -> None:
+        try:
+            if self.cleanup_targets:
+                await self.process_tracker.cleanup(
+                    self.cleanup_targets, self.cleanup_mode
+                )
+            else:
+                await asyncio.to_thread(self.process_tracker.collect_children)
+                await self._legacy_cleanup()
+                for manager in self._launch_managers:
+                    if manager is not self.general_process_manager:
+                        await manager.kill()
+                remaining = [
+                    str(proc.pid)
+                    for proc in self.process_tracker.owned.values()
+                    if proc.is_running()
+                ]
+                if remaining:
+                    raise CleanupFailed(
+                        "进程清理失败，仍在运行: " + "、".join(remaining)
+                    )
+        except CleanupFailed:
+            raise
+        except Exception as e:
+            raise CleanupFailed(f"进程清理失败: {e}") from e
+
+    async def _legacy_cleanup(self):
         """中止关联进程（底层通过 taskkill /F /T 连续强杀 3 遍）"""
 
+        errors = []
         try:
-            logger.info(f"强制清理通用脚本进程 (taskkill /F /T x3): {self.script_exe_path}")
-            if hasattr(self, "general_process_manager") and self.general_process_manager is not None:
+            logger.info(
+                f"强制清理通用脚本进程 (taskkill /F /T x3): {self.script_exe_path}"
+            )
+            if (
+                hasattr(self, "general_process_manager")
+                and self.general_process_manager is not None
+            ):
                 await self.general_process_manager.kill()
             if hasattr(self, "script_exe_path") and self.script_exe_path is not None:
                 await System.kill_process(self.script_exe_path, kill_tree=True)
         except Exception as e:
             logger.opt(exception=True).warning(f"中止通用脚本进程失败: {e}")
+            errors.append(str(e))
 
         if self.game_manager is not None:
             logger.info("中止游戏/模拟器进程")
@@ -576,11 +762,17 @@ class AutoProxyTask(ScriptAutoProxyBase):
                     )
             except Exception as e:
                 logger.opt(exception=True).warning(f"关闭游戏/模拟器失败: {e}")
+                errors.append(str(e))
+        if errors:
+            raise CleanupFailed("进程清理失败: " + "；".join(errors))
 
     async def set_general(self) -> None:
         """启动前清理可能残留的旧脚本进程（不再注入或覆盖外部配置文件，仅靠启动参数控制启停）。"""
-        logger.info("准备启动脚本: 清理可能未退出的残留进程（不下发/不回写外部配置文件）")
-        await System.kill_process(self.script_exe_path, kill_tree=True)
+        logger.info(
+            "准备启动脚本: 清理可能未退出的残留进程（不下发/不回写外部配置文件）"
+        )
+        if not self.cleanup_targets:
+            await System.kill_process(self.script_exe_path, kill_tree=True)
 
     def _format_push_log(
         self,
@@ -647,41 +839,35 @@ class AutoProxyTask(ScriptAutoProxyBase):
                     )
         self._push_log_processed = len(log_content)
 
-        # 保持原 Auto-MAS 逻辑：
-        # 命中 SuccessLog 判成功；命中 ErrorLog 或日志停滞超时判失败；未配 SuccessLog 则进程正常退出判成功
-        if self.success_log.search(log) is not None:
-            self.cur_user_log.status = "Success!"
-        elif self.is_log_stalled(
-            latest_time, minutes=self.script_config.get("Run", "RunTimeLimit")
+        if log_content:
+            self._log_observed = True
+        if log_content and (
+            latest_time != self._latest_log_time
+            or len(log_content) != self._latest_log_count
         ):
-            self.cur_user_log.status = "脚本进程超时"
+            self._last_log_progress = time.monotonic()
+            self._latest_log_time = latest_time
+            self._latest_log_count = len(log_content)
+        if self.wait_event.is_set():
+            return
+        if self.success_log.search(log) is not None:
+            self._set_result("Success!", kind="success")
         else:
             error_sign = self.error_log.search(log)
             if error_sign is not None:
-                self.cur_user_log.status = f"异常日志: {error_sign}"
-            elif await self.general_process_manager.is_running():
-                self._process_seen = True
-                self.cur_user_log.status = "通用脚本正常运行中"
-            elif (
-                not self._process_seen
-                and time.monotonic() - self.log_start_at < _PROCESS_START_GRACE_SECONDS
-            ):
-                self.cur_user_log.status = "通用脚本正常运行中"
-            elif self.success_log.configured:
-                self.cur_user_log.status = "脚本在完成任务前退出"
-            else:
-                self.cur_user_log.status = "Success!"
-
-        logger.debug(f"通用脚本日志分析结果: {self.cur_user_log.status}")
-        if self.cur_user_log.status != "通用脚本正常运行中":
-            logger.info(f"通用脚本任务结果: {self.cur_user_log.status}, 日志锁已释放")
-            self.wait_event.set()
+                self._set_result(f"异常日志: {error_sign}")
 
     async def final_task(self):
-        if self.check_result != "Pass":
+        if self.check_result != "Pass" or not self._prepared:
             return
 
-        await self.kill_managed_process()
+        await self._cleanup_before_recovery()
+        if not self._finished:
+            self.run_book = False
+            if self._recovery_used:
+                self._recovery_result = "补跑已取消"
+            if hasattr(self, "cur_user_log"):
+                self.cur_user_log.status = "任务被用户手动中止"
         if self.general_log_monitor is not None:
             await self.general_log_monitor.stop()
         if hasattr(self, "general_process_manager"):
@@ -735,7 +921,18 @@ class AutoProxyTask(ScriptAutoProxyBase):
             "代理任务全部完成" if self.run_book else self.cur_user_item.result
         )
 
-        statistics["notification_failed"] = not self.run_book
+        if self._recovery_used:
+            statistics["user_result"] = (
+                f"首轮失败（{self._first_failure}），{self._recovery_result}"
+            )
+        if self._ownership_warning:
+            statistics["user_result"] += f"；{self._ownership_warning}"
+        if self._cleanup_error:
+            self.script_info.log = self._cleanup_error
+            statistics["user_result"] += f"；{self._cleanup_error}"
+        statistics["notification_failed"] = not self.run_book or bool(
+            self._cleanup_error
+        )
         success_symbol = "√" if self.run_book else "X"
 
         try:
@@ -774,15 +971,27 @@ class AutoProxyTask(ScriptAutoProxyBase):
             logger.success(f"用户 {self.cur_user_uid} 的自动代理任务已完成")
             await Notify.push_plyer(
                 "成功完成一个自动代理任务！",
-                f"已完成用户 {self.cur_user_item.name} 的自动代理任务",
+                statistics["user_result"],
                 f"已完成 {self.cur_user_item.name} 的自动代理任务",
                 3,
             )
         else:
             logger.warning(f"用户 {self.cur_user_uid} 的自动代理任务未完成")
             self.cur_user_item.status = "异常"
+            await Notify.push_plyer(
+                "自动代理任务已结束",
+                statistics["user_result"],
+                f"{self.cur_user_item.name} 的自动代理结果",
+                3,
+            )
 
     async def on_crash(self, e: Exception):
+        self._finished = True
+        self.run_book = False
+        if self._recovery_used:
+            self._recovery_result = "补跑失败"
+        if hasattr(self, "cur_user_log"):
+            self.cur_user_log.status = f"运行异常: {e}"
         self.cur_user_item.status = "异常"
         logger.opt(exception=True).warning(f"自动代理任务出现异常: {e}")
         await Publisher.send(

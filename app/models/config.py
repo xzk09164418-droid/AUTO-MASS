@@ -85,7 +85,7 @@ from .ConfigBase import (
     ValidatorBase,
     VirtualConfigValidator,
 )
-from .schema import TagItem
+from .schema import GeneralConfig_Script, TagItem
 
 logger = get_logger("配置模型")
 
@@ -4484,6 +4484,27 @@ class BetterGIUserConfig(ConfigBase):
         return json.dumps(tags, ensure_ascii=False)
 
 
+class GeneralRecoveryListValidator(ValidatorBase):
+    """复用清单契约校验，错误配置不得静默清空后退回原清理方式。"""
+
+    def __init__(self, field: str) -> None:
+        self.field = field
+
+    def validate(self, value: Any) -> bool:
+        if not isinstance(value, list):
+            return False
+        try:
+            GeneralConfig_Script.model_validate({self.field: value})
+            return True
+        except ValueError:
+            return False
+
+    def correct(self, value: Any) -> Any:
+        if not self.validate(value):
+            raise ValueError(f"{self.field} 清单配置不合法，请检查路径、进程名和主体设置")
+        return value
+
+
 class GeneralConfig(ConfigBase):
     """通用配置"""
 
@@ -4503,6 +4524,21 @@ class GeneralConfig(ConfigBase):
         ## 脚本参数
         self.Script_Arguments = ConfigItem(
             "Script", "Arguments", "", AdvancedArgumentValidator()
+        )
+        ## 自定义清理清单；留空时沿用原版进程清理
+        self.Script_TaskKill = ConfigItem(
+            "Script", "TaskKill", [], GeneralRecoveryListValidator("TaskKill")
+        )
+        ## 自定义清理范围：本轮、当前会话全部匹配、跨会话强力清理
+        self.Script_TaskKillMode = ConfigItem(
+            "Script",
+            "TaskKillMode",
+            "Force",
+            OptionsValidator(["Force", "Tracked", "Session"]),
+        )
+        ## 重试与超时补跑的有序启动清单；留空时使用原启动配置
+        self.Script_Restart = ConfigItem(
+            "Script", "Restart", [], GeneralRecoveryListValidator("Restart")
         )
         ## 是否追踪进程
         self.Script_IfTrackProcess = ConfigItem(

@@ -2,7 +2,21 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { GeneralRestartData } from './GeneralRestartData';
+import type { GeneralTaskKillData } from './GeneralTaskKillData';
 export type GeneralConfig_Script = {
+    /**
+     * 自定义清理清单，留空沿用原清理
+     */
+    TaskKill?: (Array<GeneralTaskKillData> | null);
+    /**
+     * 本轮进程、当前会话全部匹配、跨会话强力清理
+     */
+    TaskKillMode?: ('Tracked' | 'Session' | 'Force' | null);
+    /**
+     * 重试及补跑启动清单
+     */
+    Restart?: (Array<GeneralRestartData> | null);
     /**
      * 脚本可执行文件路径
      */

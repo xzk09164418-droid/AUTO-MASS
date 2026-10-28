@@ -3,8 +3,8 @@
  * AUTO-MAS 前后端分离 Node.js 前端宿主与系统浏览器启动器 (frontend/server.js)
  *
  * 功能特性：
- * 1. 前后端分离架构：独立监听前端端口（默认 36162），承载与 Auto-MAS 一致的 Web UI，
- *    并将 /api/* HTTP 请求与 /api/core/ws WebSocket 实时流透明反向代理至 Python 后端（默认 36163）。
+ * 1. 前后端分离架构：独立监听前端端口（默认 36262），承载与 Auto-MAS 一致的 Web UI，
+ *    并将 /api/* HTTP 请求与 /api/core/ws WebSocket 实时流透明反向代理至 Python 后端（默认 36263）。
  * 2. 按需独立拉起后端：若 Python 后端尚未运行，以无黑框模式后台启动；
  *    前端退出不结束后端，后端输出独立写入 debug/backend-launcher.log。
  * 3. 调用系统浏览器：后端健康检查就绪后，通过 Node.js 自动调用系统默认浏览器打开前端控制台。
@@ -27,14 +27,15 @@ const DIST_DIR = path.join(__dirname, 'dist-browser');
 const { createBrowserHost } = require('./web/host.cjs');
 const { createRuntimeLogs } = require('./web/runtimeLogs.cjs');
 const { createStartupStatus } = require('./web/startupStatus.cjs');
+const { DEFAULT_PORTS, resolveInstance, ownsService, portAvailable, readJson } = require('./web/instance.cjs');
 let backendStartPromise = null;
 let backendProcess = null;
 let backendLaunchError = null;
 
 function parseArgs(argv) {
   const opts = {
-    frontendPort: Number(process.env.AUTO_MAS_FRONTEND_PORT || 36162),
-    backendPort: Number(process.env.AUTO_MAS_HTTP_PORT || 36163),
+    frontendPort: Number(process.env.AUTO_MAS_FRONTEND_PORT || DEFAULT_PORTS.frontendPort),
+    backendPort: Number(process.env.AUTO_MAS_HTTP_PORT || DEFAULT_PORTS.backendPort),
     backendHost: '127.0.0.1',
     openBrowser: true,
     headless: false,
@@ -48,9 +49,9 @@ function parseArgs(argv) {
   for (let i = 2; i < argv.length; i++) {
     const arg = String(argv[i] || '');
     if ((arg === '--port' || arg === '-p') && i + 1 < argv.length) {
-      opts.frontendPort = Number(argv[++i]) || 36162;
+      opts.frontendPort = Number(argv[++i]) || DEFAULT_PORTS.frontendPort;
     } else if (arg === '--backend-port' && i + 1 < argv.length) {
-      opts.backendPort = Number(argv[++i]) || 36163;
+      opts.backendPort = Number(argv[++i]) || DEFAULT_PORTS.backendPort;
     } else if (arg === '--no-browser') {
       opts.openBrowser = false;
     } else if (arg === '--headless' || arg === '--no-window') {
@@ -104,30 +105,14 @@ function resolvePythonExecutable() {
   return process.platform === 'win32' ? 'python' : 'python3';
 }
 
-function checkBackendHealth(host, port, timeoutMs = 1500) {
-  return new Promise((resolve) => {
-    const req = http.get(
-      {
-        host,
-        port,
-        path: '/api/core/health',
-        timeout: timeoutMs,
-      },
-      (res) => {
-        let body = '';
-        res.on('data', (chunk) => (body += chunk));
-        res.on('end', () => {
-          try { resolve(res.statusCode === 200 && JSON.parse(body).ready !== false); }
-          catch { resolve(false); }
-        });
-      }
-    );
-    req.on('error', () => resolve(false));
-    req.on('timeout', () => {
-      req.destroy();
-      resolve(false);
-    });
-  });
+function checkBackendHealth(host, port, expectedId) {
+  return ownsService(host, port, '/api/core/health', expectedId);
+}
+
+async function requireBackendOwnership(opts) {
+  if (!await checkBackendHealth(opts.backendHost, opts.backendPort, opts.instanceId)) {
+    throw new Error('后端尚未就绪或不属于本安装实例，已拒绝连接');
+  }
 }
 
 function ensureBackendStarted(opts) {
@@ -137,12 +122,15 @@ function ensureBackendStarted(opts) {
 }
 
 async function startBackendOnce(opts) {
-  const alreadyUp = await checkBackendHealth(opts.backendHost, opts.backendPort);
+  const alreadyUp = await checkBackendHealth(opts.backendHost, opts.backendPort, opts.instanceId);
   if (alreadyUp) {
     console.log(`[AUTO-MAS] 检测到 Python 后端已在 http://${opts.backendHost}:${opts.backendPort} 运行`);
     return null;
   }
 
+  if (!await portAvailable(opts.backendPort)) {
+    throw new Error(`后端端口 ${opts.backendPort} 被其他实例占用，请重新启动并选择新端口`);
+  }
   if (opts.externalBackendOnly) {
     console.log('[AUTO-MAS] 等待外部 Python 后端就绪...');
   } else {
@@ -204,7 +192,7 @@ async function startBackendOnce(opts) {
       if (backendProc.exitCode !== null) {
         throw new Error(`Python 后端已退出 (${backendProc.exitCode})，请查看 debug/backend-launcher.log`);
       }
-      const ok = await checkBackendHealth(opts.backendHost, opts.backendPort, 1000);
+      const ok = await checkBackendHealth(opts.backendHost, opts.backendPort, opts.instanceId);
       if (ok) {
         console.log(`[AUTO-MAS] Python 后端已就绪 (http://${opts.backendHost}:${opts.backendPort})`);
         return;
@@ -279,11 +267,17 @@ function resolveStaticFile(requestPath) {
   return null;
 }
 
-function startFrontendServer(opts, runtimeLogs) {
-  const startupStatus = createStartupStatus(ROOT_DIR, opts.backendPort, () => backendLaunchError?.message);
+async function startFrontendServer(opts, runtimeLogs) {
+  const existing = await readJson('127.0.0.1', opts.frontendPort, '/__frontend_config');
+  if (existing?.instanceId === opts.instanceId && existing.backendPort === opts.backendPort) {
+    if (opts.openBrowser && !opts.headless) openSystemBrowser(`http://127.0.0.1:${opts.frontendPort}`, opts.appMode);
+    return false;
+  }
+  const startupStatus = createStartupStatus(ROOT_DIR, opts.backendPort, () => backendLaunchError?.message, opts.instanceId);
   const handleHost = createBrowserHost(ROOT_DIR, opts.backendPort, {
     runtimeLogs,
     startupStatus,
+    requireBackendOwnership: () => requireBackendOwnership(opts),
     stopFrontend() {
       // 先返回托盘请求，再关闭 HTTP 与 WebSocket；不触碰 Python 后端。
       setTimeout(() => process.exit(0), 250);
@@ -298,6 +292,11 @@ function startFrontendServer(opts, runtimeLogs) {
   });
   const server = http.createServer(async (req, res) => {
     const reqUrl = req.url || '/';
+    if (req.headers['x-auto-mas-instance'] && req.headers['x-auto-mas-instance'] !== opts.instanceId) {
+      res.writeHead(409, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify({ code: 409, status: 'error', message: '前端不属于请求指定的安装实例' }));
+      return;
+    }
     if (await handleHost(req, res)) return;
 
     // 前端配置探测端点
@@ -305,6 +304,7 @@ function startFrontendServer(opts, runtimeLogs) {
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
       res.end(
         JSON.stringify({
+          instanceId: opts.instanceId,
           frontendPort: opts.frontendPort,
           backendPort: opts.backendPort,
           backendBaseUrl: `http://${opts.backendHost}:${opts.backendPort}`,
@@ -316,6 +316,12 @@ function startFrontendServer(opts, runtimeLogs) {
 
     // 反向代理 /api/* 到 Python FastAPI 后端
     if (reqUrl.startsWith('/api/')) {
+      try { await requireBackendOwnership(opts); }
+      catch (error) {
+        res.writeHead(503, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({ code: 503, status: 'error', message: error.message }));
+        return;
+      }
       const proxyReq = http.request(
         {
           host: opts.backendHost,
@@ -325,6 +331,7 @@ function startFrontendServer(opts, runtimeLogs) {
           headers: {
             ...req.headers,
             host: `${opts.backendHost}:${opts.backendPort}`,
+            'X-Auto-Mas-Instance': opts.instanceId,
           },
         },
         (proxyRes) => {
@@ -392,7 +399,9 @@ function startFrontendServer(opts, runtimeLogs) {
   });
 
   // 透明代理 WebSocket 升级请求 (/api/core/ws 等)
-  server.on('upgrade', (req, clientSocket, head) => {
+  server.on('upgrade', async (req, clientSocket, head) => {
+    try { await requireBackendOwnership(opts); }
+    catch { clientSocket.destroy(); return; }
     clientSocket.setNoDelay(true);
     const backendSocket = net.connect(opts.backendPort, opts.backendHost, () => {
       const headers = [`${req.method} ${req.url} HTTP/${req.httpVersion}`];
@@ -405,7 +414,7 @@ function startFrontendServer(opts, runtimeLogs) {
           headers.push(`${k}: ${v}`);
         }
       }
-      headers.push('', '');
+      headers.push(`X-Auto-Mas-Instance: ${opts.instanceId}`, '', '');
       backendSocket.write(headers.join('\r\n'));
       if (head && head.length > 0) {
         backendSocket.write(head);
@@ -419,28 +428,14 @@ function startFrontendServer(opts, runtimeLogs) {
     clientSocket.on('error', () => backendSocket.destroy());
   });
 
-  server.on('error', (error) => {
-    if (error.code === 'EADDRINUSE') {
-      console.log(`[AUTO-MAS] 控制台端口 ${opts.frontendPort} 已有服务，复用现有控制台`);
-      if (opts.openBrowser && !opts.headless) {
-        openSystemBrowser(`http://127.0.0.1:${opts.frontendPort}`, opts.appMode);
-      }
-      return;
-    }
-    console.error('[AUTO-MAS] 控制台监听失败:', error);
-    process.exitCode = 1;
+  await new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(opts.frontendPort, '127.0.0.1', resolve);
   });
-
-  server.listen(opts.frontendPort, '127.0.0.1', () => {
-    const url = `http://127.0.0.1:${opts.frontendPort}`;
-    console.log(`[AUTO-MAS] 前端 Web 服务已启动: ${url}`);
-    console.log(`[AUTO-MAS] API 反向代理目标: http://${opts.backendHost}:${opts.backendPort}`);
-    if (opts.openBrowser && !opts.headless) {
-      openSystemBrowser(url, opts.appMode);
-    } else {
-      console.log('[AUTO-MAS] 当前为无窗口/静默运行模式，未打开浏览器窗口。');
-    }
-  });
+  const url = `http://127.0.0.1:${opts.frontendPort}`;
+  console.log(`[AUTO-MAS] 前端 Web 服务已启动: ${url}`);
+  console.log(`[AUTO-MAS] API 反向代理目标: http://${opts.backendHost}:${opts.backendPort}`);
+  if (opts.openBrowser && !opts.headless) openSystemBrowser(url, opts.appMode);
 
   const cleanup = () => {
     try {
@@ -451,21 +446,27 @@ function startFrontendServer(opts, runtimeLogs) {
 
   process.on('SIGINT', cleanup);
   process.on('SIGTERM', cleanup);
+  return true;
 }
 
 async function main() {
-  const opts = parseArgs(process.argv);
+  const instance = await resolveInstance(ROOT_DIR, process.argv.slice(2));
+  if (instance.cancelled) return;
+  const opts = { ...parseArgs(process.argv), ...instance };
   const runtimeLogs = createRuntimeLogs(ROOT_DIR, require('./dist-host/services.cjs'));
   for (const [method, level] of Object.entries({ log: 'INFO', info: 'INFO', debug: 'DEBUG', warn: 'WARNING', error: 'ERROR' })) {
     const original = console[method].bind(console);
     console[method] = (...args) => { runtimeLogs.write(level, 'Node 前端', ...args); original(...args); };
   }
-  startFrontendServer(opts, runtimeLogs);
+  if (!await startFrontendServer(opts, runtimeLogs)) return;
   try { await ensureBackendStarted(opts); }
   catch (error) { console.error('[AUTO-MAS] 后端启动未完成:', error.message); }
 }
 
-main().catch((err) => {
-  console.error('[AUTO-MAS] 启动异常:', err);
-  process.exit(1);
-});
+module.exports = { checkBackendHealth, requireBackendOwnership };
+if (require.main === module) {
+  main().catch((err) => {
+    console.error('[AUTO-MAS] 启动异常:', err);
+    process.exit(1);
+  });
+}

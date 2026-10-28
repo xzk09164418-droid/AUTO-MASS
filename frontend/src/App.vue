@@ -13,6 +13,7 @@ import UpdateModal from './components/UpdateModal.vue'
 import GlobalPowerCountdown from './components/GlobalPowerCountdown.vue'
 import AppClosingOverlay from './components/AppClosingOverlay.vue'
 import BackendStartupOverlay from './components/BackendStartupOverlay.vue'
+import GeneralOwnershipPrompt from './components/GeneralOwnershipPrompt.vue'
 import CursorEffectLayer from './components/CursorEffectLayer.vue'
 import AppearanceDecoration from './components/AppearanceDecoration.vue'
 import ThemeTokenBridge from './components/ThemeTokenBridge'
@@ -78,6 +79,7 @@ onMounted(async () => {
   <ConfigProvider :theme="antdTheme" :locale="antdLocale">
     <BrowserFilePicker v-if="windowIsBrowser" />
     <ThemeTokenBridge />
+    <GeneralOwnershipPrompt v-if="isUiReady" />
     <AppearanceDecoration />
     <!-- 初始化页面使用带标题栏的全屏布局 -->
     <div v-if="isInitializationPage" class="initialization-container">

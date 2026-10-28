@@ -35,6 +35,7 @@ from app.core.lifecycle import ShutdownCoordinator
 from app.core.ws import MainConnection, Publisher, protocol
 from app.models.schema import *
 from app.services import System
+from app.services.instance_identity import backend_instance_id
 from app.utils import get_logger, is_backend_dev_mode, is_supervised
 
 router = APIRouter(prefix="/api/core", tags=["核心信息"])
@@ -66,6 +67,7 @@ class BackendHealthOut(BaseModel):
     protocol: int = Field(description="后端自身支持的健康检查协议版本")
     version: str = Field(description="后端版本号")
     commit: str = Field(description="后端所在提交哈希，未受监督或监督器未注入时为空")
+    instanceId: str = Field(description="实际数据根的稳定身份，用于避免跨安装复用或关闭")
 
 
 def _resolve_injected_identity(env_name: str) -> str | None:
@@ -103,6 +105,7 @@ async def get_health(request: Request) -> BackendHealthOut:
         version=_resolve_injected_identity("AUTO_MAS_EXPECTED_VERSION")
         or Config.VERSION,
         commit=_resolve_injected_identity("AUTO_MAS_EXPECTED_COMMIT") or "",
+        instanceId=backend_instance_id(),
     )
 
 

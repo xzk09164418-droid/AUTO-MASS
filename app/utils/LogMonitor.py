@@ -92,6 +92,7 @@ class LogMonitor:
         log_file_path_resolver: Callable[[], Path],
         log_start_time: datetime,
         initial_offset: int | None = None,
+        initial_offsets: dict[Path, int] | None = None,
     ):
         """监控日志文件
 
@@ -113,11 +114,12 @@ class LogMonitor:
         if_mtime_checked = False
         warned_mtime_date: date | None = None
         if_log_start = False
-        offset = initial_offset if initial_offset is not None else 0
+        read_offsets: dict[Path, int] = dict(initial_offsets or {})
+        offset = initial_offset if initial_offset is not None else read_offsets.get(current_path, 0)
         log_contents = []
         # 按路径记忆读取偏移：时钟回拨可能让解析出的路径倒退回昨天，
         # 若一律从 0 重读会把整份旧日志重复摄入。
-        read_offsets: dict[Path, int] = {current_path: offset}
+        read_offsets[current_path] = offset
         drain_failures = 0
 
         while True:
@@ -495,6 +497,7 @@ class LogMonitor:
         log_file_path_resolver: Callable[[], Path],
         start_time: datetime,
         initial_offset: int | None = None,
+        initial_offsets: dict[Path, int] | None = None,
     ) -> None:
         """
         开始监控日志文件
@@ -506,6 +509,8 @@ class LogMonitor:
             initial_offset (int | None): 首个监控文件的起始字节偏移，用于追加写
                 且跨运行保留的日志：传入被监控进程启动前的文件长度，只有本次
                 运行新写的行会被读取；为 None 时从文件头开始读
+            initial_offsets (dict[Path, int] | None): 启动前已存在文件的偏移；
+                切换文件时也跳过旧内容，仍由同一监控器排空旧文件尾部。
         """
 
         probe_path = log_file_path_resolver()
@@ -516,7 +521,7 @@ class LogMonitor:
             await self.stop()
 
         self.task = asyncio.create_task(
-            self.monitor_file(log_file_path_resolver, start_time, initial_offset)
+            self.monitor_file(log_file_path_resolver, start_time, initial_offset, initial_offsets)
         )
         logger.info(f"日志文件监控已启动: {probe_path}")
 

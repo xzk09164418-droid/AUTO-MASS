@@ -43,6 +43,22 @@ SCRIPT_BOOK = {"GeneralConfig": GeneralConfig}
 USER_BOOK = {"GeneralConfig": GeneralUserConfig}
 
 
+@router.get("/ownership/prompts", response_model=GeneralOwnershipPromptsOut, tags=["GeneralOwnership"])
+async def get_ownership_prompts() -> GeneralOwnershipPromptsOut:
+    from app.core.general_ownership import general_ownership
+
+    return GeneralOwnershipPromptsOut(data=general_ownership.prompts())
+
+
+@router.post("/ownership/answer", response_model=OutBase, tags=["GeneralOwnership"])
+async def answer_ownership_prompt(data: GeneralOwnershipAnswerIn) -> OutBase:
+    from app.core.general_ownership import general_ownership
+
+    if not general_ownership.respond(data.requestId, edit=data.edit):
+        return OutBase(code=409, status="error", message="该提示已结束，请刷新状态")
+    return OutBase()
+
+
 @router.post(
     "/add",
     tags=["Add"],

@@ -103,6 +103,11 @@
           :config-mode="generalConfig.Script.ConfigPathMode || 'File'"
           @saved="patch => Object.assign(generalConfig.Script, patch)"
         />
+        <GeneralRecoverySection
+          :script-id="scriptId"
+          :config="generalConfig.Script"
+          @saved="patch => Object.assign(generalConfig.Script, patch)"
+        />
         <!-- 基础配置 -->
         <div class="form-section">
           <div class="section-header">
@@ -904,6 +909,7 @@
 </template>
 
 <script setup lang="ts">
+import GeneralRecoverySection from './components/GeneralRecoverySection.vue'
 import GeneralNativeConfigSection from './components/GeneralNativeConfigSection.vue'
 import ScriptHardTimeoutField from '@/views/EditView/Script/components/ScriptHardTimeoutField.vue'
 import ConfigLockPanel from '@/components/ConfigLockPanel.vue'

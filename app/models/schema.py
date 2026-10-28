@@ -21,6 +21,7 @@
 #   Contact: DLmaster_361@163.com
 
 
+from pathlib import PureWindowsPath
 from typing import (
     Annotated,
     Any,
@@ -2577,7 +2578,76 @@ class GeneralConfig_Info(_SchemaModel):
     RootPath: Optional[str] = Field(default=None, description="脚本根目录")
 
 
+class GeneralOwnershipPromptData(_SchemaModel):
+    requestId: str
+    scriptId: str
+    scriptName: str
+    reason: str
+    automated: bool = Field(description="定时运行已跳过，不等待选择")
+
+
+class GeneralOwnershipPromptsOut(OutBase):
+    data: list[GeneralOwnershipPromptData]
+
+
+class GeneralOwnershipAnswerIn(_SchemaModel):
+    requestId: str
+    edit: bool = Field(description="是：跳过本次并修改；否：保留原配置")
+
+
+class GeneralTaskKillData(_SchemaModel):
+    Name: str = Field(min_length=1, description="精确匹配的进程名")
+    Path: str = Field(min_length=1, description="精确匹配的可执行文件绝对路径")
+
+    @model_validator(mode="after")
+    def validate_target(self) -> "GeneralTaskKillData":
+        path = PureWindowsPath(self.Path)
+        if not path.is_absolute() or any(c in self.Path for c in '*?"'):
+            raise ValueError("清理路径必须是无通配符的完整绝对路径")
+        if path.name.casefold() != self.Name.casefold():
+            raise ValueError("进程名必须与清理路径的文件名一致")
+        return self
+
+
+class GeneralRestartData(_SchemaModel):
+    Path: str = Field(min_length=1, description="启动程序绝对路径")
+    Arguments: str = Field(default="", description="启动参数")
+    WorkingDirectory: str = Field(default="", description="工作目录，留空使用程序目录")
+    WaitSeconds: int = Field(default=50, ge=0, le=9999, description="启动后等待秒数")
+    IsMain: bool = Field(default=False, description="是否为脚本主体入口")
+
+    @model_validator(mode="after")
+    def validate_entry(self) -> "GeneralRestartData":
+        for path in (self.Path, self.WorkingDirectory):
+            if path and (
+                not PureWindowsPath(path).is_absolute() or any(c in path for c in '*?"')
+            ):
+                raise ValueError("启动路径和工作目录必须为无通配符的绝对路径")
+        if self.IsMain and self.WaitSeconds < 10:
+            raise ValueError("脚本主体等待时间不能少于 10 秒")
+        return self
+
+
 class GeneralConfig_Script(_SchemaModel):
+    TaskKill: Optional[list[GeneralTaskKillData]] = Field(
+        default=None, description="自定义清理清单，留空沿用原清理"
+    )
+    TaskKillMode: Optional[Literal["Tracked", "Session", "Force"]] = Field(
+        default=None, description="本轮进程、当前会话全部匹配、跨会话强力清理"
+    )
+    Restart: Optional[list[GeneralRestartData]] = Field(
+        default=None, description="重试及补跑启动清单"
+    )
+
+    @field_validator("Restart")
+    @classmethod
+    def validate_restart(
+        cls, value: list[GeneralRestartData] | None
+    ) -> list[GeneralRestartData] | None:
+        if value and sum(item.IsMain for item in value) != 1:
+            raise ValueError("非空启动清单必须且只能标记一个脚本主体")
+        return value
+
     ScriptPath: Optional[str] = Field(default=None, description="脚本可执行文件路径")
     Arguments: Optional[str] = Field(default=None, description="脚本启动附加命令参数")
     IfTrackProcess: Optional[bool] = Field(

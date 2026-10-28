@@ -28,7 +28,7 @@ Copy-Item -LiteralPath (Join-Path $root 'frontend\server.js') -Destination $fron
 $modulesTarget = Join-Path $frontendTarget 'node_modules'
 New-Item -ItemType Directory -Path $modulesTarget -Force | Out-Null
 Copy-Item -LiteralPath (Join-Path $root 'frontend\node_modules\adm-zip') -Destination $modulesTarget -Recurse
-foreach ($file in @('host.cjs', 'runtimeLogs.cjs', 'startupStatus.cjs')) {
+foreach ($file in @('host.cjs', 'runtimeLogs.cjs', 'startupStatus.cjs', 'instance.cjs')) {
     Copy-Item -LiteralPath (Join-Path $root "frontend\web\$file") -Destination (Join-Path $frontendTarget 'web')
 }
 $node = (Get-Command node.exe -ErrorAction Stop).Source

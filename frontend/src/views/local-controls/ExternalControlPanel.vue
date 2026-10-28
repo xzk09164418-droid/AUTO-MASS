@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { message, Modal } from 'ant-design-vue'
+import { useI18n } from 'vue-i18n'
 import type { ExternalHoldInfo } from '@/api'
 import { useExternalControl } from '@/composables/useExternalControl'
 import { useScriptApi } from '@/composables/useScriptApi'
@@ -9,6 +10,9 @@ import { externalControlExamples } from './externalControlExamples'
 const { snapshot, schemas, backendUrl, loading, error, refresh, save, release, testMail } =
   useExternalControl()
 const { getScripts } = useScriptApi()
+const { t } = useI18n()
+const frontendAddress = window.location.origin
+const frontendPort = window.location.port || (window.location.protocol === 'https:' ? '443' : '80')
 const scripts = ref<{ label: string; value: string }[]>([])
 const scriptId = ref('')
 const callerId = ref('external_program')
@@ -23,6 +27,13 @@ const form = reactive({
   callerSecret: '',
 })
 const base = computed(() => backendUrl.value.replace(/\/$/, ''))
+const backendPort = computed(() => {
+  try {
+    return new URL(base.value).port || '80'
+  } catch {
+    return '—'
+  }
+})
 const example = computed(() =>
   externalControlExamples(base.value, scriptId.value || '<脚本 ID>', callerId.value, holdId.value)
 )
@@ -139,6 +150,14 @@ onMounted(load)
 <template>
   <section class="external-control-panel">
     <a-alert v-if="error" type="error" show-icon :message="error" />
+    <a-descriptions :title="t('hostPorts.title')" bordered :column="1">
+      <a-descriptions-item :label="t('hostPorts.frontend')">
+        <code>{{ frontendAddress }}</code> · {{ t('hostPorts.port') }} {{ frontendPort }}
+      </a-descriptions-item>
+      <a-descriptions-item :label="t('hostPorts.backend')">
+        <code>{{ base }}</code> · {{ t('hostPorts.port') }} {{ backendPort }}
+      </a-descriptions-item>
+    </a-descriptions>
     <a-alert
       type="info"
       show-icon

@@ -69,8 +69,13 @@ if _leaked_venv is not None:
         os.environ["PATH"] = os.pathsep.join(_kept_entries)
         logger.info(f"已从 PATH 摘除启动链路注入的段: {_venv_scripts}")
 
-DEFAULT_HTTP_PORT = 36163
-DEV_HTTP_PORT = 36164
+from app.services.instance_identity import (  # noqa: E402
+    DEFAULT_PORTS,
+    configured_backend_port,
+)
+
+DEFAULT_HTTP_PORT = DEFAULT_PORTS["backendPort"]
+DEV_HTTP_PORT = DEFAULT_PORTS["developmentBackendPort"]
 SUPERVISED_PORT_ENV = "AUTO_MAS_SUPERVISED_PORT"
 SUPERVISED_PORT_MIN = 1024
 BACKGROUND_ERROR_MESSAGE_MAX = 300
@@ -206,7 +211,7 @@ def resolve_http_port(development_environment: bool, cli_port: int = 0) -> int:
             return port
         logger.warning(f"AUTO_MAS_HTTP_PORT 取值无效，已忽略: {raw}")
 
-    return DEV_HTTP_PORT if development_environment else DEFAULT_HTTP_PORT
+    return configured_backend_port(development=development_environment)
 
 
 def _resolve_supervised_port() -> int:
@@ -589,6 +594,9 @@ def main(argv: list[str] | None = None):
         lifespan=lifespan,
     )
 
+    from app.api.instance_guard import InstanceIdentityMiddleware
+
+    app.add_middleware(InstanceIdentityMiddleware)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],

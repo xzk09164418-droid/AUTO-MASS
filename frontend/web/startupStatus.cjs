@@ -4,7 +4,7 @@ const path = require('node:path')
 const http = require('node:http')
 const terminalCodes = new RegExp(`${String.fromCharCode(27)}\\[[0-?]*[ -/]*[@-~]`, 'g')
 
-function createStartupStatus(root, backendPort, launchError) {
+function createStartupStatus(root, backendPort, launchError, expectedId) {
   const files = ['app.log', 'backend-launcher.log'].map(name => {
     const file = path.join(root, 'debug', name)
     const stat = fs.existsSync(file) ? fs.statSync(file) : null
@@ -63,9 +63,10 @@ function createStartupStatus(root, backendPort, launchError) {
     })
     return {
       runId,
-      coreReady: !!health?.ready,
+      coreReady: !!health?.ready && (!expectedId || health.instanceId === expectedId),
       backgroundStatus: health?.backgroundStatus || 'starting',
-      error: health?.backgroundError || launchError() || '',
+      error: health && expectedId && health.instanceId !== expectedId
+        ? '端口上的后端不属于本安装实例' : health?.backgroundError || launchError() || '',
       logs,
     }
   }

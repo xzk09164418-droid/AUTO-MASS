@@ -26,6 +26,7 @@ from pathlib import Path
 
 from app.core import Config, EmulatorManager
 from app.core.child_session import ChildSessionManager
+from app.core.general_ownership import general_ownership
 from app.core.ws import Publisher, protocol
 from app.models.config import GeneralConfig, GeneralUserConfig
 from app.models.ConfigBase import MultipleConfig
@@ -66,6 +67,9 @@ class GeneralManager(ScriptManagerBase):
         self.task_info = script_info.task_info
         self.script_info = script_info
         self.check_result = "-"
+        self._ownership_skipped = False
+        self._prepared = False
+        self._config_locked = False
         self._device_provider = device_provider
 
     def is_user_selected(self, user_id: uuid.UUID | str, user) -> bool:
@@ -152,6 +156,7 @@ class GeneralManager(ScriptManagerBase):
         """运行前准备"""
 
         await Config.ScriptConfig[uuid.UUID(self.script_info.script_id)].lock()
+        self._config_locked = True
         self.script_config = Config.ScriptConfig[uuid.UUID(self.script_info.script_id)]
         self.user_config = MultipleConfig([GeneralUserConfig])
         await self.user_config.load(await self.script_config.UserData.toDict())
@@ -208,8 +213,20 @@ class GeneralManager(ScriptManagerBase):
             )
             return
 
+        if self.task_info.mode == "AutoProxy":
+            config = Config.ScriptConfig[uuid.UUID(self.script_info.script_id)]
+            allowed = await general_ownership.before_run(
+                self.script_info.script_id, self.script_info.name, config,
+                automated=self.task_info.trigger_source != "manual_task",
+            )
+            if not allowed:
+                self._ownership_skipped = True
+                self.script_info.status = "跳过"
+                self.script_info.log = "主体归属待确认，已跳过本次运行"
+                return
         self.begin_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         await self.prepare()
+        self._prepared = True
 
         if not isinstance(self.script_config, GeneralConfig):
             raise RuntimeError("脚本配置类型错误, 不是通用脚本类型")
@@ -250,9 +267,17 @@ class GeneralManager(ScriptManagerBase):
     async def final_task(self):
         """运行结束后的收尾工作（不进行任何外部配置文件恢复或回写）"""
 
+        if self._ownership_skipped:
+            return
         if self.check_result != "Pass":
             self.script_info.status = "异常"
             return self.check_result
+
+        if not self._prepared:
+            if self._config_locked:
+                await Config.ScriptConfig[uuid.UUID(self.script_info.script_id)].unlock()
+            self.script_info.status = "跳过"
+            return
 
         logger.info("通用脚本任务已结束, 开始执行后续操作")
 

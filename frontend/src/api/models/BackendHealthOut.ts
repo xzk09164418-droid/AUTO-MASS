@@ -34,5 +34,9 @@ export type BackendHealthOut = {
      * 后端所在提交哈希，未受监督或监督器未注入时为空
      */
     commit: string;
+    /**
+     * 实际数据根的稳定身份，用于避免跨安装复用或关闭
+     */
+    instanceId: string;
 };
 

@@ -4,7 +4,6 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
 using System.Net;
-using System.Net.Sockets;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -37,8 +36,9 @@ namespace AutoMas.Launcher
         private readonly string _rootDir;
         private readonly string[] _args;
         private readonly bool _headless;
-        private readonly int _frontendPort = 36162;
-        private readonly int _backendPort = 36163;
+        private int _frontendPort;
+        private int _backendPort;
+        private string _instanceId;
         private readonly SemaphoreSlim _servicesLock = new SemaphoreSlim(1, 1);
         private NotifyIcon _trayIcon;
         private ContextMenuStrip _trayMenu;
@@ -178,20 +178,54 @@ namespace AutoMas.Launcher
             return "node.exe";
         }
 
-        private async Task StartServicesAsync(bool initialLaunch)
+        private async Task<bool> ResolveInstanceAsync(bool initialLaunch)
+        {
+            // 端口选择、冲突询问和落盘全部复用 Node 实例配置模块。
+            var module = Path.Combine(_rootDir, "frontend", "web", "instance.cjs");
+            var arguments = initialLaunch ? string.Join(" ", _args) : "";
+            var start = new ProcessStartInfo {
+                FileName = ResolveNodeExe(),
+                Arguments = string.Format("\"{0}\" {1}", module, arguments),
+                WorkingDirectory = _rootDir,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true
+            };
+            using (var process = Process.Start(start))
+            {
+                if (process == null) throw new InvalidOperationException("无法读取实例端口配置");
+                var output = process.StandardOutput.ReadToEndAsync();
+                var error = process.StandardError.ReadToEndAsync();
+                await Task.Run(() => process.WaitForExit());
+                var json = await output;
+                var errorText = await error;
+                if (process.ExitCode != 0) throw new InvalidOperationException(errorText);
+                var config = new JavaScriptSerializer().Deserialize<Dictionary<string, object>>(json);
+                if (config.ContainsKey("cancelled") && Convert.ToBoolean(config["cancelled"])) return false;
+                _frontendPort = Convert.ToInt32(config["frontendPort"]);
+                _backendPort = Convert.ToInt32(config["backendPort"]);
+                _instanceId = Convert.ToString(config["instanceId"]);
+                return true;
+            }
+        }
+
+        private async Task<bool> StartServicesAsync(bool initialLaunch)
         {
             await _servicesLock.WaitAsync();
             try
             {
+                if (!await ResolveInstanceAsync(initialLaunch)) return false;
                 if (CheckPortReady(_frontendPort, "/__frontend_config"))
                 {
                     if (initialLaunch && !_headless)
                         OpenBrowserWindow(_frontendPort);
-                    return;
+                    return true;
                 }
                 await StartServicesCoreAsync(initialLaunch);
                 if (initialLaunch && !_headless)
                     OpenBrowserWindow(CheckPortReady(_frontendPort, "/__frontend_config") ? _frontendPort : _backendPort);
+                return true;
             }
             finally { _servicesLock.Release(); }
         }
@@ -201,6 +235,7 @@ namespace AutoMas.Launcher
             var serverJs = Path.Combine(_rootDir, "frontend", "server.js");
             // 从托盘重新打开页面不重放 --run-queue / --run-script 等启动动作。
             var joinedArgs = initialLaunch ? string.Join(" ", _args) + " --no-browser" : "--no-browser";
+            joinedArgs += string.Format(" --port {0} --backend-port {1}", _frontendPort, _backendPort);
 
             // 优先通过 Node.js 前后端分离宿主启动（会自动拉起 Python 后端并调用系统浏览器）
             if (File.Exists(serverJs) && CanRunCommand(ResolveNodeExe(), "--version"))
@@ -223,7 +258,7 @@ namespace AutoMas.Launcher
             var pyPsi = new ProcessStartInfo
             {
                 FileName = ResolvePythonExe(),
-                Arguments = string.Format("\"{0}\" --no-admin-restart {1}", mainPy, joinedArgs).Trim(),
+                Arguments = string.Format("\"{0}\" --no-admin-restart {1} --port {2}", mainPy, joinedArgs, _backendPort).Trim(),
                 WorkingDirectory = _rootDir,
                 UseShellExecute = false,
                 CreateNoWindow = true
@@ -240,7 +275,7 @@ namespace AutoMas.Launcher
             }
         }
 
-        private static async Task<bool> WaitForServiceAsync(int port, string path, int timeoutMs)
+        private async Task<bool> WaitForServiceAsync(int port, string path, int timeoutMs)
         {
             var elapsed = Stopwatch.StartNew();
             while (elapsed.ElapsedMilliseconds < timeoutMs)
@@ -278,7 +313,7 @@ namespace AutoMas.Launcher
             }
         }
 
-        private static bool CheckPortReady(int port, string path = "/api/core/health")
+        private bool CheckPortReady(int port, string path = "/api/core/health")
         {
             try
             {
@@ -286,23 +321,20 @@ namespace AutoMas.Launcher
                 req.Timeout = 1200;
                 using (var resp = (HttpWebResponse)req.GetResponse())
                 {
-                    return resp.StatusCode == HttpStatusCode.OK;
+                    if (resp.StatusCode != HttpStatusCode.OK || string.IsNullOrEmpty(_instanceId)) return false;
+                    using (var reader = new StreamReader(resp.GetResponseStream(), Encoding.UTF8))
+                    {
+                        var data = new JavaScriptSerializer().Deserialize<Dictionary<string, object>>(reader.ReadToEnd());
+                        if (!data.ContainsKey("instanceId") || Convert.ToString(data["instanceId"]) != _instanceId) return false;
+                        if (path == "/__frontend_config" && (!data.ContainsKey("backendPort") || Convert.ToInt32(data["backendPort"]) != _backendPort)) return false;
+                        return !data.ContainsKey("ready") || Convert.ToBoolean(data["ready"]);
+                    }
                 }
             }
             catch
             {
                 return false;
             }
-        }
-
-        private static bool IsPortListening(int port)
-        {
-            try
-            {
-                using (var client = new TcpClient())
-                    return client.ConnectAsync("127.0.0.1", port).Wait(1000) && client.Connected;
-            }
-            catch { return false; }
         }
 
         private void OpenBrowserWindow(int port)
@@ -341,9 +373,10 @@ namespace AutoMas.Launcher
             _openingBrowser = true;
             try
             {
-                await StartServicesAsync(false);
+                if (!await StartServicesAsync(false)) return;
                 int targetPort = CheckPortReady(_frontendPort, "/__frontend_config") ? _frontendPort : _backendPort;
-                OpenBrowserWindow(targetPort);
+                if (CheckPortReady(targetPort, targetPort == _frontendPort ? "/__frontend_config" : "/api/core/health"))
+                    OpenBrowserWindow(targetPort);
             }
             catch (Exception error)
             {
@@ -361,9 +394,13 @@ namespace AutoMas.Launcher
             });
         }
 
-        private static async Task SendJsonAsync(int port, string path, string jsonBody)
+        private async Task SendJsonAsync(int port, string path, string jsonBody)
         {
+            var healthPath = port == _frontendPort ? "/__frontend_config" : "/api/core/health";
+            if (!CheckPortReady(port, healthPath))
+                throw new InvalidOperationException("服务尚未就绪或不属于本安装实例，已拒绝操作。");
             var req = (HttpWebRequest)WebRequest.Create(string.Format("http://127.0.0.1:{0}{1}", port, path));
+            req.Headers["X-Auto-Mas-Instance"] = _instanceId;
             req.Method = "POST";
             req.ContentType = "application/json; charset=utf-8";
             req.ReadWriteTimeout = 120000;
@@ -389,11 +426,11 @@ namespace AutoMas.Launcher
 
         private async Task StopFrontendAsync()
         {
-            if (!IsPortListening(_frontendPort)) return;
+            if (!CheckPortReady(_frontendPort, "/__frontend_config")) return;
             await SendJsonAsync(_frontendPort, "/__host/invoke", "{\"method\":\"frontendStop\",\"args\":[]}");
             for (int i = 0; i < 40; i++)
             {
-                if (!IsPortListening(_frontendPort)) return;
+                if (!CheckPortReady(_frontendPort, "/__frontend_config")) return;
                 await Task.Delay(100);
             }
             throw new InvalidOperationException("前端尚未退出，请稍后重试。");
@@ -419,13 +456,13 @@ namespace AutoMas.Launcher
 
         private async Task ShutdownAndExitAsync()
         {
-            if (IsPortListening(_backendPort))
+            if (CheckPortReady(_backendPort))
             {
                 await SendJsonAsync(_backendPort, "/api/core/close", "{}");
                 bool stopped = false;
                 for (int i = 0; i < 240; i++)
                 {
-                    if (!IsPortListening(_backendPort)) { stopped = true; break; }
+                    if (!CheckPortReady(_backendPort)) { stopped = true; break; }
                     await Task.Delay(500);
                 }
                 if (!stopped) throw new InvalidOperationException("后端尚未完成清理，保留服务运行，请查看日志后重试。");

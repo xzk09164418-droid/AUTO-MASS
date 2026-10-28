@@ -32,8 +32,8 @@ if %errorLevel% equ 0 (
     exit /b
 )
 
-:: 回退：直接启动 Python 后端并打开系统默认浏览器
-start "" "http://127.0.0.1:36163"
+:: 无 Node 时仅启动后端，不能向未经身份核验的固定端口打开浏览器。
+echo [AUTO-MAS] Node.js 不可用，仅启动后端；请安装 Node.js 后使用浏览器控制台。
 if exist "%~dp0.venv\Scripts\python.exe" (
     "%~dp0.venv\Scripts\python.exe" "%~dp0main.py" %*
 ) else (

@@ -79,6 +79,7 @@ function createBrowserHost(root, backendPort, lifecycle = {}) {
       }
       if (!Object.hasOwn(routes, action)) throw new Error('未知本机操作')
       const [method, endpoint] = routes[action]
+      await lifecycle.requireBackendOwnership?.()
       const response = await fetch(`http://127.0.0.1:${backendPort}${endpoint}`, {
         method,
         headers: { 'Content-Type': 'application/json' },

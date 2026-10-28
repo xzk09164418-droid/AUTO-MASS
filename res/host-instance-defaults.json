@@ -1,0 +1,5 @@
+{
+  "frontendPort": 36262,
+  "backendPort": 36263,
+  "developmentBackendPort": 36264
+}

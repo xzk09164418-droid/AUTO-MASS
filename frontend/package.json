@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "vp dev",
     "dev:fullstack": "concurrently \"yarn backend\" \"vp dev\"",
-    "backend": "cross-env PYTHONIOENCODING=utf-8 AUTO_MAS_HTTP_PORT=36164 python ../main.py",
+    "backend": "cross-env PYTHONIOENCODING=utf-8 python ../main.py",
     "build:web": "vp build --config web/vite.config.ts && vp build --config web/services.config.ts",
     "start:web": "node server.js",
     "build": "yarn build:web",
