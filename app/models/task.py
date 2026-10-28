@@ -150,6 +150,9 @@ class TaskItem(ABC):
     queue_id: str | None  # 执行的队列ID
     script_id: str | None  # 执行的脚本ID
     user_id: str | None  # 执行的用户ID
+    # 外部抢占后的本轮重跑需重新执行已完成用户，不回滚历史计数。
+    external_restart_script_ids: set[str] = field(default_factory=set)
+    external_restart_user_ids: dict[str, frozenset[str]] = field(default_factory=dict)
     user_ids: frozenset[str] | None = None  # 自动代理时指定的多个用户；None 表示不限制
     # 队列任务按脚本限定的本次运行用户；未列出的脚本不限，空集合表示该脚本本次整项跳过
     user_ids_by_script: dict[str, frozenset[str]] | None = None

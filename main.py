@@ -296,6 +296,14 @@ def main(argv: list[str] | None = None):
         from app.core import Config, MainTimer, TaskManager
 
         await Config.init_config()
+        from app.core.external_control_mail import run_mail_control
+        from app.core.external_holds import external_holds
+
+        await external_holds.initialize()
+        external_mail_task = asyncio.create_task(
+            run_mail_control(lambda sid: uuid.UUID(sid) in Config.ScriptConfig),
+            name="external-control-mail",
+        )
 
         from app.core.desktop_runtime import watch_execution_session
 
@@ -479,6 +487,10 @@ def main(argv: list[str] | None = None):
             from app.core.ws import Dispatcher, MainConnection
             from app.runtime_tasks import RuntimeTasks
             from app.services import Matomo, System, Updater
+
+            external_mail_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await external_mail_task
 
             mcp_runtime = getattr(app.state, "mcp_runtime", None)
             if mcp_runtime is not None:

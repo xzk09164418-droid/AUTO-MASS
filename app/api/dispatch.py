@@ -22,9 +22,11 @@
 
 
 from typing import Any
+
 from fastapi import APIRouter, Body
 from pydantic import Field
 
+from app.api.external_holds import router as external_holds_router
 from app.core import Config, TaskManager
 from app.core.hotkey_manager import HotkeyManager
 from app.models.schema import *
@@ -33,6 +35,9 @@ from app.utils import get_logger
 
 router = APIRouter(prefix="/api/dispatch", tags=["任务调度"])
 logger = get_logger("任务调度 API")
+
+
+router.include_router(external_holds_router)
 
 
 class NavigationActionOut(OutBase):

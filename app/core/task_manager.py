@@ -35,6 +35,7 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, Iterable, Literal
 import app.task as task
 from app.core.child_session import ChildSessionManager
 from app.core.desktop_guard import ensure_desktop_available
+from app.core.external_holds import ExternalHoldDeferred, external_holds
 from app.models.config import CLASS_BOOK
 from app.models.schema import (
     ReplayRecord,
@@ -563,6 +564,7 @@ class Task(TaskExecuteBase):
         # 支持全局热键上/下一个任务跳转
         self._active_child_task: asyncio.Task | None = None
         self._pending_nav_offset: int | None = None
+        self._external_deferred_cycle: set[str] = set()
 
     def request_navigate(self, offset: int) -> bool:
         """请求跳转到上一个（offset=-1）或下一个（offset=+1）子任务。"""
@@ -690,6 +692,9 @@ class Task(TaskExecuteBase):
                 outcome = "failed"
             else:
                 outcome = "incomplete"
+        except ExternalHoldDeferred:
+            outcome = "deferred"
+            raise
         except asyncio.CancelledError:
             outcome = "cancelled"
             raise
@@ -786,7 +791,33 @@ class Task(TaskExecuteBase):
         self, queue_uid: uuid.UUID, pending: list[CycleEntry]
     ) -> None:
         results: list[str] = []
-        for stale in pending:
+        blocked, released = await external_holds.availability(
+            [entry.script_id for entry in pending]
+        )
+        for entry in pending:
+            if entry.script_id in blocked:
+                self._external_deferred_cycle.add(entry.queue_item_id)
+                self.task_info.script_list[entry.index].status = "外部占用，等待释放"
+        runnable = [entry for entry in pending if entry.script_id not in blocked]
+        runnable.sort(
+            key=lambda entry: (
+                entry.queue_item_id in self._external_deferred_cycle,
+                released.get(entry.script_id, 0)
+                if entry.queue_item_id in self._external_deferred_cycle
+                else 0,
+            )
+        )
+        if not runnable:
+            # 有限等待还需重新计算循环计划，避免等待占用时错过其他项目的新到期点。
+            try:
+                await asyncio.wait_for(
+                    external_holds.wait_changed([entry.script_id for entry in pending]),
+                    timeout=CYCLE_MAX_SLEEP_SECONDS,
+                )
+            except TimeoutError:
+                pass
+            return
+        for stale in runnable:
             # 循环队列相邻两个子任务间隔检查是否有其他程序需要连接本地远程桌面
             await ChildSessionManager.wait_if_external_requested(
                 boundary_label=f"循环队列[{queue_uid}]子任务间隔"
@@ -797,7 +828,12 @@ class Task(TaskExecuteBase):
             )
             if entry is None or not entry.is_due:
                 continue
-            results.append(await self._run_cycle_entry(queue_uid, entry, entries))
+            result = await self._run_cycle_entry(queue_uid, entry, entries)
+            results.append(result)
+            if result == "blocked":
+                self._external_deferred_cycle.add(entry.queue_item_id)
+            else:
+                self._external_deferred_cycle.discard(entry.queue_item_id)
 
         if results and not any(result in ("success", "skipped") for result in results):
             await asyncio.sleep(CYCLE_RETRY_SLEEP_SECONDS)
@@ -882,6 +918,7 @@ class Task(TaskExecuteBase):
         self.task_info.begin_script_run(script_item)
         started_at = datetime.now()
         previous_started_at = queue_item.get("Data", "LastCycleStartedAt")
+        previous_next_run = queue_item.get("Schedule", "NextRunAt")
         success = False
         ChildSessionManager.enter_subtask()
         try:
@@ -919,6 +956,14 @@ class Task(TaskExecuteBase):
                     script_item.status,
                     (user.status for user in script_item.user_list),
                 )
+        except ExternalHoldDeferred as deferred:
+            if deferred.interrupted:
+                self.task_info.external_restart_script_ids.add(entry.script_id)
+            await queue_item.set("Data", "LastCycleStartedAt", previous_started_at)
+            await queue_item.set("Schedule", "NextRunAt", previous_next_run)
+            script_item.status = "外部占用，等待释放"
+            logger.info(f"循环项目因外部占用延后: {script_uid}")
+            return "blocked"
         except Exception as e:
             script_item.status = "异常"
             logger.exception(f"循环任务出现异常: {entry.script_name}: {e}")
@@ -936,6 +981,7 @@ class Task(TaskExecuteBase):
             await self._advance_cycle_after_maintenance(queue_item)
             return "skipped"
 
+        self.task_info.external_restart_script_ids.discard(entry.script_id)
         finished_at = datetime.now()
         await queue_item.set(
             "Data", "LastCycleFinishedAt", format_cycle_time(finished_at)
@@ -964,14 +1010,17 @@ class Task(TaskExecuteBase):
         entry: CycleEntry,
         queue_uid: uuid.UUID,
     ) -> None:
-        child = self.spawn(task_item)
-        self._active_child_task = child
+        def start_child():
+            child = self.spawn(task_item)
+            self._active_child_task = child
+            return child
+
         refresher = RuntimeTasks.spawn(
             self._refresh_preview_while_running(queue_uid, entry),
             name=f"cycle-preview:{self.task_info.task_id}",
         )
         try:
-            await child
+            await external_holds.run(entry.script_id, start_child)
         except asyncio.CancelledError:
             if self._pending_nav_offset is not None and not self.is_closing:
                 self._pending_nav_offset = None
@@ -1138,8 +1187,57 @@ class Task(TaskExecuteBase):
     async def _run_script_list(self, start_index: int) -> None:
         idx = start_index
         has_started_any = False
+        deferred: set[int] = set()
 
         while 0 <= idx < len(self.task_info.script_list):
+            # 只排列本次执行快照；保存的 QueueConfig、用户范围和日期条件不变。
+            remaining = self.task_info.script_list[idx:]
+            blocked, released = await external_holds.availability(
+                [item.script_id for item in remaining]
+            )
+            # 已删除、未选择用户或今天不排期的项仍按原规则跳过，不能被占用拖住。
+            blocked_items = {
+                id(item)
+                for offset, item in enumerate(remaining, start=idx)
+                if item.script_id in blocked
+                and uuid.UUID(item.script_id) in Config.ScriptConfig
+                and self.task_info.script_user_scope(item.script_id) != frozenset()
+                and self._is_script_scheduled_today(offset)
+            }
+            for item in remaining:
+                if id(item) in blocked_items:
+                    deferred.add(id(item))
+                    item.status = "外部占用，等待释放"
+            paired = list(
+                zip(
+                    remaining,
+                    self.script_run_days[idx:]
+                    if self.script_run_days is not None
+                    else [None] * len(remaining),
+                )
+            )
+            paired.sort(
+                key=lambda pair: (
+                    2
+                    if id(pair[0]) in blocked_items
+                    else 1
+                    if id(pair[0]) in deferred
+                    else 0,
+                    released.get(pair[0].script_id, 0)
+                    if id(pair[0]) in deferred
+                    else 0,
+                )
+            )
+            if paired:
+                self.task_info.script_list[idx:] = [pair[0] for pair in paired]
+                if self.script_run_days is not None:
+                    self.script_run_days[idx:] = [pair[1] for pair in paired]
+                self.task_info.schedule_on_change()
+            if id(self.task_info.script_list[idx]) in blocked_items:
+                await external_holds.wait_changed(
+                    [item.script_id for item in remaining]
+                )
+                continue
             # 队列中相邻两个子任务间隔检查是否有其他程序需要连接本地远程桌面，并在其停止使用时机接受回传
             if has_started_any or ChildSessionManager.has_external_lease_requests():
                 await ChildSessionManager.wait_if_external_requested(
@@ -1257,10 +1355,14 @@ class Task(TaskExecuteBase):
                     continue
 
                 with self._observe_script_run(script_item, script_config):
-                    child = self.spawn(task_item)
-                    self._active_child_task = child
+
+                    def start_child():
+                        child = self.spawn(task_item)
+                        self._active_child_task = child
+                        return child
+
                     try:
-                        await child
+                        await external_holds.run(str(current_script_uid), start_child)
                     except asyncio.CancelledError:
                         if self._pending_nav_offset is not None and not self.is_closing:
                             nav_offset = self._pending_nav_offset
@@ -1277,11 +1379,21 @@ class Task(TaskExecuteBase):
                             raise
                     finally:
                         self._active_child_task = None
+            except ExternalHoldDeferred as held:
+                if held.interrupted:
+                    self.task_info.external_restart_script_ids.add(
+                        script_item.script_id
+                    )
+                deferred.add(id(script_item))
+                script_item.status = "外部占用，等待释放"
+                logger.info(f"项目因外部占用延后: {current_script_uid}")
+                continue
             finally:
                 ChildSessionManager.exit_subtask()
                 self.script_reservations.release(current_script_uid, reservation_owner)
                 self.task_info.flush_replays(script_item)
 
+            self.task_info.external_restart_script_ids.discard(script_item.script_id)
             if nav_offset is not None:
                 idx = max(0, idx + nav_offset)
             else:
@@ -1443,9 +1555,10 @@ class _TaskManager:
                     await asyncio.sleep(remaining)
                     remaining = finished_at + 10 - time.perf_counter()
                 # 等待期间手动开了一轮时，等该轮完整结束后再重新计时。
-                if self.is_queue_running(queue_id) or self._queue_finished_at.get(
-                    queue_id, finished_at
-                ) != finished_at:
+                if (
+                    self.is_queue_running(queue_id)
+                    or self._queue_finished_at.get(queue_id, finished_at) != finished_at
+                ):
                     continue
                 if queue_id not in Config.QueueConfig:
                     return
@@ -1972,8 +2085,12 @@ class _TaskManager:
         for q_uid, queue in Config.QueueConfig.items():
             if self._queue_script_ids(q_uid):
                 is_cycle = bool(queue.get("Info", "CycleEnabled"))
-                mode: Literal["CycleRun", "AutoProxy"] = "CycleRun" if is_cycle else "AutoProxy"
-                task_uid = await self.add_task(mode, str(q_uid), trigger_source="manual_task")
+                mode: Literal["CycleRun", "AutoProxy"] = (
+                    "CycleRun" if is_cycle else "AutoProxy"
+                )
+                task_uid = await self.add_task(
+                    mode, str(q_uid), trigger_source="manual_task"
+                )
                 return {
                     "action": "started",
                     "targetType": "queue",
@@ -1985,7 +2102,9 @@ class _TaskManager:
         if script_uids:
             self._last_standalone_script_idx = 0
             s_uid = script_uids[0]
-            task_uid = await self.add_task("AutoProxy", str(s_uid), trigger_source="manual_task")
+            task_uid = await self.add_task(
+                "AutoProxy", str(s_uid), trigger_source="manual_task"
+            )
             return {
                 "action": "started",
                 "targetType": "script",
@@ -2004,7 +2123,10 @@ class _TaskManager:
         for task_uid, handler in list(self.task_handler.items()):
             if handler.is_closing:
                 continue
-            if len(handler.task_info.script_list) > 1 or handler.task_info.queue_id is not None:
+            if (
+                len(handler.task_info.script_list) > 1
+                or handler.task_info.queue_id is not None
+            ):
                 if handler.request_navigate(direction):
                     return {
                         "action": "navigated_in_queue",
@@ -2033,7 +2155,9 @@ class _TaskManager:
 
         self._last_standalone_script_idx = next_idx
         target_uid = script_uids[next_idx]
-        new_task_uid = await self.add_task("AutoProxy", str(target_uid), trigger_source="manual_task")
+        new_task_uid = await self.add_task(
+            "AutoProxy", str(target_uid), trigger_source="manual_task"
+        )
         return {
             "action": "started_script",
             "direction": direction,

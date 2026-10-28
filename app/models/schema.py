@@ -7161,3 +7161,87 @@ class GeneralNativeConfigOut(OutBase):
     file: str = ""
     content: str = ""
     revision: str = ""
+
+
+# 外部程序占用协议。业务规则由 core 持有，schema 只声明公开格式。
+class ExternalHoldEnvelopeIn(_SchemaModel):
+    payload: str = Field(
+        ...,
+        min_length=1,
+        max_length=16384,
+        description="UTF-8 JSON 的无填充 Base64URL 编码",
+    )
+    signature: str = Field(
+        ...,
+        pattern=r"^[0-9a-f]{64}$",
+        description="对 payload 原文计算的 HMAC-SHA256 小写十六进制签名",
+    )
+
+
+class ExternalHoldCommandIn(_SchemaModel):
+    model_config = ConfigDict(extra="forbid")
+    version: Literal[1] = 1
+    requestId: str = Field(..., min_length=1, max_length=128)
+    callerId: str = Field(..., min_length=1, max_length=80)
+    action: Literal["acquire", "release", "status"]
+    scriptId: str = Field(..., min_length=1, max_length=36)
+    holdId: str = Field(..., min_length=1, max_length=128)
+    issuedAt: AwareDatetime = Field(
+        ..., description="UTC 签发时间，允许过去 5 分钟或未来 1 分钟"
+    )
+    ttlSeconds: int | None = Field(
+        default=None, ge=1, le=86400, description="申请时必填；从签发时间开始计算"
+    )
+
+
+class ExternalHoldInfo(_SchemaModel):
+    holdId: str
+    callerId: str
+    scriptId: str
+    state: Literal["stopping", "active", "released", "expired", "failed"]
+    expiresAt: float = Field(..., description="UTC Unix 秒")
+    message: str = ""
+
+
+class ExternalHoldOut(OutBase):
+    requestId: str = ""
+    hold: ExternalHoldInfo | None = None
+    remainingHolds: int = 0
+
+
+class ExternalControlSettingsIn(_SchemaModel):
+    enabled: bool = False
+    email: str = Field(default="", max_length=254)
+    authorizationCode: SecretStr | None = Field(
+        default=None, description="留空保留已有授权码"
+    )
+    callerId: str | None = Field(default=None, min_length=1, max_length=80)
+    callerSecret: SecretStr | None = Field(
+        default=None, description="新增或轮换调用方密钥，至少 32 字符"
+    )
+    removeCaller: bool = False
+
+
+class ExternalControlSettingsData(_SchemaModel):
+    enabled: bool = False
+    email: str = ""
+    hasAuthorizationCode: bool = False
+    callers: list[str] = Field(default_factory=list)
+
+
+class ExternalControlSnapshotOut(OutBase):
+    settings: ExternalControlSettingsData = Field(
+        default_factory=ExternalControlSettingsData
+    )
+    holds: list[ExternalHoldInfo] = Field(default_factory=list)
+    results: list[ExternalHoldOut] = Field(default_factory=list)
+    mailError: str = ""
+
+
+class ExternalHoldForceReleaseIn(_SchemaModel):
+    callerId: str
+    holdId: str
+
+class ExternalControlContractOut(OutBase):
+    backendUrl: str = Field(default="", description="本机 Python 后端直连地址，不是前端代理或远程桌面宿主地址")
+    schemas: dict[str, Any] = Field(default_factory=dict, description="当前后端公开输入模型的 JSON Schema")

@@ -6,6 +6,7 @@ import uuid
 from fastapi import APIRouter
 
 from app.core import Config
+from app.core.external_holds import ExternalHoldDeferred, external_holds
 from app.models.config import GeneralConfig
 from app.models.schema import (
     GeneralNativeConfigOut,
@@ -42,6 +43,21 @@ async def read_general_native_config(
 
 @router.post("/general/native/write", response_model=GeneralNativeConfigOut)
 async def write_general_native_config(
+    request: GeneralNativeConfigWriteIn,
+) -> GeneralNativeConfigOut:
+    # 文件写入也参与占用准入；线程中的原子写入不能在一半时被取消。
+    try:
+        return await external_holds.run(
+            request.scriptId,
+            lambda: asyncio.create_task(_write_general_native_config(request)),
+        )
+    except ExternalHoldDeferred:
+        return GeneralNativeConfigOut(
+            code=400, status="error", message="项目被外部程序占用，暂不能写入配置"
+        )
+
+
+async def _write_general_native_config(
     request: GeneralNativeConfigWriteIn,
 ) -> GeneralNativeConfigOut:
     script = None

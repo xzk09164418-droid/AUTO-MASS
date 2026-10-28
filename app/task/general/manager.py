@@ -68,6 +68,15 @@ class GeneralManager(ScriptManagerBase):
         self.check_result = "-"
         self._device_provider = device_provider
 
+    def is_user_selected(self, user_id: uuid.UUID | str, user) -> bool:
+        # 外部中断后从头重跑本轮最初选中的用户。已完成用户的剩余天数/次数可能
+        # 已变化，不能因此悄悄把“从头重跑”降为只执行未完成用户；历史计数不回滚。
+        script_id = self.script_info.script_id
+        original = self.task_info.external_restart_user_ids.get(script_id)
+        if script_id in self.task_info.external_restart_script_ids and original is not None:
+            return str(user_id) in original
+        return super().is_user_selected(user_id, user)
+
     async def check(self) -> str:
         """校验通用脚本配置是否可用（不再强制要求填写 ConfigPath 和 LogPath）"""
         if self.task_info.mode not in METHOD_BOOK:
@@ -179,6 +188,10 @@ class GeneralManager(ScriptManagerBase):
             self.script_info.user_list = self.build_proxy_user_list(
                 self.user_config.items()
             )
+            if self.script_info.script_id not in self.task_info.external_restart_script_ids:
+                self.task_info.external_restart_user_ids[self.script_info.script_id] = frozenset(
+                    user.user_id for user in self.script_info.user_list
+                )
         logger.info(
             f"用户列表加载完成, 已筛选用户数: {len(self.script_info.user_list)}"
         )

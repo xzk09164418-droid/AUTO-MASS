@@ -20,6 +20,7 @@ class ProcessScope:
         self.processes: WeakSet = WeakSet()
         self.children: set[ProcessScope] = set()
         self.requests: set[asyncio.Task] = set()
+        self.stop_failed = False
 
     def request_stop(self) -> None:
         for child in tuple(self.children):
@@ -39,6 +40,7 @@ class ProcessScope:
                 cancelled = True
         for result in pending.result():
             if isinstance(result, BaseException):
+                self.stop_failed = True
                 logger.error(f"任务进程清理失败: {result}")
         if cancelled:
             raise asyncio.CancelledError
@@ -48,6 +50,13 @@ _current: ContextVar[ProcessScope | None] = ContextVar(
     "managed_process_scope", default=None
 )
 _tasks: WeakKeyDictionary = WeakKeyDictionary()
+# 由等待子任务结束的调用方读取；弱引用避免保存已结束任务造成泄漏。
+_cleanup_failures: WeakKeyDictionary = WeakKeyDictionary()
+
+
+def task_process_stop_failed(task: asyncio.Task) -> bool:
+    """报告进程清理是否失败；不改变原有错误日志与取消传播。"""
+    return bool(_cleanup_failures.get(task, False))
 
 
 def register_process(process: ManagedProcess) -> None:
@@ -77,7 +86,9 @@ async def managed_process_scope():
         try:
             await scope.wait_stops()
         finally:
+            _cleanup_failures[task] = scope.stop_failed
             if parent is not None:
+                parent.stop_failed = parent.stop_failed or scope.stop_failed
                 parent.children.discard(scope)
             _tasks.pop(task, None)
             _current.reset(token)
