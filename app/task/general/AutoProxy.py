@@ -57,6 +57,7 @@ from app.utils.constants import UTC4
 from app.utils.LogPatternExtractor import LOG_TYPE_NORMAL
 
 from .tools import push_notification
+from .tools.launch import launch_commands
 
 logger = get_logger("通用脚本自动代理")
 
@@ -154,26 +155,11 @@ class AutoProxyTask(ScriptAutoProxyBase):
 
         self.script_path = Path(self.script_config.get("Script", "ScriptPath"))
 
-        arguments_list = []
-        path_list = []
-
-        for argument in [
-            part.strip()
-            for part in str(self.script_config.get("Script", "Arguments")).split("|")
-            if part.strip()
-        ]:
-            arg_parts = [
-                part.strip() for part in argument.split("%", 1) if part.strip()
-            ]
-
-            path_list.append(
-                (
-                    self.script_path / arg_parts[0]
-                    if len(arg_parts) > 1
-                    else self.script_path
-                ).resolve()
-            )
-            arguments_list.append(shlex.split(arg_parts[-1]))
+        commands = launch_commands(
+            self.script_path, str(self.script_config.get("Script", "Arguments"))
+        )
+        path_list = [path for path, _ in commands]
+        arguments_list = [arguments for _, arguments in commands]
 
         self.script_exe_path = path_list[0] if len(path_list) > 0 else self.script_path
         self.script_arguments = arguments_list[0] if len(arguments_list) > 0 else []

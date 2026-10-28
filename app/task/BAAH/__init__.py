@@ -17,7 +17,3 @@
 #   along with AUTO-MAS. If not, see <https://www.gnu.org/licenses/>.
 
 #   Contact: DLmaster_361@163.com
-
-from .manager import BAAHManager
-
-__all__ = ["BAAHManager"]

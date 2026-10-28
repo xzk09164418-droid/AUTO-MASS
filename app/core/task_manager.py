@@ -111,23 +111,6 @@ class _ManagerBuildContext:
     reservations: "_ScriptTaskReservations"
 
 
-def _build_src_manager(
-    script_item: ScriptItem, ctx: _ManagerBuildContext
-) -> TaskExecuteBase:
-    if not ctx.root_paths:
-        raise RuntimeError("SRC 路径占用未初始化")
-    return task.SrcManager(
-        script_item,
-        reserved_src_root_path=ctx.root_paths[0],
-        reserve_src_root=lambda root_path: ctx.reservations.try_acquire(
-            ctx.script_uid,
-            ctx.reservation_owner,
-            root_paths=(root_path,),
-            emulator_key=ctx.emulator_key,
-        ),
-    )
-
-
 _MANAGER_BOOK: dict[
     type, Callable[[ScriptItem, _ManagerBuildContext], TaskExecuteBase]
 ] = {

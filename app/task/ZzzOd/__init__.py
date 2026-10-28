@@ -15,7 +15,3 @@
 #
 #   You should have received a copy of the GNU Affero General Public License
 #   along with AUTO-MAS. If not, see <https://www.gnu.org/licenses/>.
-
-from .manager import ZzzOdManager
-
-__all__ = ["ZzzOdManager"]

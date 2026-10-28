@@ -31,9 +31,6 @@
                 </div>
                 <div class="script-details">
                   <h3 class="script-name">{{ script.name }}</h3>
-                  <a-tag color="green" class="script-type">
-                    {{ script.type }}
-                  </a-tag>
                 </div>
               </div>
               <div class="header-actions">
@@ -526,6 +523,7 @@ const onUserDragEnd = async (script: Script) => {
   align-items: center;
   gap: 12px;
   flex: 1;
+  min-width: 0;
 }
 
 .script-drag-handle {
@@ -578,22 +576,17 @@ const onUserDragEnd = async (script: Script) => {
 .script-details {
   flex: 1;
   min-width: 0;
+  padding: 0 12px;
+  text-align: center;
 }
 
 .script-name {
-  margin: 0 0 6px 0;
-  font-size: 18px;
+  margin: 0;
+  font-size: 20px;
   font-weight: 600;
   color: var(--ant-color-text);
   line-height: 1.3;
   word-break: break-word;
-}
-
-.script-type {
-  font-size: 12px;
-  font-weight: 500;
-  border-radius: 6px;
-  border: 1px solid rgba(0, 0, 0, 0.15);
 }
 
 .header-actions {
@@ -807,7 +800,7 @@ const onUserDragEnd = async (script: Script) => {
   }
 
   .script-name {
-    font-size: 16px;
+    font-size: 18px;
   }
 
   .header-actions {
@@ -857,7 +850,7 @@ const onUserDragEnd = async (script: Script) => {
   }
 
   .script-name {
-    font-size: 15px;
+    font-size: 17px;
   }
 
   .header-actions {

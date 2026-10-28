@@ -21,7 +21,6 @@
 
 
 import asyncio
-import shlex
 from pathlib import Path
 
 from app.core.ws import Publisher, protocol
@@ -32,6 +31,7 @@ from app.models.schema import WSTaskNoticeData
 from app.models.task import ScriptItem, TaskExecuteBase
 from app.services import System
 from app.task.general.tools.backup_archive import archive_native_backup
+from app.task.general.tools.launch import launch_commands
 from app.utils import ProcessManager, get_logger
 
 logger = get_logger("通用脚本设置")
@@ -65,26 +65,11 @@ class ScriptConfigTask(TaskExecuteBase):
 
         self.script_path = Path(self.script_config.get("Script", "ScriptPath"))
 
-        arguments_list = []
-        path_list = []
-
-        for argument in [
-            part.strip()
-            for part in str(self.script_config.get("Script", "Arguments")).split("|")
-            if part.strip()
-        ]:
-            arg_parts = [
-                part.strip() for part in argument.split("%", 1) if part.strip()
-            ]
-
-            path_list.append(
-                (
-                    self.script_path / arg_parts[0]
-                    if len(arg_parts) > 1
-                    else self.script_path
-                ).resolve()
-            )
-            arguments_list.append(shlex.split(arg_parts[-1]))
+        commands = launch_commands(
+            self.script_path, str(self.script_config.get("Script", "Arguments"))
+        )
+        path_list = [path for path, _ in commands]
+        arguments_list = [arguments for _, arguments in commands]
 
         self.script_arguments = arguments_list[0] if len(arguments_list) > 0 else []
         self.script_set_exe_path = (

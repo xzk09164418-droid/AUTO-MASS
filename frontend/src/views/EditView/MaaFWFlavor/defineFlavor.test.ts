@@ -36,16 +36,17 @@ const identity: MaaFWFlavorSpec = {
 const slot = defineMaaFWLazyComponent(async () => ({}))
 const prepare = async () => undefined
 const basePage = defineMaaFWLazyComponent(async () => ({}))
-const runSection = defineMaaFWSection(
-  'scriptPage',
-  'run',
-  () => import('../Script/MaaFWScriptEdit/RunConfigSection.vue')
-)
-const headerSection = defineMaaFWSection(
-  'userPage',
-  'header',
-  () => import('../User/MaaFWUserEdit/MaaFWUserEditHeader.vue')
-)
+// 合并测试使用描述对象，不再加载已移除的专项页面。
+const runSection = {
+  ...defineMaaFWLazyComponent(async () => ({})),
+  part: 'scriptPage',
+  key: 'run',
+} as const
+const headerSection = {
+  ...defineMaaFWLazyComponent(async () => ({})),
+  part: 'userPage',
+  key: 'header',
+} as const
 const sourceSection = defineMaaFWSection(
   'create',
   'source',
