@@ -80,6 +80,8 @@ python remote_script_controller.py control next
 
 ## 4. 桌面恢复与受保护的实机测试
 
+正式浏览器启动链由 Node 直接启动 Python 主桌面监督器，不经过旧 BackendAgent。更新源码后须重新编译部署远程桌面宿主及托盘启动器，已有 EXE 不会因源码更新自动替换。
+
 恢复控制运行在主桌面，任务后端运行在子会话。每个队列项开始前将 MAS 队列位置保存到
 `data/desktop_recovery/`，不推测脚本内部断点。恢复时 General 优先使用完整 `Restart`
 清单，未填写时使用原启动入口；损坏的进度记录回退到旧记录，两份都不可用时从对应队列开头运行。
