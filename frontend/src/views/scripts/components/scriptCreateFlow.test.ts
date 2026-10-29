@@ -9,22 +9,9 @@ import {
 } from './scriptCreateFlow'
 
 describe('scriptCreateFlow · 类型卡片', () => {
-  it('卡片顺序：MaaFW 与各特调按 create.card.after 插回原位', () => {
+  it('本构建只开放 General 入口', () => {
     expect(SCRIPT_TYPE_OPTIONS.map(option => [option.value, option.group])).toEqual([
       ['General', 'general'],
-      ['MaaFW', 'general'],
-      ['MAA', 'specialized'],
-      ['SRC', 'specialized'],
-      ['MaaEnd', 'specialized'],
-      ['M9A', 'specialized'],
-      ['Okww', 'specialized'],
-      ['OkNte', 'specialized'],
-      ['HSR', 'specialized'],
-      ['BetterGI', 'specialized'],
-      ['ZzzOd', 'specialized'],
-      ['BAAH', 'specialized'],
-      ['Whimbox', 'specialized'],
-      ['MSS', 'specialized'],
     ])
   })
 })

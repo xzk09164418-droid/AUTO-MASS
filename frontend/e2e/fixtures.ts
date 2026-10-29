@@ -60,6 +60,12 @@ export const test = base.extend<{ app: App }>({
   app: async ({ page }, use, testInfo) => {
     await page.addInitScript(() => {
       ;(window as Window & { __AUTO_MAS_E2E__?: boolean }).__AUTO_MAS_E2E__ = true
+      // 用例使用英文定位器；只为隔离浏览器配置显式选语言，不改变产品默认值。
+      const key = 'auto-mas.browser-dev.config'
+      const config = JSON.parse(localStorage.getItem(key) ?? '{}')
+      if (!config.language) {
+        localStorage.setItem(key, JSON.stringify({ ...config, language: 'en-US' }))
+      }
     })
     await page.route('**/api/info/notice/get', async route => {
       await route.fulfill({
