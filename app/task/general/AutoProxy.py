@@ -326,7 +326,11 @@ class AutoProxyTask(ScriptAutoProxyBase):
                     break
                 try:
                     async with asyncio.timeout_at(self._phase_deadline):
-                        await self._run_attempt(use_restart=attempt > 0)
+                        await self._run_attempt(
+                            use_restart=attempt > 0
+                            or self.script_info.script_id
+                            in self.task_info.desktop_restart_script_ids
+                        )
                 except TimeoutError:
                     self._set_result("任务总时限已耗尽", kind="timeout")
                 finally:
@@ -941,6 +945,7 @@ class AutoProxyTask(ScriptAutoProxyBase):
                 f"{datetime.now().strftime('%m-%d')} |{success_symbol}|  {self.cur_user_item.name} 的自动代理统计报告",
                 statistics,
                 self.cur_user_config,
+                task_info=self.task_info,
             )
         except Exception as e:
             logger.opt(exception=True).warning(f"推送通知时出现异常: {e}")

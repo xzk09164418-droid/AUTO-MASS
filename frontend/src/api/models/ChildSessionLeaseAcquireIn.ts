@@ -2,7 +2,12 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { ChildSessionLeaseProcessData } from './ChildSessionLeaseProcessData';
 export type ChildSessionLeaseAcquireIn = {
+    /**
+     * 明确授权在租约到期时关闭的进程树；未登记则到期暂停等待归还
+     */
+    process?: (ChildSessionLeaseProcessData | null);
     /**
      * 申请使用远程桌面的外部程序标识
      */

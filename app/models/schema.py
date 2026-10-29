@@ -64,6 +64,14 @@ class _SchemaModel(BaseModel):
     model_config = ConfigDict(defer_build=True)
 
 
+class ChildSessionLeaseProcessData(_SchemaModel):
+    """调用方明确授权回收的进程身份；不允许仅凭进程名称认领。"""
+
+    pid: int = Field(gt=0)
+    createdAt: float = Field(gt=0)
+    sessionId: int = Field(gt=0)
+
+
 class OutBase(_SchemaModel):
     code: int = Field(default=200, description="状态码")
     status: str = Field(default="success", description="操作状态")

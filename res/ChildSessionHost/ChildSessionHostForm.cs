@@ -1395,6 +1395,7 @@ namespace BetterGenshinImpact.Service.ChildSession
         private async Task<bool> ConnectOnceAsync()
         {
             var issues = ChildSessionEnvironmentCheck.Collect();
+            string enableError = null;
             try
             {
                 if (!ChildSessionNativeMethods.IsChildSessionsEnabled())
@@ -1404,7 +1405,18 @@ namespace BetterGenshinImpact.Service.ChildSession
             }
             catch (Exception ex)
             {
-                _statusMessage = "启用 Child Session 需要管理员权限: " + ex.Message;
+                enableError = ex.GetBaseException().Message;
+            }
+            if (enableError != null)
+            {
+                await RunOnUiThreadAsync(() =>
+                {
+                    _isConnecting = false;
+                    _statusMessage = "启用 Child Session 失败，已停止连接: " + enableError;
+                    RefreshCenterCardUi();
+                    return false;
+                });
+                return false;
             }
 
             var currentState = await RunOnUiThreadAsync(() => _rdpHost.ConnectedState);
@@ -1658,9 +1670,19 @@ namespace BetterGenshinImpact.Service.ChildSession
             }
 
             var sid = ChildSessionNativeMethods.TryGetChildSessionId();
+            bool disconnected = !disconnectRdp;
+            for (int attempt = 0; disconnectRdp && attempt < 40; attempt++)
+            {
+                if (await RunOnUiThreadAsync(() => _rdpHost.ConnectedState == 0))
+                {
+                    disconnected = true;
+                    break;
+                }
+                await Task.Delay(100);
+            }
             return new Dictionary<string, object>
             {
-                { "ok", true },
+                { "ok", disconnected },
                 { "childSessionId", sid.HasValue ? (object)sid.Value : null },
                 { "externalLeaseHolder", _externalLeaseHolder },
                 { "statusText", _statusMessage }

@@ -77,3 +77,73 @@ python remote_script_controller.py control next
    - **移除配置回写**：不再修改或回写外部脚本的本地配置文件，纯粹通过外部程序自身的启动参数 (`Arguments`) 控制启停。
 5. **系统全局热键**：
    - 默认支持 `Ctrl+Alt+S`（启停切换）、`Ctrl+Alt+Left`（上一个任务）、`Ctrl+Alt+Right`（下一个任务），可在 Web 控制台「全局设置」中自定义。
+
+## 4. 桌面恢复与受保护的实机测试
+
+恢复控制运行在主桌面，任务后端运行在子会话。每个队列项开始前将 MAS 队列位置保存到
+`data/desktop_recovery/`，不推测脚本内部断点。恢复时 General 优先使用完整 `Restart`
+清单，未填写时使用原启动入口；损坏的进度记录回退到旧记录，两份都不可用时从对应队列开头运行。
+队列身份清单或防重复重启标记损坏时保持暂停，不猜测队列或重置重启额度。
+
+连接尝试共三次、间隔五秒；失败后由主桌面注销并重建子会话。重建仍失败时显示六十秒重启提示，
+确认立即重启，取消或关闭窗口则保持暂停，超时自动重启。同一未解决故障最多自动重启电脑一次。
+普通进度保存失败不阻止升级，但防重复重启标记必须可靠保存，否则无法保证不循环重启。
+异常沿用已启用通知渠道；恢复成功不额外发送恢复通知。
+
+日常无人值守恢复在注销和重启前检查 UU 服务正在运行且自动启动，不依赖聊天回复或临时测试看门狗。
+该检查不能证明另一设备实际可连接。六十秒重启确认及同一故障最多重启一次的限制仍然有效。
+
+实机测试另须由操作者通过另一设备确认 UU 实际可用，并启用独立 SYSTEM 回退看门狗。
+测试启动进程必须设置 `AUTO_MAS_RECOVERY_TEST_ROOT` 为本仓库绝对路径（会传给子会话）；
+此模式下缺失、失效或取消看门狗均禁止注销和重启，不能自动降级为日常模式。
+
+在**管理员 PowerShell**中准备测试前备份；此命令不启用倒计时、不修改登录设置：
+
+```powershell
+$recoveryRoot = (Get-Location).Path
+$recoveryBaseline = git rev-parse HEAD
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/rdp-recovery-guard.ps1 -Action Prepare -Root $recoveryRoot -Baseline $recoveryBaseline
+```
+
+确认另一设备能够实际通过 UU 控制本机后启用本轮保护：
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/rdp-recovery-guard.ps1 -Action Arm -Root $recoveryRoot -UUVerified
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/rdp-recovery-guard.ps1 -Action Status -Root $recoveryRoot
+```
+
+必须看到 `ready: true` 才能开始实机测试。三十分钟从 Arm 开始，电脑重启不重置期限。
+到期恢复清单内的测试前文件、登录白名单设置和 MAS 自启任务，并只重启一次；不修改 UU 服务、
+UU 配置、账号密码或未列入清单的用户文件。备份校验失败时记录 `failed`，不带着未知回退结果重启。
+不要在保护期间修改清单内文件或开始另一轮测试。
+
+保持本地账号空密码的自动登录配置也必须在保护有效时执行：
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/rdp-unattended-setup.ps1 -Root $recoveryRoot -Apply
+```
+
+该命令验证空密码的本地交互登录，不改账户密码或 NLA；存在已有自动登录密码配置时拒绝覆盖。
+配置完成不等于开机验收通过，仍须验证 Windows 自动进入桌面、MAS 自启、子会话建立和队列恢复。
+
+取消本轮测试保护时使用 Prepare/Arm 输出的 `runId`，只有返回 `cancelled` 才算确认取消：
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/rdp-recovery-guard.ps1 -Action Cancel -Root $recoveryRoot -RunId '<本轮 runId>'
+```
+
+聊天回复取消由当前聊天的监护自动任务转发到上述入口；它依赖 Codex 能继续运行和读取消息。
+如果重启后 Codex 尚未启动，须通过 UU 在本机执行 Cancel，不能把“已发送消息”当作本机已收到取消。
+六十秒重启弹窗的取消只取消故障升级，不会替代三十分钟测试看门狗的取消。
+
+故障处理后可查看状态，并明确重置一次自动重启额度以请求人工恢复：
+
+```powershell
+.venv/Scripts/python.exe scripts/rdp-recovery-state.py status
+.venv/Scripts/python.exe scripts/rdp-recovery-state.py resume --acknowledge-fault-resolved
+```
+
+外部桌面借用可在请求中登记 `process: {pid, createdAt, sessionId}`，或给
+`remote_script_controller.py acquire-desktop` 同时传入 `--process-pid`、`--process-created-at`、
+`--process-session-id`。超时只关闭已验证的绑定进程树，先正常关闭窗口再强制结束；UU 组件和 MAS
+监督进程不能登记。旧客户端未登记进程时，到期保持暂停并通知，必须明确归还，绝不按进程名猜测后杀进程。

@@ -441,8 +441,12 @@ def main(argv: list[str] | None = None):
                         run_optional_step("活动关卡信息获取", init_stage_info)
                     )
 
+                from app.core.desktop_recovery import DesktopRecovery
+
+                recovered = await DesktopRecovery.restore()
                 timer_error = await run_step("主业务定时器", MainTimer.start)
-                await run_optional_step("启动参数直接运行任务", run_cli_startup_tasks)
+                if not recovered:
+                    await run_optional_step("启动参数直接运行任务", run_cli_startup_tasks)
 
                 if timer_error is None:
                     logger.info("后端核心服务已就绪，继续配置按需服务入口")

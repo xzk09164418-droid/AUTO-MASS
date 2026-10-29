@@ -274,6 +274,9 @@ class TaskInfo(TaskItem):
     )
 
     def begin_script_run(self, script: ScriptItem) -> None:
+        from app.core.desktop_recovery import DesktopRecovery
+
+        DesktopRecovery.checkpoint(self, script.script_id)
         self.flush_replays(script)
         previous = self._replay_runs.get(script.script_id)
         self._replay_seen = {key for key in self._replay_seen if key[0] != previous}
@@ -761,6 +764,15 @@ class Task(TaskExecuteBase):
             return
 
         pending = due_entries(entries)
+        # 恢复的中断项不等待它上次执行时预先写入的 NextRunAt。
+        recovery_entries = [
+            entry
+            for entry in entries
+            if entry.script_id in self.task_info.desktop_restart_script_ids
+        ]
+        if recovery_entries:
+            recovery_ids = {entry.queue_item_id for entry in recovery_entries}
+            pending = recovery_entries + [entry for entry in pending if entry.queue_item_id not in recovery_ids]
         if not pending:
             await self._sleep_until(min(entry.next_run_at for entry in entries))
             return
@@ -810,9 +822,14 @@ class Task(TaskExecuteBase):
             entry = next(
                 (e for e in entries if e.queue_item_id == stale.queue_item_id), None
             )
-            if entry is None or not entry.is_due:
+            if entry is None or (
+                not entry.is_due
+                and entry.script_id not in self.task_info.desktop_restart_script_ids
+            ):
                 continue
             result = await self._run_cycle_entry(queue_uid, entry, entries)
+            if result != "blocked":
+                self.task_info.desktop_restart_script_ids.discard(entry.script_id)
             results.append(result)
             if result == "blocked":
                 self._external_deferred_cycle.add(entry.queue_item_id)
@@ -1378,6 +1395,7 @@ class Task(TaskExecuteBase):
                 self.task_info.flush_replays(script_item)
 
             self.task_info.external_restart_script_ids.discard(script_item.script_id)
+            self.task_info.desktop_restart_script_ids.discard(script_item.script_id)
             if nav_offset is not None:
                 idx = max(0, idx + nav_offset)
             else:
@@ -1638,6 +1656,9 @@ class _TaskManager:
         return list(identities.values())
 
     def _remember_result(self, status: TaskStatusOut) -> None:
+        from app.core.desktop_recovery import DesktopRecovery
+
+        DesktopRecovery.finish(status.taskId, success=status.status == "success")
         self._recent_results.pop(status.taskId, None)
         self._recent_results[status.taskId] = (time.monotonic(), status)
         while len(self._recent_results) > _RECENT_RESULTS_MAX:
@@ -1795,7 +1816,11 @@ class _TaskManager:
         trigger_source: TaskTriggerSource = "manual_task",
         view_only: bool = False,
         instance_idx: int | None = None,
+        desktop_recovery_task_id: str | None = None,
     ) -> uuid.UUID:
+        from app.core.desktop_recovery import DesktopRecovery
+
+        DesktopRecovery.admission(restoring=desktop_recovery_task_id is not None)
         if mode == "Update":
             require_network_feature("updates")
         from app.core.desktop_runtime import ensure_execution_session
@@ -1937,6 +1962,14 @@ class _TaskManager:
                 script_run_days=script_run_days,
                 on_finished=self._remember_result,
             )
+            if desktop_recovery_task_id is not None:
+                restart_id = resume_from_script_id or (
+                    str(script_uid) if script_uid else None
+                )
+                if restart_id is not None:
+                    self.task_info[task_uid].desktop_restart_script_ids.add(restart_id)
+                    self.task_info[task_uid].external_restart_script_ids.add(restart_id)
+            DesktopRecovery.enroll(self.task_info[task_uid], previous_id=desktop_recovery_task_id)
             await Publisher.send(
                 id=protocol.ID_TASK_MANAGER,
                 type=protocol.TASK_CREATED,
@@ -2153,6 +2186,13 @@ class _TaskManager:
 
     async def start_startup_queue(self):
         """开始运行启动时运行的调度队列"""
+        from app.core.desktop_recovery import DesktopRecovery
+
+        if DesktopRecovery.enabled and (
+            DesktopRecovery.startup_claimed
+            or DesktopRecovery.store.control()["phase"] != "idle"
+        ):
+            return
 
         while (running_task := self._startup_queue_task) is not None:
             logger.info("启动时任务正在等待运行，等待其结束后再判断")

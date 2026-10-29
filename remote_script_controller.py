@@ -14,7 +14,6 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
-import sys
 import time
 import urllib.request
 from pathlib import Path
@@ -196,6 +195,13 @@ def build_parser() -> argparse.ArgumentParser:
     acq_p.add_argument("--caller", required=True, help="外部程序名称或标识")
     acq_p.add_argument("--keep-rdp-view", action="store_true", help="保持 AUTO-MAS 的 RDP 预览窗口不断开")
     acq_p.add_argument("--wait", action="store_true", help="等待当前正在运行的子任务结束并完成让渡后再返回")
+    acq_p.add_argument("--process-pid", type=int, help="授权租约超时后关闭的进程 PID")
+    acq_p.add_argument(
+        "--process-created-at",
+        type=float,
+        help="该进程的 Unix 创建时间，用于防止 PID 重用",
+    )
+    acq_p.add_argument("--process-session-id", type=int, help="该进程的 Windows 会话编号")
 
     # 4. 外部程序停止使用远程桌面后回传
     rel_p = sub.add_parser("release-desktop", help="外部程序停止使用本地远程桌面后回传释放，恢复队列运行")
@@ -237,6 +243,11 @@ def main(argv: list[str] | None = None) -> int:
         return 0 if result.get("status") == "success" else 1
 
     if args.subcommand == "acquire-desktop":
+        identity = (args.process_pid, args.process_created_at, args.process_session_id)
+        if any(value is not None for value in identity) and not all(
+            value is not None for value in identity
+        ):
+            parser.error("进程身份的三个参数必须同时填写")
         resp = _api_request(
             args.port,
             "/api/child-session/acquire",
@@ -245,6 +256,13 @@ def main(argv: list[str] | None = None) -> int:
                 "caller": args.caller,
                 "disconnectRdpView": not args.keep_rdp_view,
                 "waitForGrant": bool(args.wait),
+                "process": {
+                    "pid": args.process_pid,
+                    "createdAt": args.process_created_at,
+                    "sessionId": args.process_session_id,
+                }
+                if args.process_pid is not None
+                else None,
             },
         )
         print(json.dumps(resp, ensure_ascii=False, indent=2))

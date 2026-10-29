@@ -119,6 +119,9 @@ def run_wrapper(
             cwd=str(cwd) if cwd else None,
             env=env,
             stdin=subprocess.DEVNULL,
+            # pythonw 没有标准流，不能让子进程继承无效句柄并在退出刷新时失败。
+            stdout=None if sys.stdout is not None else subprocess.DEVNULL,
+            stderr=None if sys.stderr is not None else subprocess.DEVNULL,
             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
     except Exception as exc:

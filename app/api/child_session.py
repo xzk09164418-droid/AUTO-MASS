@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import ipaddress
 from typing import Any, Optional
 
-from fastapi import APIRouter, Body
+from fastapi import APIRouter, Body, Request
 from pydantic import BaseModel, Field
 
 from app.core.child_session import ChildSessionManager
-from app.models.schema import OutBase
+from app.models.schema import ChildSessionLeaseProcessData, OutBase
 from app.utils import get_logger
 
 router = APIRouter(prefix="/api/child-session", tags=["本地远程桌面"])
@@ -20,6 +21,10 @@ class ChildSessionStatusOut(OutBase):
 
 
 class ChildSessionLeaseAcquireIn(BaseModel):
+    process: ChildSessionLeaseProcessData | None = Field(
+        default=None,
+        description="明确授权在租约到期时关闭的进程树；未登记则到期暂停等待归还",
+    )
     caller: str = Field(default="external_program", description="申请使用远程桌面的外部程序标识")
     disconnectRdpView: bool = Field(
         default=True,
@@ -89,15 +94,22 @@ async def get_child_session_status() -> ChildSessionStatusOut:
     response_model=ChildSessionLeaseAcquireOut,
 )
 async def acquire_child_session_lease(
+    request: Request,
     body: ChildSessionLeaseAcquireIn = Body(...),
 ) -> ChildSessionLeaseAcquireOut:
     try:
+        if body.process is not None and (
+            request.client is None
+            or not ipaddress.ip_address(request.client.host).is_loopback
+        ):
+            raise ValueError("进程回收登记只接受本机调用")
         lease = await ChildSessionManager.acquire_external_lease(
             body.caller,
             disconnect_rdp_view=body.disconnectRdpView,
             timeout_seconds=body.timeoutSeconds,
             wait_for_grant=body.waitForGrant,
             wait_timeout=body.waitTimeout,
+            process_identity=body.process,
         )
         sid = ChildSessionManager.wts_get_child_session_id()
         return ChildSessionLeaseAcquireOut(

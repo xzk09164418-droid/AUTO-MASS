@@ -33,6 +33,8 @@ from typing import Any
 
 import psutil
 
+from app.models.schema import ChildSessionLeaseProcessData
+from app.services.borrowed_desktop_process import BorrowedDesktopProcess
 from app.utils.logger import get_logger
 
 logger = get_logger("远程桌面分身")
@@ -60,6 +62,7 @@ class ExternalDesktopLease:
     granted_at: str | None = None
     expires_at_monotonic: float | None = None
     _granted_event: asyncio.Event = field(default_factory=asyncio.Event, repr=False)
+    process: BorrowedDesktopProcess | None = field(default=None, repr=False)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -150,6 +153,7 @@ class _ChildSessionManager:
 
     def __init__(self) -> None:
         self._lock = asyncio.Lock()
+        self._lease_lock = asyncio.Lock()
         self._host_process: asyncio.subprocess.Process | None = None
         self._leases: dict[str, ExternalDesktopLease] = {}
         self._in_subtask_execution: int = 0
@@ -263,7 +267,10 @@ class _ChildSessionManager:
         if sid is None or os.name != "nt":
             return None
         try:
-            ctypes.windll.wtsapi32.WTSLogoffSession(0, ctypes.c_uint(sid), bool(wait))
+            if not ctypes.windll.wtsapi32.WTSLogoffSession(
+                0, ctypes.c_uint(sid), bool(wait)
+            ):
+                raise ctypes.WinError()
             return sid
         except Exception as exc:
             logger.warning(f"注销 Child Session {sid} 失败: {exc}")
@@ -476,14 +483,17 @@ class _ChildSessionManager:
                     payload={"width": width, "height": height},
                     timeout=65.0,
                 )
-                if conn_resp and conn_resp.get("childSessionId") is not None:
+                if (
+                    conn_resp
+                    and conn_resp.get("ok") is True
+                    and conn_resp.get("childSessionId") is not None
+                ):
                     if expected is not None and conn_resp["childSessionId"] != int(expected):
                         raise RuntimeError("RDP 重连后执行会话已改变，请重新启动主程序")
                     return int(conn_resp["childSessionId"])
 
-            # 回退：直接通过 wtsapi32 读取已建立的 ChildSessionId
-            await asyncio.to_thread(self.wts_enable_child_sessions)
-            return await asyncio.to_thread(self.wts_get_child_session_id)
+            # 存在会话 ID 不代表桌面已连接，不能据此放行识别和输入任务。
+            raise RuntimeError("无法确认 RDP 子桌面连接成功")
 
     @staticmethod
     def _launch_via_task_scheduler_sync(
@@ -643,16 +653,18 @@ class _ChildSessionManager:
             if lease.expires_at_monotonic is not None and now >= lease.expires_at_monotonic
         ]
         for lid in expired_ids:
-            lease = self._leases.pop(lid, None)
-            if lease is not None:
-                logger.warning(f"外部远程桌面租约已超时自动释放: caller={lease.caller}, leaseId={lid}")
-        if not self._leases:
+            lease = self._leases.get(lid)
+            if lease is not None and lease.status == "pending":
+                self._leases.pop(lid)
+                lease.status = "expired"
+                lease._granted_event.set()
+        if not self._leases and not self._rdp_view_disconnected_for_external:
             self._all_leases_released_event.set()
 
     def has_external_lease_requests(self) -> bool:
         """检查当前是否有外部程序正在申请或正在使用本地远程桌面。"""
         self._prune_expired_leases()
-        return bool(self._leases)
+        return bool(self._leases) or self._rdp_view_disconnected_for_external
 
     def list_leases(self) -> list[dict[str, Any]]:
         self._prune_expired_leases()
@@ -666,6 +678,7 @@ class _ChildSessionManager:
         timeout_seconds: float = 3600.0,
         wait_for_grant: bool = False,
         wait_timeout: float = 300.0,
+        process_identity: ChildSessionLeaseProcessData | None = None,
     ) -> ExternalDesktopLease:
         """供外部程序申请连接/使用本地远程桌面。
 
@@ -682,6 +695,15 @@ class _ChildSessionManager:
             disconnect_rdp_view=disconnect_rdp_view,
             status="pending",
             expires_at_monotonic=expires_at,
+            process=(
+                BorrowedDesktopProcess(
+                    process_identity.pid,
+                    process_identity.createdAt,
+                    process_identity.sessionId,
+                )
+                if process_identity is not None
+                else None
+            ),
         )
         self._leases[lease_id] = lease
         self._all_leases_released_event.clear()
@@ -691,7 +713,13 @@ class _ChildSessionManager:
         )
 
         if self._in_subtask_execution == 0:
-            await self._grant_pending_leases()
+            try:
+                await self._grant_pending_leases()
+            except Exception:
+                self._leases.pop(lease_id, None)
+                lease.status = "failed"
+                lease._granted_event.set()
+                raise
 
         if wait_for_grant and lease.status != "granted":
             with suppress(asyncio.TimeoutError):
@@ -700,6 +728,10 @@ class _ChildSessionManager:
         return lease
 
     async def _grant_pending_leases(self) -> None:
+        async with self._lease_lock:
+            await self._grant_pending_leases_locked()
+
+    async def _grant_pending_leases_locked(self) -> None:
         self._prune_expired_leases()
         if not self._leases:
             return
@@ -707,13 +739,17 @@ class _ChildSessionManager:
         need_disconnect = any(lease.disconnect_rdp_view for lease in self._leases.values())
         callers = ", ".join(sorted({lease.caller for lease in self._leases.values()}))
 
-        if need_disconnect and not self._rdp_view_disconnected_for_external:
-            await self._http_call(
+        if need_disconnect:
+            # 请求超时也可能已断开，先保持队列阻塞，不能把未知当作未发生。
+            self._rdp_view_disconnected_for_external = True
+            response = await self._http_call(
                 "/disconnect",
                 method="POST",
                 payload={"caller": callers, "disconnectRdpView": True},
                 timeout=5.0,
             )
+            if response is None or response.get("ok") is not True:
+                raise RuntimeError("远程桌面让渡失败，尚未批准外部程序使用")
             self._rdp_view_disconnected_for_external = True
 
         now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -733,6 +769,14 @@ class _ChildSessionManager:
 
         释放对应的租约；当所有外部租约均已释放时，自动通知 C# 宿主重连常驻 RDP 画面并唤醒队列继续执行。
         """
+        async with self._lease_lock:
+            return await self._release_external_lease_locked(
+                lease_id=lease_id, caller=caller
+            )
+
+    async def _release_external_lease_locked(
+        self, *, lease_id: str | None = None, caller: str | None = None
+    ) -> list[str]:
         self._prune_expired_leases()
         released: list[str] = []
 
@@ -746,12 +790,70 @@ class _ChildSessionManager:
 
         if not self._leases:
             if self._rdp_view_disconnected_for_external:
+                for attempt in range(3):
+                    response = await self._http_call(
+                        "/reconnect", method="POST", payload={}, timeout=65.0
+                    )
+                    if response is not None and response.get("ok") is True:
+                        break
+                    logger.warning(f"远程桌面重连失败（{attempt + 1}/3）")
+                    if attempt < 2:
+                        await asyncio.sleep(5)
+                else:
+                    from app.core.desktop_recovery import DesktopRecovery
+
+                    await DesktopRecovery.request(
+                        "远程桌面重连三次均失败，已暂停任务并请求主桌面恢复"
+                    )
+                    raise RuntimeError("远程桌面重连失败，任务队列保持暂停")
                 self._rdp_view_disconnected_for_external = False
-                if self.enabled:
-                    await self._http_call("/reconnect", method="POST", payload={}, timeout=30.0)
             self._all_leases_released_event.set()
 
         return released
+
+    async def maintain_external_leases(self) -> None:
+        """在后端监督循环回收超时进程；只读状态查询不执行关闭程序。"""
+        from app.core.desktop_recovery import DesktopRecovery, guard_ready
+
+        async with self._lease_lock:
+            self._prune_expired_leases()
+            for lease in tuple(self._leases.values()):
+                if lease.status != "granted":
+                    continue
+                if lease.process is not None:
+                    try:
+                        lease.process.collect()
+                    except (psutil.Error, OSError, ValueError):
+                        lease.status = "blocked"
+                        await DesktopRecovery.notify(
+                            "外部借用进程身份无法确认，已暂停自动回收"
+                        )
+                        continue
+                if (
+                    lease.expires_at_monotonic is None
+                    or time.monotonic() < lease.expires_at_monotonic
+                ):
+                    continue
+                if lease.process is None or not await guard_ready(Path.cwd()):
+                    lease.status = "blocked"
+                    await DesktopRecovery.notify(
+                        "桌面借用已超时，进程身份或回退保护不可用，等待明确归还"
+                    )
+                    continue
+                try:
+                    await lease.process.close()
+                except (psutil.Error, OSError, RuntimeError, ValueError):
+                    lease.status = "blocked"
+                    await DesktopRecovery.notify(
+                        "外部借用程序未能完全关闭，任务保持暂停"
+                    )
+                    continue
+                await DesktopRecovery.notify(
+                    "桌面借用已超时，已关闭登记的外部程序并回收桌面"
+                )
+                await self._release_external_lease_locked(lease_id=lease.lease_id)
+            if not self._leases and self._rdp_view_disconnected_for_external:
+                await self._release_external_lease_locked()
 
     async def wait_if_external_requested(self, boundary_label: str = "子任务间隔") -> bool:
         """在队列相邻两个子任务间隔调用：检查是否有其他程序需要连接该远程桌面，并在其停止使用回传后继续。
@@ -760,7 +862,7 @@ class _ChildSessionManager:
             bool: 若期间发生了让渡等待则返回 True，未发生返回 False。
         """
         self._prune_expired_leases()
-        if not self._leases:
+        if not self.has_external_lease_requests():
             return False
 
         callers = ", ".join(sorted({lease.caller for lease in self._leases.values()}))

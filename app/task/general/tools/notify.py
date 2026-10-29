@@ -22,7 +22,7 @@
 from app.core import Config
 from app.core.notify import (
     DispatchResult,
-    dispatch,
+    dispatch_task_report,
     statistic_targets,
 )
 from app.models.config import GeneralUserConfig
@@ -57,7 +57,7 @@ async def push_notification(
         )
         template = Config.notify_env.get_template("general_statistics.html")
 
-        return await dispatch(
+        return await dispatch_task_report(
             NotifyPayload(
                 title=title,
                 text=message_text,
@@ -66,6 +66,7 @@ async def push_notification(
             statistic_targets(
                 user_config, failed=bool(message.get("notification_failed", False))
             ),
+            task_info,
         )
 
     return DispatchResult()
