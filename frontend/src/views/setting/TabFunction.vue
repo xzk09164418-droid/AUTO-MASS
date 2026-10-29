@@ -453,7 +453,9 @@ const { settings, historyRetentionOptions, voiceTypeOptions, handleSettingChange
             <a-input
               :value="(settings as any).Hotkey?.ToggleStartStop || 'Ctrl+Alt+S'"
               size="large"
-              @blur="(e: any) => handleSettingChange('Hotkey' as any, 'ToggleStartStop', e.target.value)"
+              @blur="
+                (e: any) => handleSettingChange('Hotkey' as any, 'ToggleStartStop', e.target.value)
+              "
             />
           </div>
         </a-col>
@@ -465,7 +467,9 @@ const { settings, historyRetentionOptions, voiceTypeOptions, handleSettingChange
             <a-input
               :value="(settings as any).Hotkey?.PreviousTask || 'Ctrl+Alt+Left'"
               size="large"
-              @blur="(e: any) => handleSettingChange('Hotkey' as any, 'PreviousTask', e.target.value)"
+              @blur="
+                (e: any) => handleSettingChange('Hotkey' as any, 'PreviousTask', e.target.value)
+              "
             />
           </div>
         </a-col>

@@ -203,7 +203,9 @@ class ScriptAutoProxyBase(TaskExecuteBase):
                 user.log_record[datetime.now()] = record
             record.status = message
             record.content.append(message)
-            self.script_info.log = f"{message}\n正在强制清理相关程序 (taskkill /F /T x3)"
+            self.script_info.log = (
+                f"{message}\n正在强制清理相关程序 (taskkill /F /T x3)"
+            )
             logger.warning(f"{self.script_info.name} - {user.name}: {message}")
             # 超过总上限时间时立即执行强制清理，确保绝不打扰下一个任务
             kill_fn = getattr(self, "kill_managed_process", None)

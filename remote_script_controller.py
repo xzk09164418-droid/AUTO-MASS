@@ -101,12 +101,16 @@ async def run_standalone_script_task(
                         "mode": "no_log",
                         "attempt": attempt,
                         "returncode": rc,
-                        "elapsedSeconds": round(time.monotonic() - started_monotonic, 2),
+                        "elapsedSeconds": round(
+                            time.monotonic() - started_monotonic, 2
+                        ),
                     }
                 else:
                     # 有日志模式：保留原 Auto-MAS 判定逻辑 + 日志停滞超时
                     target_log = Path(log_path).resolve()
-                    last_mtime = target_log.stat().st_mtime if target_log.is_file() else 0.0
+                    last_mtime = (
+                        target_log.stat().st_mtime if target_log.is_file() else 0.0
+                    )
                     last_progress_at = time.monotonic()
                     attempt_outcome = "running"
 
@@ -117,7 +121,9 @@ async def run_standalone_script_task(
                             if stat.st_mtime != last_mtime:
                                 last_mtime = stat.st_mtime
                                 last_progress_at = time.monotonic()
-                            content = target_log.read_text(encoding="utf-8", errors="replace")
+                            content = target_log.read_text(
+                                encoding="utf-8", errors="replace"
+                            )
 
                         if success_matcher.search(content) is not None:
                             attempt_outcome = "success"
@@ -126,7 +132,10 @@ async def run_standalone_script_task(
                         if err_hit is not None:
                             attempt_outcome = f"error_log:{err_hit}"
                             break
-                        if time.monotonic() - last_progress_at > log_stall_minutes * 60.0:
+                        if (
+                            time.monotonic() - last_progress_at
+                            > log_stall_minutes * 60.0
+                        ):
                             attempt_outcome = "log_stalled_timeout"
                             break
                         if not await pm.is_running():
@@ -145,7 +154,9 @@ async def run_standalone_script_task(
                             "mode": "with_log",
                             "attempt": attempt,
                             "returncode": rc,
-                            "elapsedSeconds": round(time.monotonic() - started_monotonic, 2),
+                            "elapsedSeconds": round(
+                                time.monotonic() - started_monotonic, 2
+                            ),
                         }
                     logger.warning(f"第 {attempt} 次尝试未成功: {attempt_outcome}")
                     if attempt < retries:
@@ -172,45 +183,86 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="AUTO-MAS 远程桌面脚本控制程序 (支持服务端启动、单脚本控制、远程桌面租约与热键指令)"
     )
-    parser.add_argument("--port", type=int, default=36163, help="AUTO-MAS 后端 HTTP 端口 (默认 36163)")
+    parser.add_argument(
+        "--port", type=int, default=36163, help="AUTO-MAS 后端 HTTP 端口 (默认 36163)"
+    )
     sub = parser.add_subparsers(dest="subcommand")
 
     # 1. 启动完整 AUTO-MAS 服务
-    sub.add_parser("serve", help="启动完整 AUTO-MAS 后台服务（含常驻远程桌面、队列调度与全局热键）")
+    sub.add_parser(
+        "serve", help="启动完整 AUTO-MAS 后台服务（含常驻远程桌面、队列调度与全局热键）"
+    )
 
     # 2. 直接运行外部脚本任务
-    run_p = sub.add_parser("run-script", help="直接运行并监控单个外部脚本（支持远程桌面包装器与双模超时）")
+    run_p = sub.add_parser(
+        "run-script", help="直接运行并监控单个外部脚本（支持远程桌面包装器与双模超时）"
+    )
     run_p.add_argument("executable", help="外部脚本或程序可执行文件路径")
     run_p.add_argument("--args", nargs="*", default=[], help="传递给外部程序的启动参数")
-    run_p.add_argument("--log-path", default="", help="可选日志文件路径（留空则仅以在上限时间内自行退出作为成功条件）")
+    run_p.add_argument(
+        "--log-path",
+        default="",
+        help="可选日志文件路径（留空则仅以在上限时间内自行退出作为成功条件）",
+    )
     run_p.add_argument("--success-log", default="", help="可选成功日志关键字")
     run_p.add_argument("--error-log", default="", help="可选异常日志关键字")
-    run_p.add_argument("--log-timeout", type=float, default=10.0, help="日志未刷新超时分钟数（仅填写日志路径时生效）")
-    run_p.add_argument("--hard-timeout", type=float, default=120.0, help="从任务开始到结束的总上限时间（分钟，含全部重试）")
+    run_p.add_argument(
+        "--log-timeout",
+        type=float,
+        default=10.0,
+        help="日志未刷新超时分钟数（仅填写日志路径时生效）",
+    )
+    run_p.add_argument(
+        "--hard-timeout",
+        type=float,
+        default=120.0,
+        help="从任务开始到结束的总上限时间（分钟，含全部重试）",
+    )
     run_p.add_argument("--retries", type=int, default=3, help="最大尝试次数")
-    run_p.add_argument("--local-desktop", action="store_true", help="在当前主桌面而非本地远程桌面分身中运行")
+    run_p.add_argument(
+        "--local-desktop",
+        action="store_true",
+        help="在当前主桌面而非本地远程桌面分身中运行",
+    )
 
     # 3. 外部程序申请借用本地远程桌面
-    acq_p = sub.add_parser("acquire-desktop", help="外部程序申请使用本地远程桌面（队列将在子任务间隔让渡桌面）")
+    acq_p = sub.add_parser(
+        "acquire-desktop",
+        help="外部程序申请使用本地远程桌面（队列将在子任务间隔让渡桌面）",
+    )
     acq_p.add_argument("--caller", required=True, help="外部程序名称或标识")
-    acq_p.add_argument("--keep-rdp-view", action="store_true", help="保持 AUTO-MAS 的 RDP 预览窗口不断开")
-    acq_p.add_argument("--wait", action="store_true", help="等待当前正在运行的子任务结束并完成让渡后再返回")
+    acq_p.add_argument(
+        "--keep-rdp-view",
+        action="store_true",
+        help="保持 AUTO-MAS 的 RDP 预览窗口不断开",
+    )
+    acq_p.add_argument(
+        "--wait",
+        action="store_true",
+        help="等待当前正在运行的子任务结束并完成让渡后再返回",
+    )
     acq_p.add_argument("--process-pid", type=int, help="授权租约超时后关闭的进程 PID")
     acq_p.add_argument(
         "--process-created-at",
         type=float,
         help="该进程的 Unix 创建时间，用于防止 PID 重用",
     )
-    acq_p.add_argument("--process-session-id", type=int, help="该进程的 Windows 会话编号")
+    acq_p.add_argument(
+        "--process-session-id", type=int, help="该进程的 Windows 会话编号"
+    )
 
     # 4. 外部程序停止使用远程桌面后回传
-    rel_p = sub.add_parser("release-desktop", help="外部程序停止使用本地远程桌面后回传释放，恢复队列运行")
+    rel_p = sub.add_parser(
+        "release-desktop", help="外部程序停止使用本地远程桌面后回传释放，恢复队列运行"
+    )
     rel_p.add_argument("--lease-id", default=None, help="申请时返回的 leaseId")
     rel_p.add_argument("--caller", default=None, help="外部程序名称或标识")
 
     # 5. 任务导航与启停控制
     nav_p = sub.add_parser("control", help="发送启停或上/下一个任务指令")
-    nav_p.add_argument("action", choices=["toggle", "prev", "next", "status"], help="控制动作")
+    nav_p.add_argument(
+        "action", choices=["toggle", "prev", "next", "status"], help="控制动作"
+    )
 
     return parser
 
@@ -282,11 +334,20 @@ def main(argv: list[str] | None = None) -> int:
         if args.action == "status":
             resp = _api_request(args.port, "/api/child-session/status", method="GET")
         elif args.action == "toggle":
-            resp = _api_request(args.port, "/api/dispatch/navigation/toggle", method="POST", payload={})
+            resp = _api_request(
+                args.port, "/api/dispatch/navigation/toggle", method="POST", payload={}
+            )
         elif args.action == "prev":
-            resp = _api_request(args.port, "/api/dispatch/navigation/previous", method="POST", payload={})
+            resp = _api_request(
+                args.port,
+                "/api/dispatch/navigation/previous",
+                method="POST",
+                payload={},
+            )
         else:
-            resp = _api_request(args.port, "/api/dispatch/navigation/next", method="POST", payload={})
+            resp = _api_request(
+                args.port, "/api/dispatch/navigation/next", method="POST", payload={}
+            )
         print(json.dumps(resp, ensure_ascii=False, indent=2))
         return 0
 

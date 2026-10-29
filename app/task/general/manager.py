@@ -77,7 +77,10 @@ class GeneralManager(ScriptManagerBase):
         # 已变化，不能因此悄悄把“从头重跑”降为只执行未完成用户；历史计数不回滚。
         script_id = self.script_info.script_id
         original = self.task_info.external_restart_user_ids.get(script_id)
-        if script_id in self.task_info.external_restart_script_ids and original is not None:
+        if (
+            script_id in self.task_info.external_restart_script_ids
+            and original is not None
+        ):
             return str(user_id) in original
         return super().is_user_selected(user_id, user)
 
@@ -193,9 +196,12 @@ class GeneralManager(ScriptManagerBase):
             self.script_info.user_list = self.build_proxy_user_list(
                 self.user_config.items()
             )
-            if self.script_info.script_id not in self.task_info.external_restart_script_ids:
-                self.task_info.external_restart_user_ids[self.script_info.script_id] = frozenset(
-                    user.user_id for user in self.script_info.user_list
+            if (
+                self.script_info.script_id
+                not in self.task_info.external_restart_script_ids
+            ):
+                self.task_info.external_restart_user_ids[self.script_info.script_id] = (
+                    frozenset(user.user_id for user in self.script_info.user_list)
                 )
         logger.info(
             f"用户列表加载完成, 已筛选用户数: {len(self.script_info.user_list)}"
@@ -216,7 +222,9 @@ class GeneralManager(ScriptManagerBase):
         if self.task_info.mode == "AutoProxy":
             config = Config.ScriptConfig[uuid.UUID(self.script_info.script_id)]
             allowed = await general_ownership.before_run(
-                self.script_info.script_id, self.script_info.name, config,
+                self.script_info.script_id,
+                self.script_info.name,
+                config,
                 automated=self.task_info.trigger_source != "manual_task",
             )
             if not allowed:
@@ -275,7 +283,9 @@ class GeneralManager(ScriptManagerBase):
 
         if not self._prepared:
             if self._config_locked:
-                await Config.ScriptConfig[uuid.UUID(self.script_info.script_id)].unlock()
+                await Config.ScriptConfig[
+                    uuid.UUID(self.script_info.script_id)
+                ].unlock()
             self.script_info.status = "跳过"
             return
 

@@ -67,7 +67,9 @@ class BackendHealthOut(BaseModel):
     protocol: int = Field(description="后端自身支持的健康检查协议版本")
     version: str = Field(description="后端版本号")
     commit: str = Field(description="后端所在提交哈希，未受监督或监督器未注入时为空")
-    instanceId: str = Field(description="实际数据根的稳定身份，用于避免跨安装复用或关闭")
+    instanceId: str = Field(
+        description="实际数据根的稳定身份，用于避免跨安装复用或关闭"
+    )
 
 
 def _resolve_injected_identity(env_name: str) -> str | None:

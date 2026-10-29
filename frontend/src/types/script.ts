@@ -100,7 +100,13 @@ export interface GeneralScriptConfig {
   Script: {
     TaskKill?: { Name: string; Path: string }[]
     TaskKillMode?: 'Tracked' | 'Session' | 'Force'
-    Restart?: { Path: string; Arguments: string; WorkingDirectory: string; WaitSeconds: number; IsMain: boolean }[]
+    Restart?: {
+      Path: string
+      Arguments: string
+      WorkingDirectory: string
+      WaitSeconds: number
+      IsMain: boolean
+    }[]
     Arguments: string
     ConfigPath: string
     ConfigPathMode: string

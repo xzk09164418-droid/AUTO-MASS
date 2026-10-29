@@ -105,7 +105,9 @@ class _MainTimer:
         self.calendar_timer = asyncio.create_task(self.calendar_task())
         self.started = True
 
-        if Config.ToolsConfig.get("GameSign", "Enabled") and Config.ToolsConfig.get("GameSign", "RunOnStartup"):
+        if Config.ToolsConfig.get("GameSign", "Enabled") and Config.ToolsConfig.get(
+            "GameSign", "RunOnStartup"
+        ):
             self.schedule_community_for_startup()
 
         logger.info("主业务定时器启动")

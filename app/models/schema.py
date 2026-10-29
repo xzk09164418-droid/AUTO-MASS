@@ -1589,7 +1589,8 @@ class GlobalConfig_Update(_SchemaModel):
 
 class GlobalConfig_ChildSession(_SchemaModel):
     Enabled: Optional[bool] = Field(
-        default=None, description="是否启用基于 BetterGI 的本地远程桌面 (Child Session) 执行任务"
+        default=None,
+        description="是否启用基于 BetterGI 的本地远程桌面 (Child Session) 执行任务",
     )
     HostPort: Optional[int] = Field(
         default=None, ge=1024, le=65535, description="C# 远程桌面宿主 IPC 端口"
@@ -1613,9 +1614,7 @@ class GlobalConfig_Hotkey(_SchemaModel):
     PreviousTask: Optional[str] = Field(
         default=None, description="全局热键：上一个任务"
     )
-    NextTask: Optional[str] = Field(
-        default=None, description="全局热键：下一个任务"
-    )
+    NextTask: Optional[str] = Field(default=None, description="全局热键：下一个任务")
 
 
 class GlobalConfig(_SchemaModel):
@@ -7222,6 +7221,7 @@ class PatternDebugOut(OutBase):
         default_factory=list, description="逐行/逐窗口调试结果"
     )
 
+
 class GeneralNativeConfigReadIn(_SchemaModel):
     scriptId: str = Field(description="通用脚本 ID")
     file: str = Field(
@@ -7320,6 +7320,12 @@ class ExternalHoldForceReleaseIn(_SchemaModel):
     callerId: str
     holdId: str
 
+
 class ExternalControlContractOut(OutBase):
-    backendUrl: str = Field(default="", description="本机 Python 后端直连地址，不是前端代理或远程桌面宿主地址")
-    schemas: dict[str, Any] = Field(default_factory=dict, description="当前后端公开输入模型的 JSON Schema")
+    backendUrl: str = Field(
+        default="",
+        description="本机 Python 后端直连地址，不是前端代理或远程桌面宿主地址",
+    )
+    schemas: dict[str, Any] = Field(
+        default_factory=dict, description="当前后端公开输入模型的 JSON Schema"
+    )

@@ -235,7 +235,9 @@ async def rebuild_or_reboot(manager: Any, store: DesktopRecoveryStore) -> int | 
     if not await guard_ready(root):
         control["phase"] = "paused"
         store.write("control.json", control)
-        await DesktopRecovery.notify("UU 远程服务或实机测试保护未就绪，已暂停注销和重启")
+        await DesktopRecovery.notify(
+            "UU 远程服务或实机测试保护未就绪，已暂停注销和重启"
+        )
         return None
     control["phase"] = "recovering"
     store.write("control.json", control)

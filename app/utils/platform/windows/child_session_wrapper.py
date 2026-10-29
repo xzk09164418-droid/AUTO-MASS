@@ -203,7 +203,9 @@ def run_wrapper(
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="AUTO-MAS Child Session Process Wrapper")
+    parser = argparse.ArgumentParser(
+        description="AUTO-MAS Child Session Process Wrapper"
+    )
     parser.add_argument("--state-file", required=True, help="JSON 状态输出文件路径")
     parser.add_argument("--cwd", default=None, help="工作目录")
     parser.add_argument("--env-file", default=None, help="附加环境变量 JSON 文件")

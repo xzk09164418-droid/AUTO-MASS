@@ -772,7 +772,9 @@ class Task(TaskExecuteBase):
         ]
         if recovery_entries:
             recovery_ids = {entry.queue_item_id for entry in recovery_entries}
-            pending = recovery_entries + [entry for entry in pending if entry.queue_item_id not in recovery_ids]
+            pending = recovery_entries + [
+                entry for entry in pending if entry.queue_item_id not in recovery_ids
+            ]
         if not pending:
             await self._sleep_until(min(entry.next_run_at for entry in entries))
             return
@@ -1969,7 +1971,9 @@ class _TaskManager:
                 if restart_id is not None:
                     self.task_info[task_uid].desktop_restart_script_ids.add(restart_id)
                     self.task_info[task_uid].external_restart_script_ids.add(restart_id)
-            DesktopRecovery.enroll(self.task_info[task_uid], previous_id=desktop_recovery_task_id)
+            DesktopRecovery.enroll(
+                self.task_info[task_uid], previous_id=desktop_recovery_task_id
+            )
             await Publisher.send(
                 id=protocol.ID_TASK_MANAGER,
                 type=protocol.TASK_CREATED,

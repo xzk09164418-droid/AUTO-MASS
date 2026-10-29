@@ -255,11 +255,15 @@ class AppConfig(GlobalConfig):
     def __getattr__(self, name: str) -> Any:
         # ConfigBase 初始化会遍历属性；用缺失属性入口避免 property 提前加载模板库。
         if name != "notify_env":
-            raise AttributeError(f"{type(self).__name__!r} object has no attribute {name!r}")
+            raise AttributeError(
+                f"{type(self).__name__!r} object has no attribute {name!r}"
+            )
 
         from jinja2 import Environment, FileSystemLoader
 
-        self.notify_env = Environment(loader=FileSystemLoader(str(resource_path("html"))))
+        self.notify_env = Environment(
+            loader=FileSystemLoader(str(resource_path("html")))
+        )
         return self.notify_env
 
     @staticmethod
@@ -4162,7 +4166,6 @@ class AppConfig(GlobalConfig):
 
         # 公告不属于活动内容；不再请求或展示上游公告，旧配置仍保留以便回退。
         return False, {}
-
 
     def build_history_log_path(
         self, *, script_name: str, user_name: str, log_time: datetime

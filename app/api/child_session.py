@@ -25,7 +25,9 @@ class ChildSessionLeaseAcquireIn(BaseModel):
         default=None,
         description="明确授权在租约到期时关闭的进程树；未登记则到期暂停等待归还",
     )
-    caller: str = Field(default="external_program", description="申请使用远程桌面的外部程序标识")
+    caller: str = Field(
+        default="external_program", description="申请使用远程桌面的外部程序标识"
+    )
     disconnectRdpView: bool = Field(
         default=True,
         description="是否在让渡期间断开 AUTO-MAS 宿主自身的 RDP 预览连接（以便外部程序连接 Child Session）",
@@ -50,27 +52,41 @@ class ChildSessionLeaseAcquireIn(BaseModel):
 
 class ChildSessionLeaseAcquireOut(OutBase):
     leaseId: str = Field(default="", description="租约唯一 ID，供停止使用时回传")
-    leaseStatus: str = Field(default="", description="pending（等待当前子任务结束）或 granted（已获准使用）")
-    childSessionId: Optional[int] = Field(default=None, description="当前 Child Session ID")
+    leaseStatus: str = Field(
+        default="", description="pending（等待当前子任务结束）或 granted（已获准使用）"
+    )
+    childSessionId: Optional[int] = Field(
+        default=None, description="当前 Child Session ID"
+    )
     lease: dict[str, Any] = Field(default_factory=dict, description="完整租约信息")
 
 
 class ChildSessionLeaseReleaseIn(BaseModel):
     leaseId: Optional[str] = Field(default=None, description="要释放的租约 ID")
-    caller: Optional[str] = Field(default=None, description="按外部程序名称释放全部关联租约")
+    caller: Optional[str] = Field(
+        default=None, description="按外部程序名称释放全部关联租约"
+    )
 
 
 class ChildSessionLeaseReleaseOut(OutBase):
-    releasedLeaseIds: list[str] = Field(default_factory=list, description="已释放的租约 ID 列表")
-    remainingLeases: list[dict[str, Any]] = Field(default_factory=list, description="剩余活跃租约")
+    releasedLeaseIds: list[str] = Field(
+        default_factory=list, description="已释放的租约 ID 列表"
+    )
+    remainingLeases: list[dict[str, Any]] = Field(
+        default_factory=list, description="剩余活跃租约"
+    )
 
 
 class ChildSessionWindowControlIn(BaseModel):
     visible: Optional[bool] = Field(default=None, description="显示或隐藏远程桌面窗口")
-    watchMode: Optional[bool] = Field(default=None, description="观看模式（屏蔽本机键鼠输入进入分身）")
+    watchMode: Optional[bool] = Field(
+        default=None, description="观看模式（屏蔽本机键鼠输入进入分身）"
+    )
     smartSizing: Optional[bool] = Field(default=None, description="画面自适应窗口缩放")
     topmost: Optional[bool] = Field(default=None, description="窗口置顶")
-    shortcut: Optional[str] = Field(default=None, description="向远程桌面发送组合键，如 Win+D 或 Win+Tab")
+    shortcut: Optional[str] = Field(
+        default=None, description="向远程桌面发送组合键，如 Win+D 或 Win+Tab"
+    )
 
 
 @router.get(
@@ -184,7 +200,9 @@ async def control_child_session_window(
     payload = {k: v for k, v in body.model_dump().items() if v is not None}
     if payload.get("visible") is True:
         await ChildSessionManager.ensure_host_running(force_visible=True)
-    await ChildSessionManager._http_call("/window", method="POST", payload=payload, timeout=5.0)
+    await ChildSessionManager._http_call(
+        "/window", method="POST", payload=payload, timeout=5.0
+    )
     return ChildSessionStatusOut(data=await ChildSessionManager.get_status())
 
 
@@ -194,7 +212,9 @@ async def control_child_session_window(
     response_model=OutBase,
 )
 async def logoff_child_session() -> OutBase:
-    resp = await ChildSessionManager._http_call("/logoff", method="POST", payload={}, timeout=15.0)
+    resp = await ChildSessionManager._http_call(
+        "/logoff", method="POST", payload={}, timeout=15.0
+    )
     if resp is None:
         ChildSessionManager.wts_terminate_child_session(wait=True)
     return OutBase()

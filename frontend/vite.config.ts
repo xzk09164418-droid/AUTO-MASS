@@ -43,7 +43,9 @@ const sentryUploadPlugin = sentryAuthToken
 // dev server 对应开发环境后端，构建产物对应正式版后端
 const hostDefaults = require('../res/host-instance-defaults.json')
 const instancePath = path.join(__dirname, '../config/HostInstance.json')
-const savedInstance = fs.existsSync(instancePath) ? JSON.parse(fs.readFileSync(instancePath, 'utf8')) : {}
+const savedInstance = fs.existsSync(instancePath)
+  ? JSON.parse(fs.readFileSync(instancePath, 'utf8'))
+  : {}
 const DEFAULT_HTTP_PORT = savedInstance.backendPort ?? hostDefaults.backendPort
 const DEV_HTTP_PORT = savedInstance.backendPort ?? hostDefaults.developmentBackendPort
 // 与 本机 Node 宿主的开发入口 对齐，需要错开时用 vite --port 覆盖

@@ -41,7 +41,9 @@ router.include_router(external_holds_router)
 
 
 class NavigationActionOut(OutBase):
-    data: dict[str, Any] = Field(default_factory=dict, description="启停或上下任务切换结果")
+    data: dict[str, Any] = Field(
+        default_factory=dict, description="启停或上下任务切换结果"
+    )
 
 
 @router.get(

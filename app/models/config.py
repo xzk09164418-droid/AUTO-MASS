@@ -4501,7 +4501,9 @@ class GeneralRecoveryListValidator(ValidatorBase):
 
     def correct(self, value: Any) -> Any:
         if not self.validate(value):
-            raise ValueError(f"{self.field} 清单配置不合法，请检查路径、进程名和主体设置")
+            raise ValueError(
+                f"{self.field} 清单配置不合法，请检查路径、进程名和主体设置"
+            )
         return value
 
 
@@ -5528,21 +5530,15 @@ class GlobalConfig(ConfigBase):
 
         ## Hotkey -----------------------------------------------------------
         ## 是否启用系统全局热键
-        self.Hotkey_Enabled = ConfigItem(
-            "Hotkey", "Enabled", True, BoolValidator()
-        )
+        self.Hotkey_Enabled = ConfigItem("Hotkey", "Enabled", True, BoolValidator())
         ## 全局热键：控制程序启停
         self.Hotkey_ToggleStartStop = ConfigItem(
             "Hotkey", "ToggleStartStop", "Ctrl+Alt+S"
         )
         ## 全局热键：切换到上一个任务
-        self.Hotkey_PreviousTask = ConfigItem(
-            "Hotkey", "PreviousTask", "Ctrl+Alt+Left"
-        )
+        self.Hotkey_PreviousTask = ConfigItem("Hotkey", "PreviousTask", "Ctrl+Alt+Left")
         ## 全局热键：切换到下一个任务
-        self.Hotkey_NextTask = ConfigItem(
-            "Hotkey", "NextTask", "Ctrl+Alt+Right"
-        )
+        self.Hotkey_NextTask = ConfigItem("Hotkey", "NextTask", "Ctrl+Alt+Right")
 
         ## Voice ------------------------------------------------------------
         ## 是否启用语音

@@ -6,16 +6,9 @@
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "types": [
-      "node"
-    ],
+    "types": ["node"],
     "noEmit": true
   },
-  "include": [
-    "node/**/*.ts",
-    "web/services.ts"
-  ],
-  "exclude": [
-    "node/**/*.test.ts"
-  ]
+  "include": ["node/**/*.ts", "web/services.ts"],
+  "exclude": ["node/**/*.test.ts"]
 }

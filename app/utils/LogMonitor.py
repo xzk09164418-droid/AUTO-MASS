@@ -115,7 +115,11 @@ class LogMonitor:
         warned_mtime_date: date | None = None
         if_log_start = False
         read_offsets: dict[Path, int] = dict(initial_offsets or {})
-        offset = initial_offset if initial_offset is not None else read_offsets.get(current_path, 0)
+        offset = (
+            initial_offset
+            if initial_offset is not None
+            else read_offsets.get(current_path, 0)
+        )
         log_contents = []
         # 按路径记忆读取偏移：时钟回拨可能让解析出的路径倒退回昨天，
         # 若一律从 0 重读会把整份旧日志重复摄入。
@@ -521,7 +525,9 @@ class LogMonitor:
             await self.stop()
 
         self.task = asyncio.create_task(
-            self.monitor_file(log_file_path_resolver, start_time, initial_offset, initial_offsets)
+            self.monitor_file(
+                log_file_path_resolver, start_time, initial_offset, initial_offsets
+            )
         )
         logger.info(f"日志文件监控已启动: {probe_path}")
 

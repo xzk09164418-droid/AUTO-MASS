@@ -239,7 +239,10 @@ class _ChildSessionManager:
         try:
             wtsapi32 = ctypes.windll.wtsapi32
             enabled = ctypes.c_bool(False)
-            if wtsapi32.WTSIsChildSessionsEnabled(ctypes.byref(enabled)) and enabled.value:
+            if (
+                wtsapi32.WTSIsChildSessionsEnabled(ctypes.byref(enabled))
+                and enabled.value
+            ):
                 return True
             return bool(wtsapi32.WTSEnableChildSessions(True))
         except Exception as exc:
@@ -326,9 +329,13 @@ class _ChildSessionManager:
                         creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
                     )
                     if proc.returncode == 0 and target_exe.is_file():
-                        logger.success(f"已使用系统内置 csc.exe 自动编译远程桌面宿主: {target_exe}")
+                        logger.success(
+                            f"已使用系统内置 csc.exe 自动编译远程桌面宿主: {target_exe}"
+                        )
                         return target_exe
-                    logger.warning(f"csc.exe 编译返回码 {proc.returncode}: {proc.stdout} {proc.stderr}")
+                    logger.warning(
+                        f"csc.exe 编译返回码 {proc.returncode}: {proc.stdout} {proc.stderr}"
+                    )
                 except Exception as exc:
                     logger.warning(f"调用 csc.exe 编译远程桌面宿主失败: {exc}")
 
@@ -343,7 +350,13 @@ class _ChildSessionManager:
                     timeout=60,
                     creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
                 )
-                built = host_dir / "bin" / "Release" / "net8.0-windows" / "AutoMas.ChildSessionHost.exe"
+                built = (
+                    host_dir
+                    / "bin"
+                    / "Release"
+                    / "net8.0-windows"
+                    / "AutoMas.ChildSessionHost.exe"
+                )
                 if proc.returncode == 0 and built.is_file():
                     return built.resolve()
             except Exception as exc:
@@ -355,8 +368,12 @@ class _ChildSessionManager:
     def _find_host_executable(cls) -> Path | None:
         candidates = [
             Path("res/ChildSessionHost/AutoMas.ChildSessionHost.exe"),
-            Path("res/ChildSessionHost/bin/Release/net8.0-windows/AutoMas.ChildSessionHost.exe"),
-            Path("res/ChildSessionHost/bin/Debug/net8.0-windows/AutoMas.ChildSessionHost.exe"),
+            Path(
+                "res/ChildSessionHost/bin/Release/net8.0-windows/AutoMas.ChildSessionHost.exe"
+            ),
+            Path(
+                "res/ChildSessionHost/bin/Debug/net8.0-windows/AutoMas.ChildSessionHost.exe"
+            ),
         ]
         for candidate in candidates:
             if candidate.is_file():
@@ -386,7 +403,9 @@ class _ChildSessionManager:
                 await asyncio.wait_for(self._host_process.wait(), timeout=3.0)
         self._host_process = None
 
-    async def ensure_host_running(self, *, force_visible: bool = False) -> dict[str, Any] | None:
+    async def ensure_host_running(
+        self, *, force_visible: bool = False
+    ) -> dict[str, Any] | None:
         """确保 C# 远程桌面宿主进程已启动且 HTTP IPC 可达。"""
         if os.name != "nt":
             return None
@@ -415,7 +434,9 @@ class _ChildSessionManager:
             raise RuntimeError("主桌面 RDP 宿主不可用，不能在执行会话中创建嵌套子桌面")
 
         if self._host_process is not None and self._host_process.returncode is None:
-            logger.warning("远程桌面宿主仍在运行但尚未响应，请检查宿主启动状态，跳过重复启动")
+            logger.warning(
+                "远程桌面宿主仍在运行但尚未响应，请检查宿主启动状态，跳过重复启动"
+            )
             return None
 
         host_exe = await asyncio.to_thread(self._find_host_executable)
@@ -488,7 +509,9 @@ class _ChildSessionManager:
                     and conn_resp.get("ok") is True
                     and conn_resp.get("childSessionId") is not None
                 ):
-                    if expected is not None and conn_resp["childSessionId"] != int(expected):
+                    if expected is not None and conn_resp["childSessionId"] != int(
+                        expected
+                    ):
                         raise RuntimeError("RDP 重连后执行会话已改变，请重新启动主程序")
                     return int(conn_resp["childSessionId"])
 
@@ -540,7 +563,9 @@ class _ChildSessionManager:
                 TASK_LOGON_INTERACTIVE_TOKEN,
                 None,
             )
-            running = registered.RunEx(None, TASK_RUN_USE_SESSION_ID, int(session_id), None)
+            running = registered.RunEx(
+                None, TASK_RUN_USE_SESSION_ID, int(session_id), None
+            )
             # 进入运行态即可清理任务定义，不固定等待 15 秒。
             deadline = time.monotonic() + 15.0
             while running is not None and time.monotonic() < deadline:
@@ -572,8 +597,18 @@ class _ChildSessionManager:
             env_file = (self._state_dir / f"job_{job_id}.env.json").resolve()
             env_file.write_text(json.dumps(env, ensure_ascii=False), encoding="utf-8")
 
-        wrapper_script = Path(__file__).resolve().parents[1] / "utils" / "platform" / "windows" / "child_session_wrapper.py"
-        resolved_cwd = str((cwd or (Path(program).parent if Path(program).is_file() else Path.cwd())).resolve())
+        wrapper_script = (
+            Path(__file__).resolve().parents[1]
+            / "utils"
+            / "platform"
+            / "windows"
+            / "child_session_wrapper.py"
+        )
+        resolved_cwd = str(
+            (
+                cwd or (Path(program).parent if Path(program).is_file() else Path.cwd())
+            ).resolve()
+        )
         target_cmd = [str(program), *[str(a) for a in args]]
 
         wrapper_args_list = [
@@ -650,7 +685,8 @@ class _ChildSessionManager:
         expired_ids = [
             lid
             for lid, lease in self._leases.items()
-            if lease.expires_at_monotonic is not None and now >= lease.expires_at_monotonic
+            if lease.expires_at_monotonic is not None
+            and now >= lease.expires_at_monotonic
         ]
         for lid in expired_ids:
             lease = self._leases.get(lid)
@@ -723,7 +759,9 @@ class _ChildSessionManager:
 
         if wait_for_grant and lease.status != "granted":
             with suppress(asyncio.TimeoutError):
-                await asyncio.wait_for(lease._granted_event.wait(), timeout=wait_timeout)
+                await asyncio.wait_for(
+                    lease._granted_event.wait(), timeout=wait_timeout
+                )
 
         return lease
 
@@ -736,7 +774,9 @@ class _ChildSessionManager:
         if not self._leases:
             return
 
-        need_disconnect = any(lease.disconnect_rdp_view for lease in self._leases.values())
+        need_disconnect = any(
+            lease.disconnect_rdp_view for lease in self._leases.values()
+        )
         callers = ", ".join(sorted({lease.caller for lease in self._leases.values()}))
 
         if need_disconnect:
@@ -781,12 +821,16 @@ class _ChildSessionManager:
         released: list[str] = []
 
         for lid, lease in list(self._leases.items()):
-            if (lease_id and lid == lease_id) or (caller and lease.caller == caller) or (
-                not lease_id and not caller
+            if (
+                (lease_id and lid == lease_id)
+                or (caller and lease.caller == caller)
+                or (not lease_id and not caller)
             ):
                 self._leases.pop(lid, None)
                 released.append(lid)
-                logger.info(f"外部程序 [{lease.caller}] 已回传释放远程桌面租约 (leaseId={lid})")
+                logger.info(
+                    f"外部程序 [{lease.caller}] 已回传释放远程桌面租约 (leaseId={lid})"
+                )
 
         if not self._leases:
             if self._rdp_view_disconnected_for_external:
@@ -855,7 +899,9 @@ class _ChildSessionManager:
             if not self._leases and self._rdp_view_disconnected_for_external:
                 await self._release_external_lease_locked()
 
-    async def wait_if_external_requested(self, boundary_label: str = "子任务间隔") -> bool:
+    async def wait_if_external_requested(
+        self, boundary_label: str = "子任务间隔"
+    ) -> bool:
         """在队列相邻两个子任务间隔调用：检查是否有其他程序需要连接该远程桌面，并在其停止使用回传后继续。
 
         Returns:
@@ -874,11 +920,15 @@ class _ChildSessionManager:
 
         while self.has_external_lease_requests():
             try:
-                await asyncio.wait_for(self._all_leases_released_event.wait(), timeout=2.0)
+                await asyncio.wait_for(
+                    self._all_leases_released_event.wait(), timeout=2.0
+                )
             except asyncio.TimeoutError:
                 self._prune_expired_leases()
 
-        logger.info(f"[{boundary_label}] 外部程序已停止使用本地远程桌面并完成回传，恢复任务队列执行")
+        logger.info(
+            f"[{boundary_label}] 外部程序已停止使用本地远程桌面并完成回传，恢复任务队列执行"
+        )
         return True
 
     def enter_subtask(self) -> None:
@@ -899,7 +949,9 @@ class _ChildSessionManager:
             "enabled": self.enabled,
             "hostPort": self.host_port,
             "childSessionId": sid,
-            "hostConnected": bool(host_status and host_status.get("connectedState") == 1),
+            "hostConnected": bool(
+                host_status and host_status.get("connectedState") == 1
+            ),
             "hostStatus": host_status,
             "inSubtaskExecution": self._in_subtask_execution > 0,
             "activeLeases": self.list_leases(),

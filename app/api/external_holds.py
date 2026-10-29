@@ -131,7 +131,7 @@ async def get_external_control_contract(request: Request) -> ExternalControlCont
                 ExternalHoldCommandIn,
                 ExternalHoldEnvelopeIn,
             )
-        }
+        },
     )
 
 

@@ -1,10 +1,6 @@
 import type { ShareTemplateItem } from '@/composables/useTemplateApi'
 import type { MaaFWEmbeddedSourceItem } from '@/api'
-import {
-  isMaaFWFamily,
-  maafwRouteSuffix,
-  type MaaFWFlavorType,
-} from '@/composables/useMaaFWFlavor'
+import { isMaaFWFamily, maafwRouteSuffix, type MaaFWFlavorType } from '@/composables/useMaaFWFlavor'
 import type { ScriptType } from '@/types/script'
 import { SCRIPT_LOGOS } from '@/utils/scriptLogos'
 

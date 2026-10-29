@@ -65,8 +65,10 @@ function createStartupStatus(root, backendPort, launchError, expectedId) {
       runId,
       coreReady: !!health?.ready && (!expectedId || health.instanceId === expectedId),
       backgroundStatus: health?.backgroundStatus || 'starting',
-      error: health && expectedId && health.instanceId !== expectedId
-        ? '端口上的后端不属于本安装实例' : health?.backgroundError || launchError() || '',
+      error:
+        health && expectedId && health.instanceId !== expectedId
+          ? '端口上的后端不属于本安装实例'
+          : health?.backgroundError || launchError() || '',
       logs,
     }
   }

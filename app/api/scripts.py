@@ -43,7 +43,11 @@ SCRIPT_BOOK = {"GeneralConfig": GeneralConfig}
 USER_BOOK = {"GeneralConfig": GeneralUserConfig}
 
 
-@router.get("/ownership/prompts", response_model=GeneralOwnershipPromptsOut, tags=["GeneralOwnership"])
+@router.get(
+    "/ownership/prompts",
+    response_model=GeneralOwnershipPromptsOut,
+    tags=["GeneralOwnership"],
+)
 async def get_ownership_prompts() -> GeneralOwnershipPromptsOut:
     from app.core.general_ownership import general_ownership
 
