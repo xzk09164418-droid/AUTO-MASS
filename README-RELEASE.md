@@ -149,3 +149,11 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/rdp-recovery-gua
 `remote_script_controller.py acquire-desktop` 同时传入 `--process-pid`、`--process-created-at`、
 `--process-session-id`。超时只关闭已验证的绑定进程树，先正常关闭窗口再强制结束；UU 组件和 MAS
 监督进程不能登记。旧客户端未登记进程时，到期保持暂停并通知，必须明确归还，绝不按进程名猜测后杀进程。
+# General 精简便携版
+
+生产依赖不再包含 MaaFramework、MaaAgentBinary、RapidOCR、OpenCV、NumPy 和
+ONNX Runtime；不影响外部脚本使用其自行安装的运行环境。
+本版本不提供 MAS 内置 OCR 工具，旧 OCR 接口返回 410，且不再出现在接口目录中。
+MCP 保留 General 配置、队列、调度状态、历史和模拟器查询工具；不再提供专项
+配置与计划工具，创建脚本仅支持 General。查询全部队列可使用空参数。
+便携包仍需 Windows 自带的桌面组件和系统浏览器，不迁移系统自动登录或自启任务。

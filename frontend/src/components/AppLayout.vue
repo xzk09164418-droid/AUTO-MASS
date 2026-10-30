@@ -127,7 +127,6 @@ const mainMenuItems = computed(() => [
 // 开发环境专用菜单项
 const devMenuItems = computed(() => [
   { key: '/TestRouter', label: t('comp.testRoute'), icon: icon('testRouter', SettingOutlined) },
-  { key: '/OCRdev', label: t('comp.ocrTest'), icon: icon('ocrDev', SettingOutlined) },
   {
     key: '/OverlayMaskDev',
     label: t('comp.overlayEasterEggTest'),

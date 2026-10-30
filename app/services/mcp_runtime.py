@@ -73,7 +73,10 @@ class McpRuntime:
                 return
             if self.process is not None:
                 await self._stop_process()
-            from app.services.mcp_tools import MCP_INCLUDED_OPERATIONS
+            from app.services.mcp_tools import (
+                MCP_INCLUDED_OPERATIONS,
+                restrict_mcp_schema,
+            )
 
             schema_app = FastAPI(
                 title=self.app.title,
@@ -88,6 +91,7 @@ class McpRuntime:
                 and (route.operation_id or route.unique_id) in MCP_INCLUDED_OPERATIONS
             ]
             schema = await asyncio.to_thread(schema_app.openapi)
+            schema = restrict_mcp_schema(schema)
             self.process = await create_subprocess(
                 sys.executable,
                 "-m",

@@ -18,12 +18,6 @@ const devRoutes = import.meta.env.DEV
         meta: { title: '测试路由' },
       },
       {
-        path: '/OCRdev',
-        name: 'OCRdev',
-        component: () => import('../views/OCRdev.vue'),
-        meta: { title: 'OCR测试' },
-      },
-      {
         path: '/OverlayMaskDev',
         name: 'OverlayMaskDev',
         component: () => import('../views/OverlayMaskDev.vue'),

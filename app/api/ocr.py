@@ -25,7 +25,7 @@ import base64
 from io import BytesIO
 from typing import TYPE_CHECKING, Optional
 
-from fastapi import APIRouter, Body
+from fastapi import APIRouter, Body, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from app.models.schema import OutBase
@@ -44,7 +44,18 @@ def _ocr_tool() -> "type[OCRTool]":
 
 logger = get_logger("OCR API")
 
-router = APIRouter(prefix="/api/ocr", tags=["OCR识别"])
+
+async def require_ocr_support() -> None:
+    """保留旧地址的明确响应，不再加载已裁剪的识别依赖。"""
+    raise HTTPException(status_code=410, detail="当前 General 版本不提供 OCR 工具")
+
+
+router = APIRouter(
+    prefix="/api/ocr",
+    tags=["OCR识别"],
+    dependencies=[Depends(require_ocr_support)],
+    include_in_schema=False,
+)
 
 
 # ========== 截图相关模型 ==========
