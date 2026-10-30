@@ -87,6 +87,12 @@ from .queue_cycle import (
     parse_cycle_time,
     sort_for_preview,
 )
+from .queue_summary import (
+    QueueSummaryLedger,
+    SummaryWindow,
+    script_outcome,
+    send_queue_summary,
+)
 from .ws import MainConnection, Publisher, protocol
 
 System = LazyProxy("app.services", "System")
@@ -552,6 +558,10 @@ class Task(TaskExecuteBase):
         self._active_child_task: asyncio.Task | None = None
         self._pending_nav_offset: int | None = None
         self._external_deferred_cycle: set[str] = set()
+        self._summary_started = datetime.now()
+        self._summary_ledger = QueueSummaryLedger(self._summary_started)
+        self._summary_complete = False
+        self._summary_run_finished = False
 
     def request_navigate(self, offset: int) -> bool:
         """请求跳转到上一个（offset=-1）或下一个（offset=+1）子任务。"""
@@ -748,6 +758,8 @@ class Task(TaskExecuteBase):
         queue = Config.QueueConfig[queue_uid]
         now = datetime.now()
         entries = self._collect_entries(queue_uid)
+        self._observe_cycle_summary(queue_uid, entries, now)
+        await self._send_ready_summaries(queue_uid)
 
         for entry in entries:
             queue_item = queue.QueueItem[uuid.UUID(entry.queue_item_id)]
@@ -831,6 +843,23 @@ class Task(TaskExecuteBase):
                 continue
             result = await self._run_cycle_entry(queue_uid, entry, entries)
             if result != "blocked":
+                self._summary_ledger.complete(
+                    entry.queue_item_id,
+                    entry.script_name,
+                    (
+                        script_outcome(self.task_info.script_list[entry.index])
+                        if result == "success"
+                        else "unfinished"
+                        if result == "skipped"
+                        else result
+                    ),
+                    datetime.now(),
+                )
+                self._observe_cycle_summary(
+                    queue_uid, self._collect_entries(queue_uid), datetime.now()
+                )
+                await self._send_ready_summaries(queue_uid)
+            if result != "blocked":
                 self.task_info.desktop_restart_script_ids.discard(entry.script_id)
             results.append(result)
             if result == "blocked":
@@ -840,6 +869,39 @@ class Task(TaskExecuteBase):
 
         if results and not any(result in ("success", "skipped") for result in results):
             await asyncio.sleep(CYCLE_RETRY_SLEEP_SECONDS)
+
+    def _observe_cycle_summary(self, queue_uid, entries, now) -> None:
+        queue = Config.QueueConfig[queue_uid]
+        specs = {}
+        for entry in entries:
+            item = queue.QueueItem[uuid.UUID(entry.queue_item_id)]
+            specs[entry.queue_item_id] = (
+                item.get("Schedule", "Mode"),
+                max(1, int(item.get("Schedule", "IntervalMinutes"))),
+            )
+        self._summary_ledger.observe(
+            specs,
+            [
+                (entry.queue_item_id, entry.script_name, min(entry.next_run_at, now))
+                for entry in entries
+                if entry.is_due
+                or entry.script_id in self.task_info.desktop_restart_script_ids
+            ],
+            now,
+        )
+
+    async def _send_ready_summaries(self, queue_uid) -> None:
+        for window in self._summary_ledger.take_ready():
+            try:
+                await send_queue_summary(
+                    window,
+                    Config.QueueConfig[queue_uid].get("Info", "Name"),
+                    self.task_info,
+                )
+            except Exception as error:
+                logger.opt(exception=True).warning(
+                    f"推送队列汇总失败: {type(error).__name__}"
+                )
 
     def _scope_skipped_script_ids(self) -> set[str]:
         scope = self.task_info.user_ids_by_script
@@ -1124,6 +1186,7 @@ class Task(TaskExecuteBase):
 
         await ensure_desktop_available()
         await self._run_script_list(start_index)
+        self._summary_run_finished = True
 
     async def _run_queue_extra_script(
         self, queue_id: str | uuid.UUID, if_key: str, path_key: str, label: str
@@ -1420,6 +1483,37 @@ class Task(TaskExecuteBase):
             self.task_info.community_sign_notification.finish()
 
         result_text = build_task_result_text(self.task_info.script_list)
+        if (
+            self.task_info.queue_id is not None
+            and self.task_info.mode == "AutoProxy"
+            and not self.task_info.is_cycle
+            and not self.stopped_manually
+            and not self.is_closing
+            and self._summary_run_finished
+            and not self._summary_complete
+        ):
+            self._summary_complete = True
+            window = SummaryWindow(
+                self._summary_started, None, frozenset(), ended=datetime.now()
+            )
+            for index, script in enumerate(self.task_info.script_list):
+                window.record(str(index), script.name, script_outcome(script))
+            queue_uid = uuid.UUID(self.task_info.queue_id)
+            queue = (
+                Config.QueueConfig[queue_uid]
+                if queue_uid in Config.QueueConfig
+                else None
+            )
+            try:
+                await send_queue_summary(
+                    window,
+                    queue.get("Info", "Name") if queue else "队列",
+                    self.task_info,
+                )
+            except Exception as error:
+                logger.opt(exception=True).warning(
+                    f"推送队列汇总失败: {type(error).__name__}"
+                )
         await Publisher.send(
             id=str(self.task_info.task_id),
             type=protocol.TASK_COMPLETED,

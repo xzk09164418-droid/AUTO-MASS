@@ -77,11 +77,12 @@ async def push_proxy_result(
         logger: 调用方模块 logger，仅用于可选的跳过 debug 日志。
         skip_debug_message: 汇总通知关闭时的 debug 文案，仅 M9A 传入。
         images: 随报告提供的图片资源。HTML 模板通过稳定资源 ID 引用需要展示的图片。
-        include_system: 是否弹系统通知。本轮已由专门的通知弹过（如 MaaFW 的停服维护 /
-            需要更新）时传 False，免得同一件事弹两次。
+        include_system: 保留旧调用方参数兼容；汇总报告统一不发送系统通知。
     """
 
-    if not Config.get("Notify", "IfSendStatistic"):
+    if getattr(task_info, "queue_id", None) or not Config.get(
+        "Notify", "IfSendStatistic"
+    ):
         if logger is not None and skip_debug_message:
             logger.debug(skip_debug_message)
         return DispatchResult()
@@ -118,7 +119,7 @@ async def push_proxy_result(
             ),
             images=tuple(images),
         ),
-        [global_target(include_system=include_system, system_timeout_seconds=10)],
+        [global_target(include_system=False)],
         task_info,
         summary_text=summary_text,
     )

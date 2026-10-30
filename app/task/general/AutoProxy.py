@@ -32,6 +32,7 @@ from typing import Optional
 
 from app.core import Config
 from app.core.general_ownership import general_ownership
+from app.core.notify import should_send_result
 from app.core.ws import Publisher, protocol
 from app.log_box.hooks import make_line_hook
 from app.log_box.markers import parse_marker
@@ -974,21 +975,27 @@ class AutoProxyTask(ScriptAutoProxyBase):
             )
             self.cur_user_item.status = "完成"
             logger.success(f"用户 {self.cur_user_uid} 的自动代理任务已完成")
-            await Notify.push_plyer(
-                "成功完成一个自动代理任务！",
-                statistics["user_result"],
-                f"已完成 {self.cur_user_item.name} 的自动代理任务",
-                3,
-            )
+            if should_send_result(
+                {"uncompleted_count": int(statistics["notification_failed"])}
+            ):
+                await Notify.push_plyer(
+                    "成功完成一个自动代理任务！",
+                    statistics["user_result"],
+                    f"已完成 {self.cur_user_item.name} 的自动代理任务",
+                    3,
+                )
         else:
             logger.warning(f"用户 {self.cur_user_uid} 的自动代理任务未完成")
             self.cur_user_item.status = "异常"
-            await Notify.push_plyer(
-                "自动代理任务已结束",
-                statistics["user_result"],
-                f"{self.cur_user_item.name} 的自动代理结果",
-                3,
-            )
+            if should_send_result(
+                {"uncompleted_count": int(statistics["notification_failed"])}
+            ):
+                await Notify.push_plyer(
+                    "自动代理任务已结束",
+                    statistics["user_result"],
+                    f"{self.cur_user_item.name} 的自动代理结果",
+                    3,
+                )
 
     async def on_crash(self, e: Exception):
         self._finished = True
