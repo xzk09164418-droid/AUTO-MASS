@@ -18,7 +18,7 @@ namespace AutoMas.Launcher
     /// AUTO-MAS 原生无黑框启动器与系统托盘守护进程 (编译为 AUTO-MAS.exe)。
     /// 支持两种运行方式：
     /// 1. 默认模式（双击启动）：后台无窗口拉起 Node.js 前端服务 (frontend/server.js) 与 Python 后端 (main.py)，
-    ///    远程桌面默认在系统托盘静默运行，并通过 Node.js 自动调用系统浏览器打开 AUTO-MAS 控制台。
+    ///    默认在系统托盘静默运行，用户点击托盘后打开 AUTO-MAS 控制台。
     /// 2. 无窗口直跑模式（传入 --headless / --no-window / --auto-run / --run-queue / --run-script）：
     ///    直接静默拉起后端并立即执行指定队列或脚本，不开任何浏览器或控制台窗口，完全不打扰主桌面。
     /// </summary>
@@ -136,7 +136,10 @@ namespace AutoMas.Launcher
                 ContextMenuStrip = _trayMenu,
                 Visible = true
             };
-            _trayIcon.DoubleClick += delegate { OpenBrowserConsole(); };
+            _trayIcon.MouseClick += delegate(object sender, MouseEventArgs e)
+            {
+                if (e.Button == MouseButtons.Left) OpenBrowserConsole();
+            };
         }
 
         private string ResolvePythonExe()
@@ -218,13 +221,9 @@ namespace AutoMas.Launcher
                 if (!await ResolveInstanceAsync(initialLaunch)) return false;
                 if (CheckPortReady(_frontendPort, "/__frontend_config"))
                 {
-                    if (initialLaunch && !_headless)
-                        OpenBrowserWindow(_frontendPort);
                     return true;
                 }
                 await StartServicesCoreAsync(initialLaunch);
-                if (initialLaunch && !_headless)
-                    OpenBrowserWindow(CheckPortReady(_frontendPort, "/__frontend_config") ? _frontendPort : _backendPort);
                 return true;
             }
             finally { _servicesLock.Release(); }
@@ -454,8 +453,24 @@ namespace AutoMas.Launcher
             MessageBox.Show(error.Message, "AUTO-MAS 操作未完成", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
 
+        private bool IsChildSessionEnabled()
+        {
+            var configPath = Path.Combine(_rootDir, "config", "Config.json");
+            if (!File.Exists(configPath)) return false;
+            var config = new JavaScriptSerializer().Deserialize<Dictionary<string, object>>(
+                File.ReadAllText(configPath, Encoding.UTF8));
+            object section;
+            if (config == null || !config.TryGetValue("ChildSession", out section)) return false;
+            var childSession = section as Dictionary<string, object>;
+            object enabled;
+            return childSession != null && childSession.TryGetValue("Enabled", out enabled)
+                && enabled is bool && (bool)enabled;
+        }
+
         private async Task ShutdownAndExitAsync()
         {
+            // 在关闭后端前读取本安装配置；未启用时不能注销其他实例的桌面。
+            bool closeChildSession = IsChildSessionEnabled();
             if (CheckPortReady(_backendPort))
             {
                 await SendJsonAsync(_backendPort, "/api/core/close", "{}");
@@ -468,7 +483,7 @@ namespace AutoMas.Launcher
                 if (!stopped) throw new InvalidOperationException("后端尚未完成清理，保留服务运行，请查看日志后重试。");
             }
             // 后端已完成任务收尾；宿主可能已关闭，直接注销子会话以释放其中的进程和内存。
-            await Task.Run(() =>
+            if (closeChildSession) await Task.Run(() =>
             {
                 uint childSessionId;
                 if (!WTSGetChildSessionId(out childSessionId))

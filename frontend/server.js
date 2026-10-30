@@ -176,6 +176,7 @@ async function startBackendOnce(opts) {
           stdio: ['ignore', logFd, logFd],
           env: {
             ...process.env,
+            PYTHONIOENCODING: 'utf-8',
             AUTO_MAS_HTTP_PORT: String(opts.backendPort),
             AUTO_MAS_DEV: '1',
             AUTO_MAS_BROWSER_HOST: '1',

@@ -2,13 +2,20 @@
 const fs = require('node:fs')
 const path = require('node:path')
 const http = require('node:http')
+const { StringDecoder } = require('node:string_decoder')
 const terminalCodes = new RegExp(`${String.fromCharCode(27)}\\[[0-?]*[ -/]*[@-~]`, 'g')
 
 function createStartupStatus(root, backendPort, launchError, expectedId) {
   const files = ['app.log', 'backend-launcher.log'].map(name => {
     const file = path.join(root, 'debug', name)
     const stat = fs.existsSync(file) ? fs.statSync(file) : null
-    return { file, position: stat?.size || 0, identity: stat?.ino, carry: '' }
+    return {
+      file,
+      position: stat?.size || 0,
+      identity: stat?.ino,
+      carry: '',
+      decoder: new StringDecoder('utf8'),
+    }
   })
   const runId = `${Date.now()}-${process.pid}`
   let logs = []
@@ -20,6 +27,7 @@ function createStartupStatus(root, backendPort, launchError, expectedId) {
       if (stat.ino !== state.identity || stat.size < state.position) {
         state.position = 0
         state.carry = ''
+        state.decoder = new StringDecoder('utf8')
         state.identity = stat.ino
       }
       if (stat.size === state.position) continue
@@ -31,7 +39,14 @@ function createStartupStatus(root, backendPort, launchError, expectedId) {
       } finally {
         await file.close()
       }
-      const text = (start === state.position ? state.carry : '') + buffer.toString('utf8')
+      let offset = 0
+      if (start !== state.position) {
+        state.carry = ''
+        state.decoder = new StringDecoder('utf8')
+        // 限长截取可能落在汉字中间，跳过开头不完整的 UTF-8 字节。
+        while (offset < buffer.length && (buffer[offset] & 0xc0) === 0x80) offset++
+      }
+      const text = state.carry + state.decoder.write(buffer.subarray(offset))
       const lines = text.split(/\r?\n/)
       state.carry = lines.pop().slice(-4096)
       state.position = stat.size

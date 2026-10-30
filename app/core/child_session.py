@@ -388,7 +388,7 @@ class _ChildSessionManager:
 
     async def stop(self) -> None:
         """关闭远程桌面宿主服务。"""
-        if os.name != "nt":
+        if os.name != "nt" or not self.enabled:
             return
         # 任务后端退出时不能关闭自己所在的桌面；宿主生命周期由主桌面桥接管理。
         from app.utils.platform.windows.session import EXECUTION_SESSION_ENV
