@@ -77,6 +77,14 @@ class _DesktopRecovery:
         except OSError:
             logger.exception("保存任务进度失败，将保留旧检查点")
 
+    def update_manual_pause(self, task_info: Any) -> None:
+        if not self.enabled or self.frozen:
+            return
+        tasks = self.store.tasks()
+        if task_info.task_id in tasks:
+            tasks[task_info.task_id]["manual_paused"] = task_info.control.paused
+            self.store.write("tasks.json", {"tasks": tasks})
+
     def finish(self, task_id: str, *, success: bool) -> None:
         if not self.enabled or self.frozen:
             return
@@ -117,6 +125,7 @@ class _DesktopRecovery:
         from app.runtime_tasks import RuntimeTasks
 
         for info in tuple(TaskManager.task_info.values()):
+            self.update_manual_pause(info)
             if 0 <= info.current_index < len(info.script_list):
                 self.checkpoint(info, info.script_list[info.current_index].script_id)
         self.frozen = True
@@ -157,6 +166,7 @@ class _DesktopRecovery:
                     user_ids=entry.get("user_ids"),
                     queue_user_ids=entry.get("queue_user_ids"),
                     desktop_recovery_task_id=task_id,
+                    manual_paused=bool(entry.get("manual_paused", False)),
                     trigger_source="startup_task",
                 )
             control["phase"] = "idle"

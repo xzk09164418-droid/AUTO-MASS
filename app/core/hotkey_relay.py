@@ -8,6 +8,7 @@ from pathlib import Path
 import httpx
 import psutil
 
+from app.core.hotkey_capture import acknowledge_capture, current_capture, report_relay
 from app.core.hotkey_manager import _HotkeyManager
 from app.utils.logger import get_logger
 
@@ -40,6 +41,10 @@ class DesktopHotkeyRelay(_HotkeyManager):
     async def trigger_next_task(self) -> dict:
         return await self._forward("next")
 
+    async def notify_result(self, result: dict, *, failed: bool = False) -> None:
+        # 通知由任务后端的导航接口发送，主桌面不重复发送。
+        pass
+
 
 async def run_hotkey_relay(port: int, parent: psutil.Process | None = None) -> None:
     """跟随配置变更重新注册，父启动器退出时注销全部热键。"""
@@ -52,6 +57,12 @@ async def run_hotkey_relay(port: int, parent: psutil.Process | None = None) -> N
         try:
             while parent is None or parent.is_running():
                 try:
+                    capture = current_capture()
+                    if capture:
+                        await relay.stop()
+                        acknowledge_capture(capture["token"])
+                        await asyncio.sleep(0.1)
+                        continue
                     config = json.loads(config_path.read_text(encoding="utf-8"))
                     hotkey = config.get("Hotkey", {})
                     bindings = (
@@ -70,6 +81,7 @@ async def run_hotkey_relay(port: int, parent: psutil.Process | None = None) -> N
                     if str(error) != last_error:
                         logger.warning(f"主桌面热键未就绪: {error}")
                         last_error = str(error)
+                report_relay(relay.bindings, last_error)
                 await asyncio.sleep(2)
         finally:
             await relay.stop()

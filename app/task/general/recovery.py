@@ -71,6 +71,30 @@ class ProcessTracker:
         except (psutil.NoSuchProcess, psutil.AccessDenied):
             pass
 
+    async def cleanup_owned_tree(self) -> None:
+        """手动暂停仅强清本次启动并确认归属的进程树，验证后才允许继续。"""
+        for _ in range(3):
+            await asyncio.to_thread(self.collect_children)
+            for proc in tuple(self.owned.values()):
+                if proc.pid == os.getpid() or not proc.is_running():
+                    continue
+                if not _in_execution_session(proc.pid):
+                    raise CleanupFailed(f"PID {proc.pid} 不属于当前执行会话")
+                if os.name == "nt":
+                    result = await ProcessRunner.run_process(
+                        "taskkill", "/F", "/T", "/PID", str(proc.pid), timeout=10
+                    )
+                    if result.returncode and proc.is_running():
+                        logger.warning(
+                            f"暂停清理 PID {proc.pid} 失败: {result.failure_detail()}"
+                        )
+                else:
+                    proc.kill()
+            await asyncio.sleep(CLEANUP_INTERVAL)
+        alive = [str(proc.pid) for proc in self.owned.values() if proc.is_running()]
+        if alive:
+            raise CleanupFailed("暂停未完成，进程仍存活或无权清理: " + "、".join(alive))
+
     def find_owned(self, target: ProcessInfo) -> list[psutil.Process]:
         """仅在直接启动的进程及已确认的后代中查找主体，不按启动时间认领。"""
         self.collect_children()

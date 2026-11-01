@@ -13,6 +13,7 @@ import threading
 from ctypes import wintypes
 from typing import Any, Callable, Coroutine
 
+from app.core.hotkey_capture import current_capture
 from app.task.MaaFW.tools.core.runner.hotkey import _canonical_key, _win32_keycode
 from app.utils.logger import get_logger
 
@@ -95,6 +96,8 @@ class _HotkeyManager:
         enabled, toggle_key, prev_key, next_key = self._read_config_bindings()
         self._registered_bindings = {}
         self._registration_errors = []
+        if current_capture():
+            return
         if not enabled:
             logger.info("全局热键开关未启用，跳过注册")
             return
@@ -223,14 +226,47 @@ class _HotkeyManager:
                     pass
 
     async def _run_action(self, action: Callable[[], Coroutine[Any, Any, Any]]) -> None:
-        if self._action_lock.locked():
+        if current_capture():
             return
         async with self._action_lock:
+            if current_capture():
+                return
             try:
                 result = await action()
                 logger.info(f"全局热键操作完成: {result}")
-            except Exception:
+                await self.notify_result(result)
+            except Exception as error:
                 logger.exception("全局热键操作失败")
+                await self.notify_result({"message": str(error)}, failed=True)
+
+    async def notify_result(self, result: dict, *, failed: bool = False) -> None:
+        from app.core.ws import Publisher, protocol
+        from app.models.schema import WSTaskNoticeData
+
+        if result.get("action") == "ignored":
+            return
+        direction = "上一项" if result.get("direction") == -1 else "下一项"
+        labels = {
+            "started": "已启动任务",
+            "stopped": "已停止任务",
+            "navigated_in_queue": f"已请求切换到{direction}",
+            "started_script": f"已启动{direction}",
+        }
+        message = result.get("message") or labels.get(
+            result.get("action"), "任务切换完成"
+        )
+        await Publisher.send(
+            id=protocol.ID_MAIN,
+            type=protocol.TASK_NOTICE,
+            data=WSTaskNoticeData(
+                level="error"
+                if failed
+                else "warning"
+                if result.get("action") == "none"
+                else "info",
+                message=message,
+            ),
+        )
 
     async def trigger_toggle_start_stop(self) -> dict[str, Any]:
         from app.core import TaskManager

@@ -150,9 +150,11 @@ async def stop_task(task: DispatchIn = Body(...)) -> OutBase:
 async def toggle_start_stop() -> NavigationActionOut:
     try:
         data = await TaskManager.toggle_start_stop()
+        await HotkeyManager.notify_result(data)
         return NavigationActionOut(data=data)
     except Exception as e:
         logger.opt(exception=True).warning(f"toggle_start_stop失败: {e}")
+        await HotkeyManager.notify_result({"message": str(e)}, failed=True)
         return NavigationActionOut(
             code=500, status="error", message=f"{type(e).__name__}: {e}"
         )
@@ -168,9 +170,11 @@ async def toggle_start_stop() -> NavigationActionOut:
 async def navigate_previous_task() -> NavigationActionOut:
     try:
         data = await TaskManager.navigate_task(-1)
+        await HotkeyManager.notify_result(data)
         return NavigationActionOut(data=data)
     except Exception as e:
         logger.opt(exception=True).warning(f"navigate_previous_task失败: {e}")
+        await HotkeyManager.notify_result({"message": str(e)}, failed=True)
         return NavigationActionOut(
             code=500, status="error", message=f"{type(e).__name__}: {e}"
         )
@@ -186,12 +190,56 @@ async def navigate_previous_task() -> NavigationActionOut:
 async def navigate_next_task() -> NavigationActionOut:
     try:
         data = await TaskManager.navigate_task(1)
+        await HotkeyManager.notify_result(data)
         return NavigationActionOut(data=data)
     except Exception as e:
         logger.opt(exception=True).warning(f"navigate_next_task失败: {e}")
+        await HotkeyManager.notify_result({"message": str(e)}, failed=True)
         return NavigationActionOut(
             code=500, status="error", message=f"{type(e).__name__}: {e}"
         )
+
+
+@router.get(
+    "/navigation/state", response_model=NavigationActionOut, include_in_schema=False
+)
+async def queue_control_state() -> NavigationActionOut:
+    return NavigationActionOut(data=TaskManager.control_snapshot())
+
+
+@router.post(
+    "/navigation/control", response_model=NavigationActionOut, include_in_schema=False
+)
+async def queue_control_action(payload: QueueControlIn) -> NavigationActionOut:
+    try:
+        if payload.action == "select":
+            result = TaskManager.select_controlled_queue(payload.queueId)
+        else:
+            result = await TaskManager.control_prompt(
+                payload.taskId, payload.token, payload.action
+            )
+        await HotkeyManager.notify_result(result)
+        return NavigationActionOut(data=result)
+    except (ValueError, RuntimeError) as error:
+        return NavigationActionOut(code=400, status="error", message=str(error))
+
+
+@router.post(
+    "/hotkey/capture", response_model=NavigationActionOut, include_in_schema=False
+)
+async def capture_hotkey(payload: HotkeyCaptureIn = Body(...)) -> NavigationActionOut:
+    from app.core.hotkey_capture import begin_capture, end_capture
+
+    try:
+        if payload.action == "begin":
+            token = await begin_capture(HotkeyManager)
+            return NavigationActionOut(data={"token": token})
+        if payload.action == "end" and payload.token:
+            await end_capture(HotkeyManager, payload.token)
+            return NavigationActionOut()
+        raise ValueError("无效的热键录制操作")
+    except Exception as error:
+        return NavigationActionOut(code=500, status="error", message=str(error))
 
 
 @router.post(

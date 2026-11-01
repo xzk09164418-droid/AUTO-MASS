@@ -26,7 +26,7 @@ import time
 import uuid
 from collections import OrderedDict
 from collections.abc import Iterator
-from contextlib import contextmanager, suppress
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -73,6 +73,7 @@ from .config import (
     MaaFWConfig,
     SrcConfig,
 )
+from .queue_control import QueueControl, QueueControlChanged
 from .queue_cycle import (
     SUCCESS_USER_STATUSES,
     CycleEntry,
@@ -263,6 +264,9 @@ class _ReplayRequest:
 
 @dataclass
 class TaskInfo(TaskItem):
+    control: QueueControl = field(default_factory=QueueControl, init=False, repr=False)
+    manual_pause_requested: bool = field(default=False, init=False)
+    pause_cleanup_error: str = field(default="", init=False)
     community_sign_notification: "TaskCommunitySignNotification | None" = field(
         default=None, init=False, repr=False
     )
@@ -331,6 +335,9 @@ class TaskInfo(TaskItem):
     def on_user_execution_finished(self, script: ScriptItem) -> None:
         active = max(0, self._replay_active.get(script.script_id, 0) - 1)
         self._replay_active[script.script_id] = active
+        if self.manual_pause_requested:
+            self._replay_candidates.pop(script.script_id, None)
+            return
         if active:
             return
         candidates = self._replay_candidates.pop(script.script_id, {})
@@ -558,25 +565,50 @@ class Task(TaskExecuteBase):
         self._active_child_task: asyncio.Task | None = None
         self._pending_nav_offset: int | None = None
         self._external_deferred_cycle: set[str] = set()
+        self._manual_cycle_entry: str | None = None
         self._summary_started = datetime.now()
         self._summary_ledger = QueueSummaryLedger(self._summary_started)
         self._summary_complete = False
         self._summary_run_finished = False
 
-    def request_navigate(self, offset: int) -> bool:
-        """请求跳转到上一个（offset=-1）或下一个（offset=+1）子任务。"""
-        if self.is_closing:
-            return False
-        self._pending_nav_offset = offset
-        if self._active_child_task is not None and not self._active_child_task.done():
+    def request_pause(self) -> None:
+        self.task_info.control.pause()
+        if self.task_info.control.cleaning:
+            return
+        child = self._active_child_task or self._queue_script_task
+        if child is not None and not child.done():
             from app.utils.platform.common.process_scope import (
                 request_task_process_stop,
             )
 
-            request_task_process_stop(self._active_child_task)
-            self._active_child_task.cancel()
-            return True
-        return False
+            self.task_info.manual_pause_requested = True
+            self.task_info.control.cleaning = True
+            self.task_info.control.interrupted = True
+            request_task_process_stop(child)
+            child.cancel()
+
+    def request_navigate(self, offset: int) -> bool:
+        """请求跳转到上一个（offset=-1）或下一个（offset=+1）子任务。"""
+        if self.is_closing:
+            return False
+        if self.task_info.is_cycle:
+            return False
+        control = self.task_info.control
+        if control.all_blocked:
+            raise RuntimeError("所有项目均不可用，仅可使用启停键")
+        self.request_pause()
+        control.navigate(offset, count=len(self.task_info.script_list))
+        return True
+
+    def _finish_manual_pause(self, child: asyncio.Task | None) -> None:
+        from app.utils.platform.common.process_scope import task_process_stop_failed
+
+        control = self.task_info.control
+        control.cleaning = False
+        control.error = self.task_info.pause_cleanup_error
+        if child is not None and task_process_stop_failed(child):
+            control.error = control.error or "进程树未清理干净，禁止继续执行"
+        control.touch()
 
     def _record_error(self, error: str) -> None:
         if self._exit_result == "success":
@@ -755,6 +787,7 @@ class Task(TaskExecuteBase):
             logger.info(f"循环队列停止运行: {queue_uid}")
 
     async def _run_cycle_round(self, queue_uid: uuid.UUID) -> None:
+        await self.task_info.control.wait_paused()
         queue = Config.QueueConfig[queue_uid]
         now = datetime.now()
         entries = self._collect_entries(queue_uid)
@@ -781,6 +814,7 @@ class Task(TaskExecuteBase):
             entry
             for entry in entries
             if entry.script_id in self.task_info.desktop_restart_script_ids
+            or entry.queue_item_id == self._manual_cycle_entry
         ]
         if recovery_entries:
             recovery_ids = {entry.queue_item_id for entry in recovery_entries}
@@ -795,12 +829,16 @@ class Task(TaskExecuteBase):
 
     async def _sleep_until(self, target: datetime) -> None:
         delay = (target - datetime.now()).total_seconds()
-        await asyncio.sleep(max(1.0, min(delay, CYCLE_MAX_SLEEP_SECONDS)))
+        await self.task_info.control.wait_resource(
+            asyncio.sleep(max(1.0, min(delay, CYCLE_MAX_SLEEP_SECONDS)))
+        )
 
     async def _run_due_entries(
         self, queue_uid: uuid.UUID, pending: list[CycleEntry]
     ) -> None:
         results: list[str] = []
+        control = self.task_info.control
+        await control.wait_paused()
         blocked, released = await external_holds.availability(
             [entry.script_id for entry in pending]
         )
@@ -818,20 +856,40 @@ class Task(TaskExecuteBase):
             )
         )
         if not runnable:
+            control.all_blocked = True
+            if not control.all_blocked_notified:
+                control.all_blocked_notified = True
+                control.warn(
+                    "暂无可运行项目，请使用启停键切换等待状态",
+                    action="blocked",
+                    buttons=False,
+                )
+                return
             # 有限等待还需重新计算循环计划，避免等待占用时错过其他项目的新到期点。
             try:
                 await asyncio.wait_for(
-                    external_holds.wait_changed([entry.script_id for entry in pending]),
+                    control.wait_resource(
+                        external_holds.wait_changed(
+                            [entry.script_id for entry in pending]
+                        )
+                    ),
                     timeout=CYCLE_MAX_SLEEP_SECONDS,
                 )
             except TimeoutError:
                 pass
             return
+        control.all_blocked = False
+        control.all_blocked_notified = False
         for stale in runnable:
+            await control.wait_paused()
             # 循环队列相邻两个子任务间隔检查是否有其他程序需要连接本地远程桌面
-            await ChildSessionManager.wait_if_external_requested(
-                boundary_label=f"循环队列[{queue_uid}]子任务间隔"
+            released_desktop = await control.wait_resource(
+                ChildSessionManager.wait_if_external_requested(
+                    boundary_label=f"循环队列[{queue_uid}]子任务间隔"
+                )
             )
+            if not released_desktop or control.paused:
+                return
             entries = self._collect_entries(queue_uid)
             entry = next(
                 (e for e in entries if e.queue_item_id == stale.queue_item_id), None
@@ -839,9 +897,20 @@ class Task(TaskExecuteBase):
             if entry is None or (
                 not entry.is_due
                 and entry.script_id not in self.task_info.desktop_restart_script_ids
+                and entry.queue_item_id != self._manual_cycle_entry
             ):
                 continue
+            self.task_info.manual_pause_requested = False
+            self.task_info.pause_cleanup_error = ""
+            control.index = entry.index
+            if entry.queue_item_id == self._manual_cycle_entry:
+                self.task_info.external_restart_script_ids.discard(entry.script_id)
+                self.task_info.desktop_restart_script_ids.discard(entry.script_id)
             result = await self._run_cycle_entry(queue_uid, entry, entries)
+            if control.paused or self.task_info.manual_pause_requested:
+                return
+            if result != "blocked" and entry.queue_item_id == self._manual_cycle_entry:
+                self._manual_cycle_entry = None
             if result != "blocked":
                 self._summary_ledger.complete(
                     entry.queue_item_id,
@@ -980,7 +1049,6 @@ class Task(TaskExecuteBase):
             logger.info(f"循环等待: {entry.script_name} 已被其他任务占用")
             return "blocked"
 
-        self.task_info.begin_script_run(script_item)
         started_at = datetime.now()
         previous_started_at = queue_item.get("Data", "LastCycleStartedAt")
         previous_next_run = queue_item.get("Schedule", "NextRunAt")
@@ -1021,6 +1089,17 @@ class Task(TaskExecuteBase):
                     script_item.status,
                     (user.status for user in script_item.user_list),
                 )
+        except (asyncio.CancelledError, QueueControlChanged):
+            if (
+                not self.task_info.manual_pause_requested
+                and not self.task_info.control.paused
+            ) or self.is_closing:
+                raise
+            self._manual_cycle_entry = entry.queue_item_id
+            await queue_item.set("Data", "LastCycleStartedAt", previous_started_at)
+            await queue_item.set("Schedule", "NextRunAt", previous_next_run)
+            script_item.status = "已暂停"
+            return "blocked"
         except ExternalHoldDeferred as deferred:
             if deferred.interrupted:
                 self.task_info.external_restart_script_ids.add(entry.script_id)
@@ -1076,6 +1155,9 @@ class Task(TaskExecuteBase):
         queue_uid: uuid.UUID,
     ) -> None:
         def start_child():
+            if self.task_info.control.paused:
+                raise QueueControlChanged
+            self.task_info.begin_script_run(self.task_info.script_list[entry.index])
             child = self.spawn(task_item)
             self._active_child_task = child
             return child
@@ -1097,6 +1179,8 @@ class Task(TaskExecuteBase):
                 return
             raise
         finally:
+            if self.task_info.manual_pause_requested:
+                self._finish_manual_pause(self._active_child_task)
             self._active_child_task = None
             if refresher is not None:
                 refresher.cancel()
@@ -1224,26 +1308,47 @@ class Task(TaskExecuteBase):
         # 只有配置了前后置脚本才加载执行工具，避免启动时连带加载通用专项。
         from app.task.general.tools import execute_script_task
 
-        script_task = asyncio.create_task(execute_script_task(Path(script_path), label))
-        self._queue_script_task = script_task
-        try:
-            succeeded = await script_task
-            await Publisher.send(
-                id=self.task_info.task_id,
-                type=protocol.TASK_NOTICE,
-                data=WSTaskNoticeData(
-                    level="info" if succeeded else "warning",
-                    message=f"{label}执行{'成功' if succeeded else '失败'}",
-                ),
+        control = self.task_info.control
+        while not self.stopped_manually and not self.is_closing:
+            await control.wait_paused()
+            if ChildSessionManager.has_external_lease_requests():
+                await control.wait_resource(
+                    ChildSessionManager.wait_if_external_requested(label)
+                )
+                continue
+            self.task_info.manual_pause_requested = False
+            self.task_info.pause_cleanup_error = ""
+            script_task = asyncio.create_task(
+                execute_script_task(Path(script_path), label)
             )
-            return succeeded
-        except asyncio.CancelledError:
-            if self.stopped_manually and if_key == "IfScriptAfterTask":
-                return False
-            raise
-        finally:
-            if self._queue_script_task is script_task:
-                self._queue_script_task = None
+            self._queue_script_task = script_task
+            try:
+                succeeded = await script_task
+                await Publisher.send(
+                    id=self.task_info.task_id,
+                    type=protocol.TASK_NOTICE,
+                    data=WSTaskNoticeData(
+                        level="info" if succeeded else "warning",
+                        message=f"{label}执行{'成功' if succeeded else '失败'}",
+                    ),
+                )
+                return succeeded
+            except asyncio.CancelledError:
+                if (
+                    self.task_info.manual_pause_requested
+                    and not self.stopped_manually
+                    and not self.is_closing
+                ):
+                    continue
+                if self.stopped_manually and if_key == "IfScriptAfterTask":
+                    return False
+                raise
+            finally:
+                if self.task_info.manual_pause_requested:
+                    self._finish_manual_pause(script_task)
+                if self._queue_script_task is script_task:
+                    self._queue_script_task = None
+        return False
 
     def _is_script_scheduled_today(self, index: int) -> bool:
         if self.script_run_days is None or index >= len(self.script_run_days):
@@ -1252,15 +1357,40 @@ class Task(TaskExecuteBase):
 
     async def _run_script_list(self, start_index: int) -> None:
         idx = start_index
+        control = self.task_info.control
+        control.index = idx
         has_started_any = False
         deferred: set[int] = set()
+        initial_items = list(self.task_info.script_list)
+        initial_days = (
+            list(self.script_run_days) if self.script_run_days is not None else None
+        )
 
         while 0 <= idx < len(self.task_info.script_list):
+            await control.wait_paused()
+            idx = control.index
+            if control.boundary == "finish":
+                self.task_info.script_list[-1].status = "跳过"
+                control.boundary = None
+                break
+            if control.boundary == "restart":
+                self.task_info.script_list[:] = initial_items
+                if initial_days is not None:
+                    self.script_run_days[:] = initial_days
+                idx = control.index = 0
+                deferred.clear()
+                control.boundary = None
+                has_started_any = False
+            if not 0 <= idx < len(self.task_info.script_list):
+                break
             # 只排列本次执行快照；保存的 QueueConfig、用户范围和日期条件不变。
             remaining = self.task_info.script_list[idx:]
+            revision = control.revision
             blocked, released = await external_holds.availability(
                 [item.script_id for item in remaining]
             )
+            if revision != control.revision or control.paused:
+                continue
             # 已删除、未选择用户或今天不排期的项仍按原规则跳过，不能被占用拖住。
             blocked_items = {
                 id(item)
@@ -1270,6 +1400,8 @@ class Task(TaskExecuteBase):
                 and self.task_info.script_user_scope(item.script_id) != frozenset()
                 and self._is_script_scheduled_today(offset)
             }
+            selected_blocked = id(self.task_info.script_list[idx]) in blocked_items
+            selected_name = self.task_info.script_list[idx].name
             for item in remaining:
                 if id(item) in blocked_items:
                     deferred.add(id(item))
@@ -1299,20 +1431,54 @@ class Task(TaskExecuteBase):
                 if self.script_run_days is not None:
                     self.script_run_days[idx:] = [pair[1] for pair in paired]
                 self.task_info.schedule_on_change()
+            control.all_blocked = bool(paired) and all(
+                id(pair[0]) in blocked_items for pair in paired
+            )
+            if not control.all_blocked:
+                control.all_blocked_notified = False
+            if control.all_blocked and not control.all_blocked_notified:
+                control.all_blocked_notified = True
+                control.warn(
+                    "暂无可运行项目，请使用启停键切换等待状态",
+                    action="blocked",
+                    buttons=False,
+                )
+                continue
+            if control.explicit_resume and selected_blocked and not control.all_blocked:
+                control.warn(
+                    f"{selected_name} 不可用，已延后；下一项 {self.task_info.script_list[idx].name}。到期仍保持暂停",
+                    action="unavailable",
+                )
+                continue
+            control.explicit_resume = False
             if id(self.task_info.script_list[idx]) in blocked_items:
-                await external_holds.wait_changed(
-                    [item.script_id for item in remaining]
+                await control.wait_resource(
+                    external_holds.wait_changed([item.script_id for item in remaining])
                 )
                 continue
             # 队列中相邻两个子任务间隔检查是否有其他程序需要连接本地远程桌面，并在其停止使用时机接受回传
             if has_started_any or ChildSessionManager.has_external_lease_requests():
-                await ChildSessionManager.wait_if_external_requested(
-                    boundary_label=f"队列任务[{self.task_info.task_id}]子任务间隔"
-                )
+                if ChildSessionManager.has_external_lease_requests():
+                    await control.wait_resource(
+                        ChildSessionManager.wait_if_external_requested(
+                            boundary_label=f"队列任务[{self.task_info.task_id}]子任务间隔"
+                        )
+                    )
+                    continue
+
+            if control.paused:
+                continue
+            control.boundary = None
+            self.task_info.manual_pause_requested = False
+            self.task_info.pause_cleanup_error = ""
+            if control.interrupted:
+                selected_id = self.task_info.script_list[idx].script_id
+                self.task_info.external_restart_script_ids.discard(selected_id)
+                self.task_info.desktop_restart_script_ids.discard(selected_id)
+                control.interrupted = False
 
             self.task_info.current_index = idx
             script_item = self.task_info.script_list[idx]
-            self.task_info.begin_script_run(script_item)
             current_script_uid = uuid.UUID(script_item.script_id)
 
             if current_script_uid not in Config.ScriptConfig:
@@ -1328,6 +1494,7 @@ class Task(TaskExecuteBase):
                     ),
                 )
                 idx += 1
+                control.index = idx
                 continue
 
             script_scope = self.task_info.script_user_scope(script_item.script_id)
@@ -1343,6 +1510,7 @@ class Task(TaskExecuteBase):
                     ),
                 )
                 idx += 1
+                control.index = idx
                 continue
 
             if not self._is_script_scheduled_today(idx):
@@ -1351,6 +1519,7 @@ class Task(TaskExecuteBase):
                     f"跳过任务: {current_script_uid}, 队列项未安排在 {self.run_weekday} 运行"
                 )
                 idx += 1
+                control.index = idx
                 continue
 
             reservation_owner = self.task_info.task_id
@@ -1375,6 +1544,7 @@ class Task(TaskExecuteBase):
                     ),
                 )
                 idx += 1
+                control.index = idx
                 continue
 
             nav_offset: int | None = None
@@ -1393,6 +1563,7 @@ class Task(TaskExecuteBase):
                         ),
                     )
                     idx += 1
+                    control.index = idx
                     continue
 
                 script_item.status = "运行"
@@ -1418,11 +1589,15 @@ class Task(TaskExecuteBase):
                         data=WSTaskNoticeData(level="error", message="脚本类型不支持"),
                     )
                     idx += 1
+                    control.index = idx
                     continue
 
                 with self._observe_script_run(script_item, script_config):
 
                     def start_child():
+                        if control.paused or control.index != idx:
+                            raise QueueControlChanged
+                        self.task_info.begin_script_run(script_item)
                         child = self.spawn(task_item)
                         self._active_child_task = child
                         return child
@@ -1430,7 +1605,15 @@ class Task(TaskExecuteBase):
                     try:
                         await external_holds.run(str(current_script_uid), start_child)
                     except asyncio.CancelledError:
-                        if self._pending_nav_offset is not None and not self.is_closing:
+                        if (
+                            self.task_info.manual_pause_requested
+                            and not self.is_closing
+                        ):
+                            script_item.status = "已暂停"
+                            nav_offset = 0
+                        elif (
+                            self._pending_nav_offset is not None and not self.is_closing
+                        ):
                             nav_offset = self._pending_nav_offset
                             self._pending_nav_offset = None
                             current_task = asyncio.current_task()
@@ -1444,7 +1627,12 @@ class Task(TaskExecuteBase):
                         else:
                             raise
                     finally:
+                        if self.task_info.manual_pause_requested:
+                            self._finish_manual_pause(self._active_child_task)
                         self._active_child_task = None
+            except QueueControlChanged:
+                script_item.status = "已暂停"
+                continue
             except ExternalHoldDeferred as held:
                 if held.interrupted:
                     self.task_info.external_restart_script_ids.add(
@@ -1462,9 +1650,10 @@ class Task(TaskExecuteBase):
             self.task_info.external_restart_script_ids.discard(script_item.script_id)
             self.task_info.desktop_restart_script_ids.discard(script_item.script_id)
             if nav_offset is not None:
-                idx = max(0, idx + nav_offset)
+                idx = control.index
             else:
                 idx += 1
+                control.index = idx
 
     async def final_task(self) -> None:
         self.task_info.flush_replays()
@@ -1592,6 +1781,7 @@ class _TaskManager:
     """业务调度器"""
 
     def __init__(self):
+        self._controlled_queue: str | None = None
         super().__init__()
 
         self.task_info: Dict[uuid.UUID, TaskInfo] = {}
@@ -1913,6 +2103,7 @@ class _TaskManager:
         view_only: bool = False,
         instance_idx: int | None = None,
         desktop_recovery_task_id: str | None = None,
+        manual_paused: bool = False,
     ) -> uuid.UUID:
         from app.core.desktop_recovery import DesktopRecovery
 
@@ -2068,6 +2259,9 @@ class _TaskManager:
             DesktopRecovery.enroll(
                 self.task_info[task_uid], previous_id=desktop_recovery_task_id
             )
+            if manual_paused:
+                self.task_info[task_uid].control.pause()
+                DesktopRecovery.update_manual_pause(self.task_info[task_uid])
             await Publisher.send(
                 id=protocol.ID_TASK_MANAGER,
                 type=protocol.TASK_CREATED,
@@ -2189,13 +2383,112 @@ class _TaskManager:
 
     # ==================== 全局热键与快捷任务控制 ====================
 
-    async def toggle_start_stop(self) -> dict[str, Any]:
-        """控制程序启停：若有任务正在运行则停止全部任务；若无任务则启动首个可用队列或脚本。"""
-        if self.task_handler or self._timed_queue_workers:
-            await self.stop_task("ALL")
-            return {"action": "stopped", "message": "已停止全部正在运行的任务"}
+    def control_snapshot(self) -> dict:
+        queues = [
+            {
+                "id": str(uid),
+                "name": q.get("Info", "Name"),
+                "isCycle": bool(q.get("Info", "CycleEnabled")),
+            }
+            for uid, q in Config.QueueConfig.items()
+        ]
+        if len(queues) == 1:
+            self._controlled_queue = queues[0]["id"]
+        elif self._controlled_queue not in {q["id"] for q in queues}:
+            self._controlled_queue = None
+        controls = []
+        for handler in self.task_handler.values():
+            info = handler.task_info
+            control = info.control
+            index = info.current_index if info.is_cycle else control.index
+            name = (
+                info.script_list[index].name
+                if 0 <= index < len(info.script_list)
+                else "等待队列初始化"
+            )
+            controls.append(
+                control.snapshot(
+                    task_id=info.task_id, queue_id=info.queue_id, name=name
+                )
+            )
+        return {
+            "queues": queues,
+            "selectedQueueId": self._controlled_queue,
+            "controls": controls,
+        }
 
-        return await self.start_default_task()
+    def select_controlled_queue(self, queue_id: str) -> dict:
+        if uuid.UUID(queue_id) not in Config.QueueConfig:
+            raise ValueError("队列不存在")
+        changed = self._controlled_queue != queue_id
+        self._controlled_queue = queue_id
+        cycle = Config.QueueConfig[uuid.UUID(queue_id)].get("Info", "CycleEnabled")
+        return {
+            "action": "selected",
+            "message": "循环队列不支持上下切换"
+            if cycle and changed
+            else "已选择受控队列",
+            "state": self.control_snapshot(),
+        }
+
+    def _controlled_handler(self):
+        self.control_snapshot()
+        if self._controlled_queue is None:
+            raise ValueError("请先在本机与热键中选择受控队列")
+        return next(
+            (
+                h
+                for h in self.task_handler.values()
+                if h.task_info.queue_id == self._controlled_queue
+            ),
+            None,
+        )
+
+    async def toggle_start_stop(self) -> dict[str, Any]:
+        """启停只控制所选队列：未启动则启动，运行则暂停，暂停则继续。"""
+        from app.core.desktop_recovery import DesktopRecovery
+
+        handler = self._controlled_handler()
+        if handler is None:
+            queue = Config.QueueConfig[uuid.UUID(self._controlled_queue)]
+            mode = "CycleRun" if queue.get("Info", "CycleEnabled") else "AutoProxy"
+            task_id = await self.add_task(
+                mode, self._controlled_queue, trigger_source="manual_task"
+            )
+            return {
+                "action": "started",
+                "taskId": str(task_id),
+                "message": "队列已启动；资源占用期间保持等待",
+            }
+        if handler.is_closing:
+            raise RuntimeError("队列正在退出，请等待收尾")
+        control = handler.task_info.control
+        if control.paused:
+            control.resume()
+            message = "已请求继续，执行前将重新检查资源占用"
+        else:
+            handler.request_pause()
+            message = "正在暂停" if control.cleaning else "队列已暂停"
+        DesktopRecovery.update_manual_pause(handler.task_info)
+        return {
+            "action": "controlled",
+            "message": message,
+            "state": self.control_snapshot(),
+        }
+
+    async def control_prompt(self, task_id: str, token: str, action: str) -> dict:
+        from app.core.desktop_recovery import DesktopRecovery
+
+        handler = self.task_handler.get(uuid.UUID(task_id))
+        if handler is None or handler.is_closing:
+            raise ValueError("通知对应的队列已结束")
+        handler.task_info.control.act_on_prompt(token, action)
+        DesktopRecovery.update_manual_pause(handler.task_info)
+        return {
+            "action": "controlled",
+            "message": "队列保持暂停" if action == "pause" else "已请求继续",
+            "state": self.control_snapshot(),
+        }
 
     async def start_default_task(self) -> dict[str, Any]:
         """启动默认队列（优先首个配置了脚本的队列，否则启动首个脚本）。"""
@@ -2232,54 +2525,21 @@ class _TaskManager:
         return {"action": "none", "message": "当前没有可启动的队列或脚本配置"}
 
     async def navigate_task(self, direction: Literal[-1, 1]) -> dict[str, Any]:
-        """切换到上一个任务（direction=-1）或下一个任务（direction=+1）。
+        from app.core.desktop_recovery import DesktopRecovery
 
-        - 若当前存在运行中的队列任务，向该任务发送跳转偏移，立即中止当前子任务并切到目标子任务；
-        - 若当前运行的是独立单脚本（或处于空闲态），则按 `Config.ScriptConfig` 顺序停止当前脚本并启动上/下一个脚本。
-        """
-        for task_uid, handler in list(self.task_handler.items()):
-            if handler.is_closing:
-                continue
-            if (
-                len(handler.task_info.script_list) > 1
-                or handler.task_info.queue_id is not None
-            ):
-                if handler.request_navigate(direction):
-                    return {
-                        "action": "navigated_in_queue",
-                        "direction": direction,
-                        "taskId": str(task_uid),
-                    }
-
-        script_uids = list(Config.ScriptConfig.keys())
-        if not script_uids:
-            return {"action": "none", "message": "当前没有已配置的脚本"}
-
-        # 若当前正在跑单个脚本，先记住它的位置并停止它
-        for task_uid, info in list(self.task_info.items()):
-            if info.script_id:
-                with suppress(ValueError):
-                    cur_uid = uuid.UUID(info.script_id)
-                    if cur_uid in script_uids:
-                        self._last_standalone_script_idx = script_uids.index(cur_uid)
-        if self.task_handler:
-            await self.stop_task("ALL")
-
-        if self._last_standalone_script_idx < 0:
-            next_idx = 0 if direction > 0 else len(script_uids) - 1
-        else:
-            next_idx = (self._last_standalone_script_idx + direction) % len(script_uids)
-
-        self._last_standalone_script_idx = next_idx
-        target_uid = script_uids[next_idx]
-        new_task_uid = await self.add_task(
-            "AutoProxy", str(target_uid), trigger_source="manual_task"
-        )
+        handler = self._controlled_handler()
+        queue = Config.QueueConfig[uuid.UUID(self._controlled_queue)]
+        if queue.get("Info", "CycleEnabled"):
+            return {"action": "ignored", "state": self.control_snapshot()}
+        if handler is None:
+            return {"action": "none", "message": "所选队列尚未启动，请先使用启停键"}
+        if not handler.request_navigate(direction):
+            raise RuntimeError("队列正在结束，不能切换")
+        DesktopRecovery.update_manual_pause(handler.task_info)
         return {
-            "action": "started_script",
-            "direction": direction,
-            "scriptId": str(target_uid),
-            "taskId": str(new_task_uid),
+            "action": "controlled",
+            "message": "已移动选择，按启停键继续",
+            "state": self.control_snapshot(),
         }
 
     async def start_startup_queue(self):

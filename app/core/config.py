@@ -3689,12 +3689,34 @@ class AppConfig(GlobalConfig):
                 if value is not None and key != "PasswordConfigured"
             }
             data = {**data, "Replay": replay}
-        await self.update(data)
-
         if "Hotkey" in data:
-            from app.core.hotkey_manager import HotkeyManager
+            import time
 
-            await HotkeyManager.reload()
+            from app.core.hotkey_capture import current_capture, wait_for_relay
+            from app.core.hotkey_manager import HotkeyManager, parse_win32_hotkey
+
+            if current_capture():
+                raise ValueError("请先结束热键录制，再保存配置")
+            keys = ("Enabled", "ToggleStartStop", "PreviousTask", "NextTask")
+            previous = {key: self.get("Hotkey", key) for key in keys}
+            proposed = {**previous, **data["Hotkey"]}
+            if proposed["Enabled"]:
+                bindings = [parse_win32_hotkey(proposed[key]) for key in keys[1:]]
+                if len(set(bindings)) != len(bindings):
+                    raise ValueError("三个任务热键不能相同")
+            await self.update(data)
+            try:
+                changed_at = time.time()
+                await HotkeyManager.reload()
+                await wait_for_relay(tuple(proposed[key] for key in keys), changed_at)
+            except Exception:
+                await self.update({"Hotkey": previous})
+                changed_at = time.time()
+                await HotkeyManager.reload()
+                await wait_for_relay(tuple(previous[key] for key in keys), changed_at)
+                raise
+        else:
+            await self.update(data)
 
         logger.success("全局设置更新成功")
 

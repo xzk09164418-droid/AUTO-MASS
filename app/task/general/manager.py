@@ -294,6 +294,10 @@ class GeneralManager(ScriptManagerBase):
         await Config.ScriptConfig[uuid.UUID(self.script_info.script_id)].unlock()
         logger.success(f"已解锁脚本配置 {self.script_info.script_id}")
 
+        if getattr(self.task_info, "manual_pause_requested", False):
+            self.script_info.status = "已暂停"
+            return
+
         if self.task_info.mode == "AutoProxy":
             await Config.ScriptConfig[
                 uuid.UUID(self.script_info.script_id)

@@ -76,6 +76,9 @@ function createBrowserHost(root, backendPort, lifecycle = {}) {
         previous: ['POST', '/api/dispatch/navigation/previous'],
         next: ['POST', '/api/dispatch/navigation/next'],
         reloadHotkeys: ['POST', '/api/dispatch/hotkey/reload'],
+        captureHotkey: ['POST', '/api/dispatch/hotkey/capture'],
+        queueControlState: ['GET', '/api/dispatch/navigation/state'],
+        queueControl: ['POST', '/api/dispatch/navigation/control'],
       }
       if (!Object.hasOwn(routes, action)) throw new Error('未知本机操作')
       const [method, endpoint] = routes[action]

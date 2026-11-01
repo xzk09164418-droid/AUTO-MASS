@@ -489,9 +489,16 @@ async function startFrontendServer(opts, runtimeLogs) {
   const url = `http://127.0.0.1:${opts.frontendPort}`
   console.log(`[AUTO-MAS] 前端 Web 服务已启动: ${url}`)
   console.log(`[AUTO-MAS] API 反向代理目标: http://${opts.backendHost}:${opts.backendPort}`)
+  const stopControlNotices = require('./web/queueControlNotices.cjs').startQueueControlNotices(
+    ROOT_DIR,
+    opts.backendPort,
+    opts.instanceId,
+    runtimeLogs
+  )
   if (opts.openBrowser && !opts.headless) openSystemBrowser(url, opts.appMode)
 
   const cleanup = () => {
+    stopControlNotices()
     try {
       server.close()
     } catch (_) {}

@@ -30,6 +30,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from starlette.background import BackgroundTask
 
 from app.core import Config, notify_channels
+from app.core.hotkey_capture import operation_lock as hotkey_operation_lock
 from app.core.notify import send_test_notification
 from app.models.config import Webhook as WebhookConfig
 from app.models.schema import (
@@ -66,6 +67,7 @@ from app.utils import debug_pattern, get_logger
 router = APIRouter(prefix="/api/setting", tags=["全局设置"])
 logger = get_logger("全局设置")
 backup_lock = asyncio.Lock()
+setting_update_lock = asyncio.Lock()
 
 
 @router.post(
@@ -186,7 +188,8 @@ async def update_script(script: SettingUpdateIn = Body(...)) -> OutBase:
 
     try:
         data = script.data.model_dump(exclude_unset=True)
-        await Config.update_setting(data)
+        async with setting_update_lock, hotkey_operation_lock:
+            await Config.update_setting(data)
 
     except Exception as e:
         logger.opt(exception=True).warning(

@@ -709,7 +709,9 @@ class AutoProxyTask(ScriptAutoProxyBase):
 
     async def _cleanup_processes(self) -> None:
         try:
-            if self.cleanup_targets:
+            if getattr(self.task_info, "manual_pause_requested", False):
+                await self.process_tracker.cleanup_owned_tree()
+            elif self.cleanup_targets:
                 await self.process_tracker.cleanup(
                     self.cleanup_targets, self.cleanup_mode
                 )
@@ -867,6 +869,12 @@ class AutoProxyTask(ScriptAutoProxyBase):
             return
 
         await self._cleanup_before_recovery()
+        if getattr(self.task_info, "manual_pause_requested", False):
+            if self.general_log_monitor is not None:
+                await self.general_log_monitor.stop()
+            if self._cleanup_error:
+                self.task_info.pause_cleanup_error = str(self._cleanup_error)
+            return
         if not self._finished:
             self.run_book = False
             if self._recovery_used:

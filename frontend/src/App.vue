@@ -23,6 +23,9 @@ import { useLocale } from './composables/useLocale.ts'
 
 const logger = window.hostAPI.getLogger('App组件')
 const windowIsBrowser = window.__AUTO_MAS_BROWSER_HOST__
+const QueueControlOverlay = defineAsyncComponent(
+  () => import('./components/QueueControlOverlay.vue')
+)
 
 // 调试面板及其子页只进开发构建：编译期常量让生产包直接摇掉这近两千行
 const DebugPanel =
@@ -78,6 +81,7 @@ onMounted(async () => {
 <template>
   <ConfigProvider :theme="antdTheme" :locale="antdLocale">
     <BrowserFilePicker v-if="windowIsBrowser" />
+    <QueueControlOverlay v-if="windowIsBrowser && isUiReady" />
     <ThemeTokenBridge />
     <GeneralOwnershipPrompt v-if="isUiReady" />
     <AppearanceDecoration />

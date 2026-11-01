@@ -1606,6 +1606,18 @@ class GlobalConfig_ChildSession(_SchemaModel):
     )
 
 
+class HotkeyCaptureIn(_SchemaModel):
+    action: Literal["begin", "end"]
+    token: str = ""
+
+
+class QueueControlIn(_SchemaModel):
+    action: Literal["select", "pause", "continue"]
+    queueId: str = ""
+    taskId: str = ""
+    token: str = ""
+
+
 class GlobalConfig_Hotkey(_SchemaModel):
     Enabled: Optional[bool] = Field(default=None, description="是否启用全局热键")
     ToggleStartStop: Optional[str] = Field(

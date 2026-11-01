@@ -30,6 +30,14 @@ async def ensure_execution_session() -> None:
         return
     if expected is None or not in_execution_session():
         raise RuntimeError("请重新启动主程序，将任务后端迁入 RDP 子桌面后再运行任务")
+    # 合法借用只断开预览，不销毁执行会话；注册任务时不得抢回连接。
+    if ChildSessionManager.has_external_lease_requests():
+        # 子会话内 WTSGetChildSessionId 不一定返回父桌面创建的子会话。
+        # 只读主桌面宿主身份，不调用会重新连接预览的 ensure_connected。
+        status = await ChildSessionManager._http_call("/status", timeout=2)
+        if status is None or status.get("childSessionId") != int(expected):
+            raise RuntimeError("RDP 执行会话已改变，请重新启动主程序")
+        return
     session_id = await ChildSessionManager.ensure_connected()
     if session_id != int(expected):
         raise RuntimeError("RDP 执行会话已改变，请重新启动主程序")

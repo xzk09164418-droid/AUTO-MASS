@@ -1691,7 +1691,7 @@ namespace BetterGenshinImpact.Service.ChildSession
 
         private async Task<object> HandleReconnectAfterExternalAsync(Dictionary<string, object> root)
         {
-            _externalLeaseHolder = null;
+            // 归还后的连接重试仍由借用方负责，成功前保留标记，避免监督器抢先恢复会话。
             await RunOnUiThreadAsync(() =>
             {
                 _statusMessage = "外部程序已归还本地远程桌面，正在恢复常驻 RDP 连接...";
@@ -1701,6 +1701,10 @@ namespace BetterGenshinImpact.Service.ChildSession
             });
 
             var connected = await EnsureConnectedAsync();
+            if (connected)
+            {
+                _externalLeaseHolder = null;
+            }
             var sid = ChildSessionNativeMethods.TryGetChildSessionId();
             return new Dictionary<string, object>
             {

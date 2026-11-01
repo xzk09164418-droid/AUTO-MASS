@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent, onMounted, onUnmounted, reactive, ref } from 'vue'
+import { computed, defineAsyncComponent, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { message, Modal } from 'ant-design-vue'
 import { t } from '@/i18n'
 import { useLocalControls } from '@/composables/useLocalControls'
 import type { LocalConfig } from '@/types/localControls'
+import { useHotkeyCapture } from '@/composables/useHotkeyCapture'
+import { useQueueControl } from '@/composables/useQueueControl'
 
 const ExternalControlPanel = defineAsyncComponent(
   () => import('./local-controls/ExternalControlPanel.vue')
@@ -11,6 +13,14 @@ const ExternalControlPanel = defineAsyncComponent(
 
 const { loading, error, status, getConfig, saveConfig, refreshStatus, action } = useLocalControls()
 const saving = ref(false)
+const queueControl = useQueueControl()
+async function selectQueue(value: string) {
+  try {
+    await queueControl.select(value)
+  } catch (cause) {
+    error.value = String(cause)
+  }
+}
 const loaded = ref(false)
 const tab = ref('settings')
 const leaseOpen = ref(false)
@@ -38,6 +48,16 @@ const lease = reactive({
   waitTimeout: 300,
 })
 const connected = computed(() => status.value.hostConnected === true)
+const capture = useHotkeyCapture((key, value) => {
+  const target = key as 'ToggleStartStop' | 'PreviousTask' | 'NextTask'
+  if (Object.entries(form.Hotkey).some(([name, binding]) => name !== key && binding === value)) {
+    message.error(t('localControls.duplicateHotkey'))
+    return
+  }
+  form.Hotkey[target] = value
+  message.info(t('localControls.captured'))
+})
+watch([tab, () => form.Hotkey.Enabled], () => capture.cancel())
 let timer: ReturnType<typeof setInterval> | undefined
 
 async function load() {
@@ -48,6 +68,7 @@ async function load() {
     Object.assign(form.ChildSession, config.ChildSession)
     Object.assign(form.Hotkey, config.Hotkey)
     loaded.value = true
+    await queueControl.refresh()
     await refreshStatus()
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)
@@ -56,6 +77,7 @@ async function load() {
   }
 }
 async function save() {
+  if (capture.field.value) return
   try {
     await formRef.value.validate()
   } catch {
@@ -173,6 +195,24 @@ onUnmounted(() => clearInterval(timer))
               <a-form-item :label="t('localControls.hotkeysEnabled')"
                 ><a-switch v-model:checked="form.Hotkey.Enabled"
               /></a-form-item>
+              <a-form-item
+                v-if="queueControl.state.value.queues.length > 1"
+                :label="t('localControls.controlQueue')"
+              >
+                <a-select
+                  :value="queueControl.state.value.selectedQueueId ?? undefined"
+                  :placeholder="t('localControls.controlQueueSelect')"
+                  @change="selectQueue"
+                >
+                  <a-select-option
+                    v-for="item in queueControl.state.value.queues"
+                    :key="item.id"
+                    :value="item.id"
+                  >
+                    {{ item.name }}{{ item.isCycle ? ` (${t('localControls.controlCycle')})` : '' }}
+                  </a-select-option>
+                </a-select>
+              </a-form-item>
               <a-row :gutter="24">
                 <a-col
                   v-for="key in ['ToggleStartStop', 'PreviousTask', 'NextTask'] as const"
@@ -185,21 +225,53 @@ onUnmounted(() => clearInterval(timer))
                     :name="['Hotkey', key]"
                     :rules="[{ required: form.Hotkey.Enabled, whitespace: true }]"
                   >
-                    <a-input
-                      v-model:value="form.Hotkey[key]"
-                      :disabled="!form.Hotkey.Enabled"
-                      placeholder="Ctrl+Alt+S"
-                    />
+                    <a-space direction="vertical">
+                      <a-typography-text code>{{ form.Hotkey[key] }}</a-typography-text>
+                      <a-button
+                        :disabled="!form.Hotkey.Enabled || !!capture.field.value"
+                        @click="capture.begin(key)"
+                        >{{ t('localControls.captureHotkey') }}</a-button
+                      >
+                    </a-space>
                   </a-form-item>
                 </a-col>
               </a-row>
+              <a-alert
+                v-if="capture.error.value"
+                type="error"
+                show-icon
+                :message="capture.error.value"
+              />
+              <a-alert
+                v-if="capture.field.value"
+                type="info"
+                show-icon
+                :message="
+                  t(
+                    capture.ready.value
+                      ? 'localControls.captureReady'
+                      : 'localControls.capturePreparing'
+                  )
+                "
+                :description="capture.preview.value"
+              >
+                <template #action
+                  ><a-button @click="capture.cancel">{{
+                    t('localControls.captureCancel')
+                  }}</a-button></template
+                >
+              </a-alert>
               <a-typography-paragraph type="secondary">{{
                 t('localControls.hotkeysHint')
               }}</a-typography-paragraph>
             </div>
-            <a-button type="primary" :loading="saving" :disabled="!loaded" @click="save">{{
-              t('localControls.save')
-            }}</a-button>
+            <a-button
+              type="primary"
+              :loading="saving"
+              :disabled="!loaded || !!capture.field.value"
+              @click="save"
+              >{{ t('localControls.save') }}</a-button
+            >
           </a-form>
         </a-spin>
       </a-tab-pane>
