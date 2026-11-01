@@ -34,7 +34,11 @@ from typing import Any
 import psutil
 
 from app.models.schema import ChildSessionLeaseProcessData
-from app.services.borrowed_desktop_process import BorrowedDesktopProcess
+from app.services.borrowed_desktop_process import (
+    BorrowedDesktopProcess,
+    forget_lease_processes,
+    save_lease_processes,
+)
 from app.utils.logger import get_logger
 
 logger = get_logger("远程桌面分身")
@@ -691,6 +695,7 @@ class _ChildSessionManager:
         for lid in expired_ids:
             lease = self._leases.get(lid)
             if lease is not None and lease.status == "pending":
+                forget_lease_processes(lid)
                 self._leases.pop(lid)
                 lease.status = "expired"
                 lease._granted_event.set()
@@ -741,6 +746,7 @@ class _ChildSessionManager:
                 else None
             ),
         )
+        save_lease_processes(lease_id, lease.caller, lease.process)
         self._leases[lease_id] = lease
         self._all_leases_released_event.clear()
         logger.info(
@@ -752,6 +758,7 @@ class _ChildSessionManager:
             try:
                 await self._grant_pending_leases()
             except Exception:
+                forget_lease_processes(lease_id)
                 self._leases.pop(lease_id, None)
                 lease.status = "failed"
                 lease._granted_event.set()
@@ -867,6 +874,9 @@ class _ChildSessionManager:
                 if lease.process is not None:
                     try:
                         lease.process.collect()
+                        save_lease_processes(
+                            lease.lease_id, lease.caller, lease.process
+                        )
                     except (psutil.Error, OSError, ValueError):
                         lease.status = "blocked"
                         await DesktopRecovery.notify(

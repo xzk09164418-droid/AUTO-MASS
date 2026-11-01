@@ -112,7 +112,7 @@ namespace AutoMas.Launcher
             var itemForceRestart = new ToolStripMenuItem("强制重启 MAS（清空运行状态）");
             itemForceRestart.Click += delegate
             {
-                if (MessageBox.Show("将强制终止当前任务并丢弃进度；启用远程桌面时会注销其子会话。保留用户配置，不重启电脑，本次不续跑旧队列。是否继续？",
+                if (MessageBox.Show("将强制终止当前任务及身份已核实的外部占用进程树，清除全部占用和临时运行状态；无法核实的外部程序会保留并报告。启用远程桌面时注销其子会话。保留配置，不重启电脑，不续跑旧队列。是否继续？",
                     "强制重启 MAS", MessageBoxButtons.OKCancel, MessageBoxIcon.Warning) != DialogResult.OK) return;
                 try
                 {

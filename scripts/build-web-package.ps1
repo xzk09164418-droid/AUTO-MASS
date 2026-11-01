@@ -13,7 +13,7 @@ New-Item -ItemType Directory -Path $target -Force | Out-Null
 $files = & git -c "safe.directory=$($root.Replace('\','/'))" -C $root ls-files
 if ($LASTEXITCODE -ne 0) { throw '无法读取源码文件列表' }
 foreach ($relative in $files) {
-    if ($relative -notmatch '^(app/|res/|plugins/(auto_mas_core|okww_adapter|ok_script_adapter)/|main\.py$|pyproject\.toml$|uv\.lock$|LICENSE$|scripts/(install_release\.ps1|control-toast\.py|control-toast\.ps1|force-restart\.ps1)$|README-RELEASE\.md$|Start-AUTO-MAS\.bat$)') { continue }
+    if ($relative -notmatch '^(app/|res/|plugins/(auto_mas_core|okww_adapter|ok_script_adapter)/|main\.py$|pyproject\.toml$|uv\.lock$|LICENSE$|scripts/(install_release\.ps1|control-toast\.py|control-toast\.ps1|force-restart\.ps1|force-restart-state\.py)$|README-RELEASE\.md$|Start-AUTO-MAS\.bat$)') { continue }
     if ($relative -match '(^|/)(__pycache__|tests?)(/|$)|\.py[co]$|\.test\.') { continue }
     $destination = Join-Path $target $relative
     New-Item -ItemType Directory -Path (Split-Path -Parent $destination) -Force | Out-Null

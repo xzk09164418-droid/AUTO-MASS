@@ -2,7 +2,10 @@
 
 import asyncio
 import ctypes
+import json
 import os
+import uuid
+from pathlib import Path
 
 import psutil
 
@@ -67,3 +70,36 @@ class BorrowedDesktopProcess:
         )
         if alive:
             raise RuntimeError("外部进程未完全退出，保持暂停")
+
+
+def save_lease_processes(
+    lease_id: str, caller: str, process: BorrowedDesktopProcess | None
+) -> None:
+    """保存已验证的借用身份，供后端不可用时的强制重启反查。"""
+    directory = Path("data/external-processes")
+    directory.mkdir(parents=True, exist_ok=True)
+    target = directory / f"{uuid.UUID(lease_id)}.json"
+    temporary = target.with_suffix(".tmp")
+    identities = (
+        []
+        if process is None
+        else [
+            {
+                "pid": item.pid,
+                "createdAt": item.create_time(),
+                "sessionId": process.session_id,
+            }
+            for item in process.processes.values()
+        ]
+    )
+    temporary.write_text(
+        json.dumps({"caller": caller, "processes": identities}), encoding="utf-8"
+    )
+    temporary.replace(target)
+
+
+def forget_lease_processes(lease_id: str) -> None:
+    """正常归还后不再授权强制重启结束该调用方进程。"""
+    (Path("data/external-processes") / f"{uuid.UUID(lease_id)}.json").unlink(
+        missing_ok=True
+    )
