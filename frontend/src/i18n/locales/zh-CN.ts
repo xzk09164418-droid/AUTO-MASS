@@ -8,6 +8,7 @@
  * en-US.ts 缺失的 key 会自动回退到这里。
  */
 export default {
+  startupAnimation: { waiting: '连接后端并准备主页' },
   hostPorts: {
     title: '本程序连接地址',
     frontend: '页面地址',

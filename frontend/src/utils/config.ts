@@ -250,6 +250,7 @@ export async function resetConfig(): Promise<void> {
       localStorage.removeItem('theme-mode')
       localStorage.removeItem('theme-color')
       localStorage.removeItem('app-initialized')
+      localStorage.removeItem('auto-mas.startup-animation.version')
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error)
       logger.error(`重置配置失败: ${errorMsg}`)

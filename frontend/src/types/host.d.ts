@@ -527,6 +527,8 @@ export interface HostAPI extends DesktopMascotHostAPI, DesktopMascotTaskHostAPI 
   backendStatus: () => Promise<BackendStatus>
   getStartupStatus: () => Promise<{
     runId: string
+    progress?: number
+    backendReachable?: boolean
     coreReady: boolean
     backgroundStatus: string
     error: string

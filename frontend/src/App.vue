@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent, onMounted } from 'vue'
+import { computed, defineAsyncComponent, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { ConfigProvider } from 'ant-design-vue'
 import { useTheme } from './composables/useTheme.ts'
@@ -13,6 +13,7 @@ import UpdateModal from './components/UpdateModal.vue'
 import GlobalPowerCountdown from './components/GlobalPowerCountdown.vue'
 import AppClosingOverlay from './components/AppClosingOverlay.vue'
 import BackendStartupOverlay from './components/BackendStartupOverlay.vue'
+import StartupAnimation from './components/StartupAnimation.vue'
 import GeneralOwnershipPrompt from './components/GeneralOwnershipPrompt.vue'
 import CursorEffectLayer from './components/CursorEffectLayer.vue'
 import AppearanceDecoration from './components/AppearanceDecoration.vue'
@@ -23,6 +24,12 @@ import { useLocale } from './composables/useLocale.ts'
 
 const logger = window.hostAPI.getLogger('App组件')
 const windowIsBrowser = window.__AUTO_MAS_BROWSER_HOST__
+const backendStartup = ref({
+  coreReady: !windowIsBrowser,
+  progress: windowIsBrowser ? 10 : 70,
+  error: '',
+  label: '',
+})
 const QueueControlOverlay = defineAsyncComponent(
   () => import('./components/QueueControlOverlay.vue')
 )
@@ -40,7 +47,7 @@ const { antdLocale } = useLocale()
 const { updateVisible, updateData, latestVersion, onUpdateConfirmed } = useUpdateModal()
 const { isClosing } = useAppClosing()
 const { playSound } = useAudioPlayer()
-const { isInitialized, isUiReady } = useAppInitialization()
+const { isInitialized, isUiReady, startupError } = useAppInitialization()
 const cursorEffectStore = useCursorEffectStore()
 const performanceStore = usePerformanceStore()
 
@@ -96,7 +103,7 @@ onMounted(async () => {
       <router-view />
     </div>
     <!-- 其他页面使用带标题栏的应用布局 - 仅在初始化完成后挂载 -->
-    <div v-else-if="isUiReady && performanceStore.initialized" class="app-container">
+    <div v-else-if="isInitialized && performanceStore.initialized" class="app-container">
       <AppLayout />
     </div>
 
@@ -119,7 +126,16 @@ onMounted(async () => {
 
     <!-- 应用关闭遮罩 - 始终可用 -->
     <AppClosingOverlay :visible="isClosing" />
-    <BackendStartupOverlay />
+    <BackendStartupOverlay @status="backendStartup = $event" />
+    <!-- 阶段权重仅表示已确认的启动里程碑，不代表剩余耗时。 -->
+    <StartupAnimation
+      v-if="!isStandalonePage"
+      :ready="backendStartup.coreReady && isInitialized && performanceStore.initialized"
+      :progress="!backendStartup.coreReady ? backendStartup.progress : !isInitialized ? 70 : 90"
+      :error="startupError || backendStartup.error"
+      :label="backendStartup.label"
+      :setup-required="isInitializationPage"
+    />
     <CursorEffectLayer v-if="isUiReady && performanceStore.initialized" />
   </ConfigProvider>
 </template>

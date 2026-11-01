@@ -34,9 +34,13 @@ import { openLaunchLogWindow } from '@/utils/launch'
 import { startSkippedInitializationStartup } from '@/utils/skippedInitializationStartup'
 
 defineOptions({ name: 'BackendStartupOverlay' })
+const emit = defineEmits<{
+  status: [state: { coreReady: boolean; progress: number; error: string; label: string }]
+}>()
 const { t } = useI18n()
 const { isInitialized, isBootstrapping, startupError } = useAppInitialization()
 const coreReady = ref(false)
+const progress = ref(10)
 const complete = ref(false)
 const statusError = ref('')
 const logs = ref('')
@@ -44,8 +48,10 @@ const collapsed = ref(false)
 const error = computed(() => startupError.value || statusError.value)
 const visible = computed(
   () =>
-    window.__AUTO_MAS_BROWSER_HOST__ && (!complete.value || !isInitialized.value || !!error.value)
+    window.__AUTO_MAS_BROWSER_HOST__ &&
+    ((coreReady.value && (!complete.value || !isInitialized.value)) || !!error.value)
 )
+const needsPolling = computed(() => !complete.value || !isInitialized.value || !!error.value)
 const STARTUP_POLL_INTERVAL_MS = 1000
 const FAST_STARTUP_POLL_INTERVAL_MS = 100
 const FAST_STARTUP_POLL_WINDOW_MS = 5000
@@ -56,7 +62,7 @@ let refreshRequested = false
 let timer: ReturnType<typeof setTimeout> | undefined
 
 async function poll() {
-  if (disposed) return
+  if (disposed || !window.__AUTO_MAS_BROWSER_HOST__) return
   if (polling) {
     refreshRequested = true
     return
@@ -68,6 +74,7 @@ async function poll() {
     if (disposed) return
     const becameReady = state.coreReady && !coreReady.value
     coreReady.value = state.coreReady
+    progress.value = state.progress ?? (state.coreReady ? 70 : state.backendReachable ? 40 : 10)
     complete.value = state.backgroundStatus === 'ready'
     statusError.value = state.error
     logs.value = state.logs.slice(-20).join('\n')
@@ -76,12 +83,19 @@ async function poll() {
     if (!disposed) statusError.value = t('launch.statusUnavailable', { detail: String(cause) })
   } finally {
     polling = false
+    if (!disposed)
+      emit('status', {
+        coreReady: coreReady.value,
+        progress: progress.value,
+        error: error.value,
+        label: logs.value.split('\n').filter(Boolean).at(-1) || '',
+      })
     // 启动前几秒及时发现就绪；失败或长时间未完成时恢复低频检查。
     let delay = STARTUP_POLL_INTERVAL_MS
     if (!error.value && performance.now() < fastPollUntil) delay = FAST_STARTUP_POLL_INTERVAL_MS
     if (refreshRequested) delay = 0
     refreshRequested = false
-    if (!disposed && visible.value) timer = setTimeout(poll, delay)
+    if (!disposed && needsPolling.value) timer = setTimeout(poll, delay)
   }
 }
 
@@ -89,7 +103,7 @@ async function poll() {
 watch(
   isInitialized,
   initialized => {
-    if (initialized && visible.value) void poll()
+    if (initialized && needsPolling.value) void poll()
   },
   { immediate: true }
 )

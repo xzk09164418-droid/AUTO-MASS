@@ -1,0 +1,154 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>
+:root{--bg:#e9e9e4;--ink:#111;--dim:#8a8a84;--line:rgba(0,0,0,.12);--y:#ffe600;--panel:#111;--on-panel:#f4f4ef;
+box-sizing:border-box;
+/* 基准字号：1080p=16px，4K=32px，所有尺寸用 rem 随屏幕等比缩放 */
+font-size:max(10px,min(.8334vw,1.4815vh))}
+@media (orientation:portrait){:root{font-size:max(12px,min(4.2vw,1.9vh))}}
+@media (min-width:2561px) and (orientation:landscape){:root{font-size:min(.8334vw,1.4815vh)}}
+@media (prefers-color-scheme:dark){:root[data-theme="auto"]{--bg:#121211;--ink:#f1f1ec;--dim:#77776f;--line:rgba(255,255,255,.12);--panel:#f1f1ec;--on-panel:#111}}
+:root[data-theme="dark"]{--bg:#121211;--ink:#f1f1ec;--dim:#77776f;--line:rgba(255,255,255,.12);--panel:#f1f1ec;--on-panel:#111}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--ink);font-family:"Bahnschrift","DIN Alternate","Noto Sans SC","PingFang SC","Microsoft YaHei",sans-serif;overflow:hidden}
+.mono{font-family:"JetBrains Mono","SF Mono",Consolas,"Courier New",monospace}
+#stage{position:fixed;z-index:5;background:var(--bg);inset:0;height:100vh;height:100dvh;overflow:hidden;
+--si-t:env(safe-area-inset-top,0px);--si-b:env(safe-area-inset-bottom,0px);--si-l:env(safe-area-inset-left,0px);--si-r:env(safe-area-inset-right,0px)}
+.grid{position:absolute;inset:0;background-image:linear-gradient(var(--line) 1px,transparent 1px),linear-gradient(90deg,var(--line) 1px,transparent 1px);background-size:3rem 3rem;background-position:center;opacity:0;animation:fade 1s .1s forwards;mask-image:radial-gradient(ellipse at center,#000 30%,transparent 85%);-webkit-mask-image:radial-gradient(ellipse at center,#000 30%,transparent 85%)}
+@keyframes fade{to{opacity:1}}
+.sweep{position:absolute;top:0;bottom:0;width:38%;left:-60%;background:var(--y);transform:skewX(-18deg);animation:sweep 1s cubic-bezier(.7,0,.2,1) .15s forwards}
+@keyframes sweep{0%{left:-60%}55%{left:40%}100%{left:130%}}
+.corner{position:absolute;width:1.75rem;height:1.75rem;border:max(2px,.125rem) solid var(--ink);opacity:0;animation:fade .4s .9s forwards}
+.c1{top:calc(1.25rem + var(--si-t));left:calc(1.25rem + var(--si-l));border-right:0;border-bottom:0}
+.c2{top:calc(1.25rem + var(--si-t));right:calc(1.25rem + var(--si-r));border-left:0;border-bottom:0}
+.c3{bottom:calc(1.25rem + var(--si-b));left:calc(1.25rem + var(--si-l));border-right:0;border-top:0}
+.c4{bottom:calc(1.25rem + var(--si-b));right:calc(1.25rem + var(--si-r));border-left:0;border-top:0}
+.tag{position:absolute;font-size:max(10px,.75rem);line-height:1.5;letter-spacing:.18em;color:var(--dim);opacity:0;animation:fade .5s 1.1s forwards}
+.t1{top:calc(1.5rem + var(--si-t));left:calc(3.5rem + var(--si-l))}
+.t2{top:calc(1.5rem + var(--si-t));right:calc(3.5rem + var(--si-r));text-align:right}
+.t3{bottom:calc(1.5rem + var(--si-b));left:calc(3.5rem + var(--si-l))}
+.t4{bottom:calc(1.5rem + var(--si-b));right:calc(3.5rem + var(--si-r));text-align:right}
+.center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1.1rem;padding:var(--si-t) 1.5rem var(--si-b)}
+.logo{width:5.75rem;height:5.75rem;position:relative;opacity:0;animation:fade .4s .7s forwards}
+.logo svg{width:100%;height:100%;overflow:visible}
+.ring{transform-origin:50% 50%;animation:spin 6s linear infinite}
+.ring2{transform-origin:50% 50%;animation:spin 3s linear infinite reverse}
+@keyframes spin{to{transform:rotate(360deg)}}
+.draw{stroke-dasharray:300;stroke-dashoffset:300;animation:draw 1.2s .8s ease-out forwards}
+@keyframes draw{to{stroke-dashoffset:0}}
+.word{display:flex;font-weight:800;font-size:min(5.75rem,15vw);letter-spacing:.06em;line-height:1}
+.word span{display:inline-block;clip-path:inset(0 0 100% 0);transform:translateY(40%);animation:rise .55s cubic-bezier(.2,.8,.2,1) forwards}
+@keyframes rise{to{clip-path:inset(0 0 0 0);transform:none}}
+.sub{display:flex;align-items:center;gap:.65rem;font-size:max(10px,.75rem);letter-spacing:.42em;opacity:0;animation:fade .5s 1.7s forwards}
+.sub b{background:var(--panel);color:var(--on-panel);padding:.2rem .5rem;letter-spacing:.2em}
+.flow,.bar,.log{width:min(26rem,80vw)}
+.flow{position:relative;display:flex;justify-content:space-between;align-items:center;height:1rem;opacity:0;animation:fade .4s 1.5s forwards}
+.flow::before{content:"";position:absolute;left:0;right:0;top:50%;height:max(2px,.125rem);background:var(--line);transform:translateY(-50%)}
+.flow u{position:absolute;left:0;top:50%;height:max(2px,.125rem);width:0;background:var(--ink);transform:translateY(-50%);transition:width .2s linear}
+.flow i{position:relative;width:.8rem;height:.8rem;background:var(--bg);border:max(2px,.125rem) solid var(--ink);transform:rotate(45deg);transition:background .2s,transform .3s}
+.flow i.on{background:var(--y);transform:rotate(225deg) scale(1.15)}
+.bar{opacity:0;animation:fade .4s 1.9s forwards}
+.seg{display:grid;grid-template-columns:repeat(20,1fr);gap:max(2px,.19rem);height:.625rem}
+.seg i{background:var(--line);transition:background .15s}
+.seg i.on{background:var(--ink)}.seg i.on.hot{background:var(--y);box-shadow:0 0 0 max(1px,.0625rem) var(--ink)}
+.row{display:flex;justify-content:space-between;font-size:max(10px,.6875rem);margin-top:.5rem;color:var(--dim);letter-spacing:.1em}
+.row #pct{color:var(--ink);font-weight:700}
+.log{height:3.4rem;overflow:hidden;font-size:max(10px,.6875rem);line-height:1.125rem;color:var(--dim);opacity:0;animation:fade .4s 2s forwards}
+.log div::before{content:"> ";color:var(--ink)}
+.log .ok{color:var(--ink)}
+#stage.open{background:transparent}
+#out{position:absolute;inset:0;background:var(--y);transform:translateX(-101%);pointer-events:none}
+#out.go{animation:wipe .7s cubic-bezier(.7,0,.2,1) forwards}
+@keyframes wipe{0%{transform:translateX(-101%)}50%{transform:translateX(0)}100%{transform:translateX(101%)}}
+@keyframes itin{to{opacity:1;transform:none}}
+#done{position:absolute;inset:0;display:none;align-items:center;justify-content:center;font-size:.8rem;letter-spacing:.3em;color:var(--dim)}
+/* 竖屏：元素纵向留白更大，窄屏隐藏右侧装饰标签避免重叠 */
+@media (orientation:portrait){
+  .center{gap:1.5rem}.logo{width:7rem;height:7rem}
+  .sweep{width:60%}
+}
+@media (max-width:640px){.t2,.t4{display:none}.t1,.t3{left:calc(3rem + var(--si-l))}}
+/* 矮屏（手机横屏）：压缩垂直占用 */
+@media (max-height:480px) and (orientation:landscape){
+  .center{gap:.7rem}.logo{width:4rem;height:4rem}.word{font-size:3.6rem}.log{height:2.3rem}
+}
+/* 超宽屏（≥2:1）：限制网格遮罩，避免内容显得过小 */
+@media (min-aspect-ratio:2/1){.center{gap:1rem}}
+@media (prefers-reduced-motion:reduce){*{animation-duration:.01s!important;animation-delay:0s!important}}
+
+html,body{background:transparent!important} #stage.open{background:transparent} #out.cover{animation:cover .375s ease-in forwards} #out.reveal{animation:reveal .375s ease-out forwards} @keyframes cover{from{transform:translateX(-101%)}to{transform:translateX(0)}} @keyframes reveal{from{transform:translateX(0)}to{transform:translateX(101%)}}</style></head><body><div id="stage">
+  <div class="grid"></div>
+  <div class="sweep"></div>
+  <div class="corner c1"></div><div class="corner c2"></div><div class="corner c3"></div><div class="corner c4"></div>
+  <div class="tag mono t1">AUTO-MAS // SYS.BOOT</div>
+  <div class="tag mono t2">多脚本 · 多配置<br>MULTI-SCRIPT HUB</div>
+  <div class="tag mono t3">AUTO-MAS · <span id="bn"></span></div>
+  <div class="tag mono t4">任务流 · 日志监看</div>
+
+  <div class="center">
+    <div class="logo">
+      <svg viewBox="0 0 100 100" role="img" aria-label="AUTO-MAS">
+        <g fill="none" stroke="currentColor" stroke-linejoin="miter">
+          <g class="ring" opacity=".35"><circle cx="50" cy="50" r="46" stroke-width="3" stroke-dasharray="4 8"/></g><g class="ring2"><path d="M50 8 L86 29 V71 L50 92 L14 71 V29 Z" stroke-dasharray="6 4" stroke-width="1.5"/></g>
+          <path class="draw" d="M28 71.6 L50 21.6 L72 71.6" stroke-width="6" stroke-linecap="square"/>
+          <polygon points="44.3,49.6 44.3,69.6 60.1,59.6" fill="#ffe600" stroke-width="2"/>
+        </g>
+      </svg>
+    </div>
+    <div class="word" id="word" aria-label="AUTO-MAS"></div>
+    <div class="sub mono"><b>启动中</b><span>STARTING UP</span></div>
+    <div class="flow" id="flow"><u></u><i></i><i></i><i></i><i></i><i></i><i></i></div>
+    <div class="bar">
+      <div class="seg" id="seg"></div>
+      <div class="row mono"><span id="stat">LOADING MODULES</span><span id="pct">0%</span></div>
+    </div>
+    <div class="log mono" id="log"></div>
+  </div>
+
+  <div id="out"></div>
+  <div id="done" class="mono">READY</div>
+</div>
+<script>
+const cold='cold'==='cold', reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
+const intro=reduced?0:(cold?1900:450), started=performance.now();
+const $=id=>document.getElementById(id);
+let ready=false, exiting=false, progress=0, target=0;
+'AUTO-MAS'.split('').forEach((c,i)=>{const el=document.createElement('span');el.textContent=c;el.style.animationDelay=(cold?.45+i*.06:i*.035)+'s';$('word').appendChild(el)});
+if(cold){for(let i=0;i<20;i++)$('seg').appendChild(document.createElement('i'));}
+function exit(){
+ if(exiting)return;exiting=true;
+ const stage=$('stage'),out=$('out');
+ const close=()=>{stage.remove();parent.postMessage({type:'mas-splash-closed'},'*')};
+ const covered=()=>{
+  stage.querySelectorAll('.center,.tag,.corner,.grid,.sweep').forEach(el=>el.style.visibility='hidden');
+  stage.classList.add('open');parent.postMessage({type:'mas-splash-ready'},'*');
+  if(reduced){close();return}
+  out.addEventListener('animationend',close,{once:true});out.className='reveal';
+ };
+ if(reduced){covered();return}
+ out.addEventListener('animationend',covered,{once:true});out.className='cover';
+}
+addEventListener('message',event=>{
+ if(event.source!==parent||event.data?.type!=='mas-splash-state')return;
+ document.documentElement.dataset.theme=event.data.dark?'dark':'light';
+ ready=!!event.data.ready;target=ready?100:Math.max(target,event.data.progress||0);
+ if(!cold)document.querySelector('.state').textContent=event.data.label||'RESUMING';
+ if(cold&&$('stat'))$('stat').textContent=event.data.error||event.data.label||'LOADING';
+ if(cold){$('bn').textContent=event.data.version||'';const label=event.data.label||'LOADING';if($('log').lastElementChild?.textContent!==label){const line=document.createElement('div');line.textContent=label;$('log').appendChild(line);while($('log').children.length>3)$('log').firstElementChild.remove();}}
+});
+function tick(){
+ const elapsed=performance.now()-started;
+ const goal=reduced||!cold?target:Math.min(target,Math.max(0,elapsed-intro)/1500*100);
+ progress=reduced||!cold?goal:progress+(goal-progress)*.09;
+ if(goal-progress<.2)progress=goal;
+ if(cold){
+  $('pct').textContent=Math.floor(progress)+'%';
+  [...$('seg').children].forEach((el,i)=>el.className=i<Math.round(progress/5)?'on':'');
+ }
+ const flow=document.querySelector('.flow');
+ const nodes=flow.getElementsByTagName('i');[...nodes].forEach((el,i)=>el.className=progress>=i/(nodes.length-1)*100&&progress>0?'on':'');
+ flow.getElementsByTagName('u')[0].style.width=progress+'%';
+ flow.setAttribute('role','progressbar');flow.setAttribute('aria-label','AUTO-MAS');flow.setAttribute('aria-valuemin','0');flow.setAttribute('aria-valuemax','100');flow.setAttribute('aria-valuenow',String(Math.floor(progress)));
+ if(ready&&elapsed>=intro&&progress>=99.99){exit();return}
+ requestAnimationFrame(tick);
+}
+parent.postMessage({type:'mas-splash-loaded'},'*');tick();
+</script></body></html>

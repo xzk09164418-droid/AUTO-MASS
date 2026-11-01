@@ -1,9 +1,9 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 <# 构建 Node.js + 浏览器 + Python 源码包，不启动或修改本机服务。 #>
-param()
+param([string]$OutputDirectory)
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
-$target = Join-Path $root 'frontend\dist\win-unpacked'
+$target = if ($OutputDirectory) { [IO.Path]::GetFullPath($OutputDirectory) } else { Join-Path $root 'frontend\dist\win-unpacked' }
 if (Test-Path -LiteralPath $target) { throw "输出目录已存在，请先归档或移走：$target" }
 foreach ($relative in @('frontend\dist-browser\browser.html', 'frontend\dist-host\services.cjs')) {
     if (!(Test-Path -LiteralPath (Join-Path $root $relative))) { throw "请先运行 yarn build:web：缺少 $relative" }
@@ -13,7 +13,7 @@ New-Item -ItemType Directory -Path $target -Force | Out-Null
 $files = & git -c "safe.directory=$($root.Replace('\','/'))" -C $root ls-files
 if ($LASTEXITCODE -ne 0) { throw '无法读取源码文件列表' }
 foreach ($relative in $files) {
-    if ($relative -notmatch '^(app/|res/|plugins/(auto_mas_core|okww_adapter|ok_script_adapter)/|main\.py$|pyproject\.toml$|uv\.lock$|LICENSE$|scripts/install_release\.ps1$|README-RELEASE\.md$|Start-AUTO-MAS\.bat$)') { continue }
+    if ($relative -notmatch '^(app/|res/|plugins/(auto_mas_core|okww_adapter|ok_script_adapter)/|main\.py$|pyproject\.toml$|uv\.lock$|LICENSE$|scripts/(install_release\.ps1|control-toast\.py|control-toast\.ps1|force-restart\.ps1)$|README-RELEASE\.md$|Start-AUTO-MAS\.bat$)') { continue }
     if ($relative -match '(^|/)(__pycache__|tests?)(/|$)|\.py[co]$|\.test\.') { continue }
     $destination = Join-Path $target $relative
     New-Item -ItemType Directory -Path (Split-Path -Parent $destination) -Force | Out-Null
@@ -28,7 +28,7 @@ Copy-Item -LiteralPath (Join-Path $root 'frontend\server.js') -Destination $fron
 $modulesTarget = Join-Path $frontendTarget 'node_modules'
 New-Item -ItemType Directory -Path $modulesTarget -Force | Out-Null
 Copy-Item -LiteralPath (Join-Path $root 'frontend\node_modules\adm-zip') -Destination $modulesTarget -Recurse
-foreach ($file in @('host.cjs', 'runtimeLogs.cjs', 'startupStatus.cjs', 'instance.cjs')) {
+foreach ($file in @('host.cjs', 'runtimeLogs.cjs', 'startupStatus.cjs', 'instance.cjs', 'queueControlNotices.cjs')) {
     Copy-Item -LiteralPath (Join-Path $root "frontend\web\$file") -Destination (Join-Path $frontendTarget 'web')
 }
 $node = (Get-Command node.exe -ErrorAction Stop).Source
@@ -42,6 +42,9 @@ $hostOutput = Join-Path $target 'res\ChildSessionHost\AutoMas.ChildSessionHost.e
 $hostSources = @(Get-ChildItem -LiteralPath (Join-Path $root 'res\ChildSessionHost') -Filter '*.cs' | ForEach-Object { $_.FullName })
 & $csc @common "/win32manifest:$(Join-Path $root 'res\ChildSessionHost\app.manifest')" "/out:$hostOutput" '/r:Microsoft.CSharp.dll' @hostSources
 if ($LASTEXITCODE -ne 0) { throw '远程桌面宿主编译失败' }
+$toastOutput = Join-Path $target 'res\QueueControlToast\QueueControlToast.exe'
+& $csc @common "/out:$toastOutput" '/r:System.Web.Extensions.dll' (Join-Path $root 'res\QueueControlToast\Program.cs')
+if ($LASTEXITCODE -ne 0) { throw 'Queue control notification helper compilation failed' }
 $launcherOutput = Join-Path $target 'AUTO-MAS.exe'
 $launcherSource = Join-Path $root 'res\Launcher\AutoMasLauncher.cs'
 & $csc @common "/win32manifest:$(Join-Path $root 'res\Launcher\app.manifest')" "/out:$launcherOutput" '/r:System.Web.Extensions.dll' $launcherSource

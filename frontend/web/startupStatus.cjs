@@ -20,6 +20,16 @@ function createStartupStatus(root, backendPort, launchError, expectedId) {
   const runId = `${Date.now()}-${process.pid}`
   let logs = []
   let pending = null
+  let coreCompleted = false
+  const completedSteps = new Set()
+  const coreSteps = [
+    '本地远程桌面分身',
+    '桌面显示输出守卫',
+    '全局热键服务',
+    '通知渠道',
+    '活动关卡信息获取',
+    '主业务定时器',
+  ]
   async function read() {
     for (const state of files) {
       if (!fs.existsSync(state.file)) continue
@@ -51,7 +61,15 @@ function createStartupStatus(root, backendPort, launchError, expectedId) {
       state.carry = lines.pop().slice(-4096)
       state.position = stat.size
       // 标准流可能带终端颜色码；仅清理小窗展示，原日志和级别保持原样。
-      logs = [...logs, ...lines.map(line => line.replace(terminalCodes, ''))].slice(-60)
+      const cleanLines = lines.map(line => line.replace(terminalCodes, ''))
+      // 仅消费本轮 MAS 自身的明确完成事件，API 可响应不等于核心初始化完成。
+      for (const line of cleanLines) {
+        if (line.includes('后端核心服务已就绪，继续配置按需服务入口')) coreCompleted = true
+        for (const step of coreSteps) {
+          if (line.includes(`后台初始化步骤结束: ${step}，`)) completedSteps.add(step)
+        }
+      }
+      logs = [...logs, ...cleanLines].slice(-60)
     }
     const health = await new Promise(resolve => {
       const req = http.get(
@@ -76,14 +94,39 @@ function createStartupStatus(root, backendPort, launchError, expectedId) {
         resolve(null)
       })
     })
+    const reachable = !!health?.ready && (!expectedId || health.instanceId === expectedId)
+    if (!reachable) {
+      coreCompleted = false
+      completedSteps.clear()
+    }
+    const coreReady = reachable && (coreCompleted || health.backgroundStatus === 'ready')
+    let recoveryError = ''
+    if (!reachable) {
+      try {
+        const recovery = JSON.parse(
+          await fs.promises.readFile(path.join(root, 'data/desktop_recovery/control.json'), 'utf8')
+        )
+        if (recovery.phase === 'paused')
+          recoveryError =
+            '远程桌面恢复已暂停，后端尚未启动。可通过托盘“强制重启 MAS（清空运行状态）”放弃旧进度并重新启动；普通启动不会解除暂停。'
+      } catch (error) {
+        if (error.code !== 'ENOENT') recoveryError = '无法读取远程桌面恢复状态，请检查恢复记录。'
+      }
+    }
     return {
       runId,
-      coreReady: !!health?.ready && (!expectedId || health.instanceId === expectedId),
+      progress: coreReady
+        ? 70
+        : reachable
+          ? 20 + Math.round((completedSteps.size / coreSteps.length) * 40)
+          : 10,
+      backendReachable: !!health && (!expectedId || health.instanceId === expectedId),
+      coreReady,
       backgroundStatus: health?.backgroundStatus || 'starting',
       error:
         health && expectedId && health.instanceId !== expectedId
           ? '端口上的后端不属于本安装实例'
-          : health?.backgroundError || launchError() || '',
+          : recoveryError || health?.backgroundError || launchError() || '',
       logs,
     }
   }

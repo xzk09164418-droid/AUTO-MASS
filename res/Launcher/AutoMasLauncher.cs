@@ -109,6 +109,26 @@ namespace AutoMas.Launcher
             var itemExitAll = new ToolStripMenuItem("完全退出");
             itemExitAll.Click += async delegate { await RunControlAsync(ShutdownAndExitAsync); };
 
+            var itemForceRestart = new ToolStripMenuItem("强制重启 MAS（清空运行状态）");
+            itemForceRestart.Click += delegate
+            {
+                if (MessageBox.Show("将强制终止当前任务并丢弃进度；启用远程桌面时会注销其子会话。保留用户配置，不重启电脑，本次不续跑旧队列。是否继续？",
+                    "强制重启 MAS", MessageBoxButtons.OKCancel, MessageBoxIcon.Warning) != DialogResult.OK) return;
+                try
+                {
+                    // 独立助手不等待启动锁，后端未就绪或卡死时也能执行清理。
+                    var script = Path.Combine(_rootDir, "scripts", "force-restart.ps1");
+                    if (!File.Exists(script)) throw new FileNotFoundException("缺少强制重启助手，请使用完整发行包。", script);
+                    Process.Start(new ProcessStartInfo {
+                        FileName = "powershell.exe",
+                        Arguments = "-NoProfile -ExecutionPolicy Bypass -File \"" + script + "\" -Root \"" + _rootDir + "\"",
+                        WorkingDirectory = _rootDir, UseShellExecute = false, CreateNoWindow = true
+                    });
+                    _trayMenu.Enabled = false;
+                }
+                catch (Exception error) { ShowControlError(error); }
+            };
+
             _trayMenu.Items.Add(itemOpenWeb);
             _trayMenu.Items.Add(new ToolStripSeparator());
             _trayMenu.Items.Add(itemShowRdp);
@@ -120,6 +140,7 @@ namespace AutoMas.Launcher
             _trayMenu.Items.Add(new ToolStripSeparator());
             _trayMenu.Items.Add(itemExitFrontend);
             _trayMenu.Items.Add(itemPauseBackend);
+            _trayMenu.Items.Add(itemForceRestart);
             _trayMenu.Items.Add(itemExitAll);
 
             Icon appIcon = SystemIcons.Application;

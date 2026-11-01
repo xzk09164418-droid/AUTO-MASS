@@ -19,28 +19,11 @@ from win32com.propsys import propsys, pscon
 def show(path: Path) -> None:
     data = json.loads(path.read_text(encoding="utf-8"))
     root = Path(__file__).resolve().parents[1]
-    source = root / "res/QueueControlToast/Program.cs"
-    executable = source.with_name("QueueControlToast.exe")
-    digest = hashlib.sha256(source.read_bytes()).hexdigest()
-    stamp = source.with_suffix(".sha256")
-    if not executable.exists() or not stamp.exists() or stamp.read_text() != digest:
-        compiler = (
-            Path(os.environ["WINDIR"]) / "Microsoft.NET/Framework64/v4.0.30319/csc.exe"
+    executable = root / "res/QueueControlToast/QueueControlToast.exe"
+    if not executable.is_file():
+        raise RuntimeError(
+            "通知助手缺失，请重新构建或安装完整发行包；仍可使用 MAS 顶部控制面板"
         )
-        subprocess.run(
-            [
-                str(compiler),
-                "/nologo",
-                "/target:winexe",
-                "/r:System.Web.Extensions.dll",
-                f"/out:{executable}",
-                str(source),
-            ],
-            check=True,
-            capture_output=True,
-            creationflags=subprocess.CREATE_NO_WINDOW,
-        )
-        stamp.write_text(digest)
     suffix = hashlib.sha256(str(root).lower().encode()).hexdigest()[:12]
     scheme = "automas-control-" + suffix
     app_id = "AUTO-MAS.Control." + suffix
@@ -92,6 +75,13 @@ def show(path: Path) -> None:
         winreg.HKEY_CURRENT_USER, "Software\\RegisteredApplications"
     ) as key:
         winreg.SetValueEx(key, app_id, 0, winreg.REG_SZ, capability_path)
+    # 校验合并后的实际协议入口，避免仍然关联到旧安装路径。
+    with winreg.OpenKey(
+        winreg.HKEY_CLASSES_ROOT, scheme + "\\shell\\open\\command"
+    ) as key:
+        command = winreg.QueryValueEx(key, "")[0]
+    if command != f'"{executable}" "%1"':
+        raise RuntimeError("通知按钮关联校验失败；仍可使用 MAS 顶部控制面板")
     # 通知 Shell 刷新关联缓存，首次注册后即可从原生通知打开协议。
     ctypes.windll.shell32.SHChangeNotify(0x08000000, 0, None, None)
     shortcut = (
