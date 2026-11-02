@@ -5,6 +5,7 @@ import { t } from '@/i18n'
 import { useLocalControls } from '@/composables/useLocalControls'
 import type { LocalConfig } from '@/types/localControls'
 import { useHotkeyCapture } from '@/composables/useHotkeyCapture'
+import { useExternalControl } from '@/composables/useExternalControl'
 import { useQueueControl } from '@/composables/useQueueControl'
 
 const ExternalControlPanel = defineAsyncComponent(
@@ -12,6 +13,16 @@ const ExternalControlPanel = defineAsyncComponent(
 )
 
 const { loading, error, status, getConfig, saveConfig, refreshStatus, action } = useLocalControls()
+const { backendUrl: connectionBackendUrl, refreshAddress } = useExternalControl()
+const frontendAddress = /^https?:$/.test(location.protocol) ? location.origin : '—'
+function addressPort(address: string) {
+  try {
+    const url = new URL(address)
+    return url.port || (url.protocol === 'https:' ? '443' : '80')
+  } catch {
+    return '—'
+  }
+}
 const saving = ref(false)
 const queueControl = useQueueControl()
 async function selectQueue(value: string) {
@@ -64,6 +75,7 @@ async function load() {
   loading.value = true
   error.value = ''
   try {
+    await refreshAddress()
     const config = await getConfig()
     Object.assign(form.ChildSession, config.ChildSession)
     Object.assign(form.Hotkey, config.Hotkey)
@@ -129,6 +141,17 @@ onUnmounted(() => clearInterval(timer))
       <a-button :loading="loading" @click="load">{{ t('localControls.reload') }}</a-button>
     </div>
     <a-alert v-if="error" :message="error" type="error" show-icon />
+    <a-descriptions :title="t('hostPorts.title')" bordered :column="1" class="connection-addresses">
+      <a-descriptions-item :label="t('hostPorts.frontend')">
+        <code>{{ frontendAddress }}</code> · {{ t('hostPorts.port') }}
+        {{ addressPort(frontendAddress) }}
+      </a-descriptions-item>
+      <a-descriptions-item :label="t('hostPorts.backend')">
+        <code>{{ connectionBackendUrl || '—' }}</code> · {{ t('hostPorts.port') }}
+        {{ addressPort(connectionBackendUrl) }}
+      </a-descriptions-item>
+    </a-descriptions>
+    <a-alert type="info" show-icon :message="t('hostPorts.hint')" />
     <a-tabs v-model:active-key="tab">
       <a-tab-pane key="settings" :tab="t('localControls.settings')">
         <a-spin :spinning="loading">
@@ -429,6 +452,9 @@ onUnmounted(() => clearInterval(timer))
   margin: 0;
   font-size: 28px;
   color: var(--ant-color-text);
+}
+.connection-addresses {
+  margin-bottom: 16px;
 }
 .local-form {
   padding-top: 16px;

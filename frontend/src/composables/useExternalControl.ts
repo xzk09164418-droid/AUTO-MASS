@@ -22,17 +22,20 @@ export function useExternalControl() {
     }
   }
 
+  async function refreshAddress() {
+    const contract = await Service.getExternalControlContractApiDispatchExternalHoldsContractGet()
+    if (contract.code !== 200) throw new Error(contract.message)
+    schemas.value = contract.schemas || {}
+    backendUrl.value = contract.backendUrl || ''
+  }
+
   async function refresh() {
     return run(async () => {
       const result = await Service.getExternalControlSnapshotApiDispatchExternalHoldsManagementGet()
       if (result.code !== 200) throw new Error(result.message)
       snapshot.value = result
       if (!Object.keys(schemas.value).length) {
-        const contract =
-          await Service.getExternalControlContractApiDispatchExternalHoldsContractGet()
-        if (contract.code !== 200) throw new Error(contract.message)
-        schemas.value = contract.schemas || {}
-        backendUrl.value = contract.backendUrl || ''
+        await refreshAddress()
       }
     })
   }
@@ -64,5 +67,16 @@ export function useExternalControl() {
     })
   }
 
-  return { snapshot, schemas, backendUrl, loading, error, refresh, save, release, testMail }
+  return {
+    snapshot,
+    schemas,
+    backendUrl,
+    loading,
+    error,
+    refresh,
+    refreshAddress,
+    save,
+    release,
+    testMail,
+  }
 }

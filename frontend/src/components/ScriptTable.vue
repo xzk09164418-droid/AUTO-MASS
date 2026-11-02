@@ -577,7 +577,7 @@ const onUserDragEnd = async (script: Script) => {
   flex: 1;
   min-width: 0;
   padding: 0 12px;
-  text-align: center;
+  text-align: left;
 }
 
 .script-name {

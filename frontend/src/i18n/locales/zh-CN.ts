@@ -10,9 +10,10 @@
 export default {
   startupAnimation: { waiting: '连接后端并准备主页' },
   hostPorts: {
-    title: '本程序连接地址',
-    frontend: '页面地址',
-    backend: '后端地址',
+    title: '当前连接地址与端口',
+    hint: '这里显示当前实际使用的地址与端口；启动时因冲突改用新端口后会同步显示。下方远程桌面宿主端口用于桌面控制，与前端、后端端口不同。',
+    frontend: '前端页面地址',
+    backend: 'Python 后端地址',
     port: '端口',
   },
   generalOwnership: {
