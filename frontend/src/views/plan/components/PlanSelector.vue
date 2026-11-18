@@ -164,17 +164,18 @@ const getPlanTypeLabel = (planType: PlanConfigType) => PLAN_TYPE_REGISTRY[planTy
 
 <style scoped>
 .plan-selector-card {
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
-  border-radius: 12px;
-  border: 1px solid var(--ant-color-border-secondary);
+  box-shadow: var(--app-rhine-card-shadow);
+  border-radius: 2px;
+  border: 1px solid var(--ant-color-border);
 }
 
 .card-title {
   display: flex;
   align-items: center;
   gap: 12px;
-  font-size: 18px;
-  font-weight: 600;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
 }
 
 .plan-selection-container {
@@ -197,26 +198,28 @@ const getPlanTypeLabel = (planType: PlanConfigType) => PLAN_TYPE_REGISTRY[planTy
   color: var(--ant-color-text);
   background: var(--ant-color-bg-container);
   border: 1px solid var(--ant-color-border);
-  border-radius: 8px;
+  border-radius: 2px;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.16s ease;
 }
 
 .plan-button:hover {
-  color: var(--ant-color-primary-hover);
-  border-color: var(--ant-color-primary-hover);
+  color: var(--ant-color-text);
+  border-color: var(--app-rhine-rule);
+  background: var(--app-rhine-hover-bg);
 }
 
 .plan-button:focus-visible {
   outline: none;
-  border-color: var(--ant-color-primary);
-  box-shadow: 0 0 0 2px var(--ant-color-primary-bg);
+  border-color: var(--app-rhine-accent);
+  box-shadow: 0 0 0 2px var(--app-rhine-accent-soft);
 }
 
 .plan-button-active {
-  color: var(--ant-color-primary);
-  background: var(--ant-color-primary-bg);
-  border-color: var(--ant-color-primary);
+  color: var(--ant-color-text);
+  background: var(--app-rhine-active-bg);
+  border-color: var(--app-rhine-accent);
+  box-shadow: inset 3px 0 0 var(--app-rhine-accent);
   font-weight: 600;
 }
 

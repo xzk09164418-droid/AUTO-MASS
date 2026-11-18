@@ -1,13 +1,13 @@
 :root {
-  --app-scrollbar-size: 8px;
+  --app-scrollbar-size: 7px;
   --app-scrollbar-track: transparent;
-  --app-scrollbar-thumb: rgba(0, 0, 0, 0.28);
-  --app-scrollbar-thumb-hover: rgba(0, 0, 0, 0.45);
+  --app-scrollbar-thumb: rgba(28, 31, 27, 0.24);
+  --app-scrollbar-thumb-hover: rgba(217, 107, 39, 0.65);
 }
 
 :root.dark {
-  --app-scrollbar-thumb: rgba(255, 255, 255, 0.28);
-  --app-scrollbar-thumb-hover: rgba(255, 255, 255, 0.45);
+  --app-scrollbar-thumb: rgba(166, 181, 188, 0.28);
+  --app-scrollbar-thumb-hover: rgba(232, 130, 58, 0.72);
 }
 
 * {
@@ -26,8 +26,8 @@
 }
 
 *::-webkit-scrollbar-thumb {
-  border: 2px solid transparent;
-  border-radius: 999px;
+  border: 1px solid transparent;
+  border-radius: 0;
   background: var(--app-scrollbar-thumb);
   background-clip: content-box;
 }

@@ -70,8 +70,8 @@ const quickActions = computed(() => [
 
 <style scoped>
 .shortcut-card {
-  border-radius: 8px;
-  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.04);
+  border-radius: 2px;
+  box-shadow: var(--app-rhine-card-shadow);
 }
 
 .shortcut-card :deep(.ant-card-body) {
@@ -79,8 +79,9 @@ const quickActions = computed(() => [
 }
 
 .shortcut-card :deep(.ant-card-head-title) {
-  font-size: 18px;
-  font-weight: 600;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
 }
 
 .quick-actions {
@@ -90,7 +91,7 @@ const quickActions = computed(() => [
 }
 
 .quick-action {
-  min-height: 108px;
+  min-height: 102px;
   padding: 18px;
   display: flex;
   align-items: center;
@@ -102,8 +103,9 @@ const quickActions = computed(() => [
   border-right: 1px solid var(--ant-color-border-secondary);
   cursor: pointer;
   transition:
+    background-color 0.16s ease,
     color 0.16s ease,
-    transform 0.16s ease;
+    box-shadow 0.16s ease;
 }
 
 .quick-action:last-child {
@@ -111,26 +113,38 @@ const quickActions = computed(() => [
 }
 
 .quick-action:hover {
-  color: var(--ant-color-primary);
-  transform: translateY(-1px);
+  background: var(--app-rhine-hover-bg);
+  color: var(--app-rhine-accent);
+  box-shadow: inset 0 -2px 0 var(--app-rhine-accent);
+}
+
+.quick-action:hover .quick-action-icon {
+  color: var(--app-rhine-accent);
+  border-color: var(--app-rhine-accent-border);
+  background: var(--app-rhine-accent-soft);
 }
 
 .quick-action:focus-visible {
-  outline: 2px solid var(--ant-color-primary);
-  outline-offset: 2px;
+  outline: 2px solid var(--app-rhine-accent);
+  outline-offset: -2px;
 }
 
 .quick-action-icon {
-  width: 42px;
-  height: 42px;
+  width: 40px;
+  height: 40px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  flex: 0 0 42px;
-  color: var(--ant-color-primary);
-  border: 1px solid var(--ant-color-border-secondary);
-  border-radius: 8px;
-  font-size: 20px;
+  flex: 0 0 40px;
+  color: var(--ant-color-text);
+  background: var(--app-rhine-surface-subtle);
+  border: 1px solid var(--ant-color-border);
+  border-radius: 2px;
+  font-size: 18px;
+  transition:
+    color 0.16s ease,
+    border-color 0.16s ease,
+    background-color 0.16s ease;
 }
 
 .quick-action-text {

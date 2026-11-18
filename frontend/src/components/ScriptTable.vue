@@ -495,18 +495,23 @@ const onUserDragEnd = async (script: Script) => {
 
 /* 脚本卡片 */
 .script-card {
-  border-radius: 16px;
-  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 2px;
+  border: 1px solid var(--ant-color-border);
+  border-left: 3px solid var(--app-rhine-rule);
   background: var(--ant-color-bg-container);
   overflow: hidden;
   height: 100%;
   display: flex;
   flex-direction: column;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  box-shadow: var(--app-rhine-card-shadow);
+  transition:
+    border-color 0.16s ease,
+    box-shadow 0.16s ease;
 }
 
 .script-card:hover {
-  border-color: var(--ant-color-primary);
+  border-color: var(--ant-color-border);
+  border-left-color: var(--app-rhine-accent);
 }
 
 /* 脚本头部 */
@@ -514,8 +519,9 @@ const onUserDragEnd = async (script: Script) => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 20px 20px 16px;
-  border-bottom: 1px solid var(--ant-color-border-secondary);
+  padding: 16px 20px;
+  background: var(--app-rhine-surface-subtle);
+  border-bottom: 1px solid var(--ant-color-border);
 }
 
 .script-info {
@@ -555,13 +561,13 @@ const onUserDragEnd = async (script: Script) => {
 }
 
 .script-logo-container {
-  width: 48px;
-  height: 48px;
-  border-radius: 12px;
+  width: 44px;
+  height: 44px;
+  border-radius: 2px;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--ant-color-bg-layout);
+  background: var(--ant-color-bg-container);
   border: 1px solid var(--ant-color-border);
   overflow: hidden;
   flex-shrink: 0;
@@ -597,9 +603,9 @@ const onUserDragEnd = async (script: Script) => {
 }
 
 .action-button {
-  border-radius: 8px;
+  border-radius: 2px;
   font-weight: 500;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  box-shadow: none;
 }
 
 .add-button {

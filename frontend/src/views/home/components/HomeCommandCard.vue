@@ -153,8 +153,9 @@ const commandParticleColor = computed(() => themeColors[themeColor.value])
 
 <style scoped>
 .command-card {
-  border-radius: 8px;
-  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.04);
+  border-radius: 2px;
+  border-top: 2px solid var(--app-rhine-rule);
+  box-shadow: var(--app-rhine-card-shadow);
 }
 
 .command-card :deep(.ant-card-body) {
@@ -178,13 +179,13 @@ const commandParticleColor = computed(() => themeColors[themeColor.value])
   flex-direction: column;
   justify-content: center;
   overflow: hidden;
-  border-radius: 6px;
+  border-radius: 2px;
   isolation: isolate;
 }
 
 .command-particles {
   z-index: 0;
-  opacity: 1;
+  opacity: 0.42;
 }
 
 .command-content {
@@ -254,14 +255,14 @@ const commandParticleColor = computed(() => themeColors[themeColor.value])
   flex-direction: column;
   justify-content: center;
   overflow: hidden;
-  border-radius: 6px;
+  border-radius: 2px;
   isolation: isolate;
   border-left: 1px solid var(--ant-color-border);
 }
 
 .scheduler-particles {
   z-index: 0;
-  opacity: 1;
+  opacity: 0.35;
 }
 
 .scheduler-content {

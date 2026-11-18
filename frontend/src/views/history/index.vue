@@ -219,11 +219,12 @@ const handleSelectRecord = async (index: number, record: any) => {
 
 .page-header {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   justify-content: space-between;
   gap: 16px;
-  margin-bottom: 24px;
-  padding: 0 4px;
+  margin-bottom: 20px;
+  padding: 0 0 14px;
+  border-bottom: 2px solid var(--app-rhine-rule);
 }
 
 .replay-entry-button {
@@ -232,13 +233,10 @@ const handleSelectRecord = async (index: number, record: any) => {
 
 .page-title {
   margin: 0;
-  font-size: 32px;
+  font-size: 26px;
   font-weight: 700;
+  letter-spacing: 0.03em;
   color: var(--ant-color-text);
-  background: linear-gradient(135deg, var(--ant-color-primary), var(--ant-color-primary-hover));
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
 }
 
 .main-content {

@@ -1,7 +1,8 @@
 <template>
   <div class="home-page">
     <div class="home-header">
-      <div>
+      <div class="home-title-block">
+        <div class="rhine-page-kicker">OVERVIEW // OPERATIONAL DASHBOARD</div>
         <a-typography-title :level="2" class="home-title">{{ greeting }}</a-typography-title>
       </div>
 
@@ -255,18 +256,24 @@ onMounted(async () => {
 
 .home-header {
   margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 2px solid var(--app-rhine-rule);
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
+  align-items: flex-end;
   gap: 24px;
 }
 
+.home-title-block {
+  min-width: 0;
+}
+
 .home-title {
-  margin: 0 0 4px;
+  margin: 0 !important;
   color: var(--ant-color-text);
-  font-size: 24px;
-  font-weight: 600;
-  letter-spacing: 0;
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
 }
 
 .header-actions {

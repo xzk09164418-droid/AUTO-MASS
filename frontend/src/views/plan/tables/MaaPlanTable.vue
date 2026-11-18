@@ -632,10 +632,10 @@ watch(
 /* 自定义关卡样式 - 与表格风格保持一致 */
 .custom-stage-section {
   padding: 16px 20px;
-  border-radius: 6px;
-  background: var(--ant-color-bg-container);
+  border-radius: 2px;
+  background: var(--app-rhine-surface-subtle);
   border: 1px solid var(--ant-color-border);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+  box-shadow: none;
   min-height: auto;
   height: auto;
 }

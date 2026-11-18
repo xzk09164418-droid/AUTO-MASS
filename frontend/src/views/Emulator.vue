@@ -1359,26 +1359,24 @@ const handleBossKeyInputChange = (uuid: string) => {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background: var(--ant-color-bg-layout);
+  background: transparent;
 }
 
 .page-header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  margin-bottom: 16px;
-  padding: 0;
+  align-items: flex-end;
+  margin-bottom: 20px;
+  padding: 0 0 14px;
+  border-bottom: 2px solid var(--app-rhine-rule);
 }
 
 .page-header h1 {
-  margin: 0 0 8px 0;
-  font-size: 32px;
+  margin: 0;
+  font-size: 26px;
   font-weight: 700;
+  letter-spacing: 0.03em;
   color: var(--ant-color-text);
-  background: linear-gradient(135deg, var(--ant-color-primary), var(--ant-color-primary-hover));
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
 }
 
 .page-content {
@@ -1415,10 +1413,10 @@ const handleBossKeyInputChange = (uuid: string) => {
   flex-direction: column;
   overflow: hidden;
   background-color: var(--ant-color-bg-container);
-  border-radius: 12px;
+  border-radius: 2px;
   padding: 16px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
-  border: 1px solid var(--ant-color-border-secondary);
+  box-shadow: var(--app-rhine-card-shadow);
+  border: 1px solid var(--ant-color-border);
 }
 
 .emulator-tabs :deep(.ant-tabs) {
@@ -1465,9 +1463,9 @@ const handleBossKeyInputChange = (uuid: string) => {
 /* 配置区域 */
 .config-section {
   background-color: var(--ant-color-bg-container);
-  border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
-  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 2px;
+  box-shadow: none;
+  border: 1px solid var(--ant-color-border);
   padding: 16px;
   overflow: hidden;
   flex-shrink: 0;
@@ -1539,8 +1537,8 @@ const handleBossKeyInputChange = (uuid: string) => {
 }
 
 .config-form :deep(.anticon-folder-open:hover) {
-  color: #40a9ff !important;
-  transform: scale(1.1);
+  color: var(--app-rhine-accent) !important;
+  transform: scale(1.08);
 }
 
 /* 设备面板 */
@@ -1651,15 +1649,15 @@ const handleBossKeyInputChange = (uuid: string) => {
   gap: 8px;
 }
 
-/* 暗色模式支持 */
+/* 暗色模式支持：复用主题 token，不再硬编码纯黑底色 */
 html.dark .config-section,
 html.dark .devices-section {
-  background: #1a1a1a;
+  background: var(--ant-color-bg-container);
 }
 
 html.dark .page-content {
-  background: #0a0a0a;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  background: transparent;
+  box-shadow: none;
 }
 
 /* 响应式 - 移动端适配 */

@@ -30,8 +30,8 @@ defineProps<{
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.7);
-  backdrop-filter: blur(4px);
+  background: var(--app-rhine-modal-backdrop);
+  backdrop-filter: blur(8px);
   z-index: 9999;
   display: flex;
   align-items: center;
@@ -41,32 +41,34 @@ defineProps<{
 
 .closing-content {
   text-align: center;
-  color: white;
-  padding: 32px;
-  border-radius: 12px;
-  background: rgba(0, 0, 0, 0.8);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-  min-width: 280px;
+  color: var(--ant-color-text);
+  padding: 32px 40px;
+  border-radius: 2px;
+  background: var(--ant-color-bg-elevated);
+  border: 1px solid var(--ant-color-border);
+  border-top: 3px solid var(--app-rhine-rule);
+  box-shadow: var(--app-rhine-card-shadow);
+  min-width: 300px;
 }
 
 .closing-spinner {
-  font-size: 32px;
+  font-size: 30px;
   margin-bottom: 16px;
-  color: var(--ant-color-primary);
+  color: var(--app-rhine-accent);
   animation: spin 1s linear infinite;
 }
 
 .closing-text {
-  font-size: 18px;
-  font-weight: 500;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
   margin-bottom: 8px;
-  color: #ffffff;
+  color: var(--ant-color-text);
 }
 
 .closing-subtitle {
-  font-size: 14px;
-  color: rgba(255, 255, 255, 0.7);
+  font-size: 13px;
+  color: var(--ant-color-text-secondary);
 }
 
 @keyframes fadeIn {

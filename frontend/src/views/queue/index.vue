@@ -854,7 +854,8 @@ onUnmounted(() => {
   justify-content: space-between;
   align-items: flex-end;
   margin-bottom: 24px;
-  padding: 0 4px;
+  padding: 0 0 14px;
+  border-bottom: 2px solid var(--app-rhine-rule);
 }
 
 .header-left {
@@ -862,14 +863,11 @@ onUnmounted(() => {
 }
 
 .page-title {
-  margin: 0 0 8px 0;
-  font-size: 32px;
+  margin: 0;
+  font-size: 26px;
   font-weight: 700;
+  letter-spacing: 0.03em;
   color: var(--ant-color-text);
-  background: linear-gradient(135deg, var(--ant-color-primary), var(--ant-color-primary-hover));
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
 }
 
 .page-description {
@@ -992,17 +990,18 @@ onUnmounted(() => {
 
 /* 队列选择卡片 */
 .queue-selector-card {
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
-  border-radius: 12px;
-  border: 1px solid var(--ant-color-border-secondary);
+  box-shadow: var(--app-rhine-card-shadow);
+  border-radius: 2px;
+  border: 1px solid var(--ant-color-border);
 }
 
 .card-title {
   display: flex;
   align-items: center;
   gap: 12px;
-  font-size: 18px;
-  font-weight: 600;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
 }
 
 .queue-selection-container {
@@ -1019,15 +1018,15 @@ onUnmounted(() => {
 
 .queue-button {
   flex: 1 1 120px;
-  border-radius: 8px;
-  transition: all 0.2s ease;
+  border-radius: 2px;
+  transition: all 0.16s ease;
 }
 
 /* 队列配置卡片 */
 .queue-config-card {
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
-  border-radius: 12px;
-  border: 1px solid var(--ant-color-border-secondary);
+  box-shadow: var(--app-rhine-card-shadow);
+  border-radius: 2px;
+  border: 1px solid var(--ant-color-border);
   min-height: 600px;
 }
 

@@ -158,7 +158,7 @@ const countdownFormat = (item: ActivityBannerItem) => {
   min-height: 240px;
   overflow: hidden;
   background: var(--ant-color-fill-secondary);
-  border-radius: 12px;
+  border-radius: 2px;
 }
 
 .banner-cover {
@@ -207,10 +207,10 @@ const countdownFormat = (item: ActivityBannerItem) => {
   align-items: center;
   gap: 6px;
   align-self: flex-start;
-  padding: 4px 12px;
+  padding: 4px 10px;
   border: 1px solid color-mix(in srgb, var(--activity-accent) 45%, transparent);
-  border-radius: 999px;
-  background: rgba(11, 18, 32, 0.55);
+  border-radius: 2px;
+  background: rgba(17, 22, 25, 0.68);
 }
 
 .banner-dot {
@@ -249,10 +249,10 @@ const countdownFormat = (item: ActivityBannerItem) => {
   display: flex;
   align-items: center;
   gap: 14px;
-  padding: 12px 22px;
-  background: rgba(8, 10, 14, 0.5);
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 14px;
+  padding: 10px 18px;
+  background: rgba(17, 22, 25, 0.62);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 2px;
   backdrop-filter: blur(10px);
 }
 

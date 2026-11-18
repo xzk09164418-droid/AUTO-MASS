@@ -79,9 +79,9 @@ defineEmits<{
   align-items: center;
   justify-content: center;
   background: var(--ant-color-bg-container);
-  border-radius: 12px;
-  border: 1px solid var(--ant-color-border-secondary);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  border-radius: 2px;
+  border: 1px solid var(--ant-color-border);
+  box-shadow: var(--app-rhine-card-shadow);
   min-height: 300px;
 }
 

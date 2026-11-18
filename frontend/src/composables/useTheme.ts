@@ -58,22 +58,59 @@ let persistedThemeSnapshot: ThemeSnapshot = {
   appearanceId: null,
 }
 
-// 预设主题色
+// 预设主题色（莱茵生命实验室低饱和精密色阶）
 const themeColors: Record<ThemeColor, string> = {
-  blue: '#1677ff',
-  purple: '#722ed1',
-  cyan: '#13c2c2',
-  green: '#52c41a',
-  magenta: '#eb2f96',
-  pink: '#eb2f96',
-  red: '#ff4d4f',
-  orange: '#fa8c16',
-  yellow: '#fadb14',
-  volcano: '#fa541c',
-  geekblue: '#2f54eb',
-  lime: '#a0d911',
-  gold: '#faad14',
+  blue: '#2b7a9b',
+  purple: '#6b5b9e',
+  cyan: '#268fa3',
+  green: '#4a7c59',
+  magenta: '#b84c76',
+  pink: '#c25b82',
+  red: '#c43e38',
+  orange: '#d96b27',
+  yellow: '#c99a2e',
+  volcano: '#cf5727',
+  geekblue: '#395a8c',
+  lime: '#729434',
+  gold: '#b8843b',
 }
+
+// 莱茵生命（Rhine Lab）默认明暗表面与排版基准
+const RHINE_FONT_FAMILY =
+  "'Bahnschrift', 'DIN Alternate', 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif"
+const RHINE_FONT_MONO =
+  "'Cascadia Mono', 'JetBrains Mono', ui-monospace, SFMono-Regular, Consolas, monospace"
+
+const RHINE_SURFACE_TOKENS = {
+  light: {
+    colorBgLayout: '#e8e5e1',
+    colorBgContainer: '#f3f1ec',
+    colorBgElevated: '#f8f6f1',
+    colorText: '#111411',
+    colorTextSecondary: '#5a5850',
+    colorTextTertiary: '#7e7a70',
+    colorBorder: '#c4bfb4',
+    colorBorderSecondary: '#dad6cc',
+    colorSuccess: '#4a7c59',
+    colorWarning: '#d47322',
+    colorError: '#c43e38',
+    colorInfo: '#2b7a9b',
+  },
+  dark: {
+    colorBgLayout: '#111619',
+    colorBgContainer: '#171d21',
+    colorBgElevated: '#1f272c',
+    colorText: '#e2e5de',
+    colorTextSecondary: '#9ea9ad',
+    colorTextTertiary: '#6d7b80',
+    colorBorder: '#354349',
+    colorBorderSecondary: '#253036',
+    colorSuccess: '#5da678',
+    colorWarning: '#e68a3e',
+    colorError: '#e2635b',
+    colorInfo: '#58b4cc',
+  },
+} as const
 
 // 检测系统主题
 const getSystemTheme = () => {
@@ -171,6 +208,57 @@ const updateCSSVariables = () => {
     '--app-appearance-background-size',
     activeAppearance.value?.background?.size ?? 'cover'
   )
+
+  // ===== 莱茵生命（Rhine Lab）语义变量 =====
+  // 独立于 AntD token bridge 注入，保证首帧即呈现暖灰档案纸（浅色）或深轨道控制室（深色）质感。
+  const dark = isDark.value
+  root.style.setProperty('--app-rhine-sider-bg', dark ? '#0d1215' : '#dfdcd4')
+  root.style.setProperty('--app-rhine-sider-border', dark ? '#344248' : '#1c1f1b')
+  root.style.setProperty('--app-rhine-rule', dark ? '#d4d8cf' : '#1c1f1b')
+  root.style.setProperty(
+    '--app-rhine-grid-line',
+    dark ? 'rgba(226, 229, 222, 0.04)' : 'rgba(17, 20, 17, 0.048)'
+  )
+  root.style.setProperty('--app-rhine-accent', dark ? '#e8823a' : '#d96b27')
+  root.style.setProperty(
+    '--app-rhine-accent-soft',
+    dark ? 'rgba(232, 130, 58, 0.16)' : 'rgba(217, 107, 39, 0.11)'
+  )
+  root.style.setProperty(
+    '--app-rhine-accent-border',
+    dark ? 'rgba(232, 130, 58, 0.5)' : 'rgba(217, 107, 39, 0.45)'
+  )
+  root.style.setProperty('--app-rhine-solid-bg', dark ? '#e2e5de' : '#1e211c')
+  root.style.setProperty('--app-rhine-solid-text', dark ? '#111619' : '#f2f0e8')
+  root.style.setProperty('--app-rhine-olive', dark ? '#7d8c6d' : '#4d5443')
+  root.style.setProperty('--app-rhine-surface-subtle', dark ? '#13191d' : '#ece9e2')
+  root.style.setProperty('--app-rhine-surface-header', dark ? '#141a1e' : '#e6e3dc')
+  root.style.setProperty(
+    '--app-rhine-card-shadow',
+    dark
+      ? '0 1px 0 rgba(0, 0, 0, 0.45), 0 10px 26px rgba(0, 0, 0, 0.28)'
+      : '0 1px 0 rgba(17, 20, 17, 0.06), 0 8px 22px rgba(45, 38, 28, 0.05)'
+  )
+  root.style.setProperty(
+    '--app-rhine-modal-backdrop',
+    dark ? 'rgba(9, 13, 16, 0.72)' : 'rgba(224, 220, 212, 0.62)'
+  )
+  root.style.setProperty(
+    '--app-rhine-hover-bg',
+    dark ? 'rgba(226, 229, 222, 0.065)' : 'rgba(17, 20, 17, 0.055)'
+  )
+  root.style.setProperty(
+    '--app-rhine-active-bg',
+    dark ? 'rgba(232, 130, 58, 0.14)' : 'rgba(217, 107, 39, 0.1)'
+  )
+  root.style.setProperty('--app-rhine-muted-index', dark ? '#6f7d82' : '#858075')
+  root.style.setProperty(
+    '--app-rhine-corner-mark',
+    dark ? 'rgba(226, 229, 222, 0.3)' : 'rgba(17, 20, 17, 0.34)'
+  )
+  root.style.setProperty('--app-rhine-font-sans', RHINE_FONT_FAMILY)
+  root.style.setProperty('--app-rhine-font-mono', RHINE_FONT_MONO)
+
   if (!resolvedAntTokens.value) return
   const customTokens = activeAppearance.value?.tokens
   const primaryColor = customTokens?.colorPrimary ?? themeColors[themeColor.value]
@@ -178,8 +266,8 @@ const updateCSSVariables = () => {
   const antTokens = resolvedAntTokens.value
 
   // 基础背景（用于估算混合）
-  const baseLightBg = '#ffffff'
-  const baseDarkBg = '#141414'
+  const baseLightBg = '#e8e5e1'
+  const baseDarkBg = '#111619'
   const baseMenuBg = isDark.value ? baseDarkBg : baseLightBg
 
   // 改进：侧边栏背景使用 HSL 调整而不是简单线性混合，提高在不同主色下的可读性
@@ -475,39 +563,80 @@ watch(themeColor, updateTheme)
 
 // Ant Design 主题配置
 function getThemeConfig() {
+  const baseSurface = isDark.value ? RHINE_SURFACE_TOKENS.dark : RHINE_SURFACE_TOKENS.light
+  const custom = activeAppearance.value?.tokens
+  const radius = custom?.borderRadius ?? 2
+
   return {
     algorithm: isDark.value ? theme.darkAlgorithm : theme.defaultAlgorithm,
     token: {
-      colorPrimary: activeAppearance.value?.tokens.colorPrimary ?? themeColors[themeColor.value],
-      ...(activeAppearance.value?.tokens.colorBgLayout
-        ? { colorBgLayout: activeAppearance.value.tokens.colorBgLayout }
-        : {}),
-      ...(activeAppearance.value?.tokens.colorBgContainer
-        ? { colorBgContainer: activeAppearance.value.tokens.colorBgContainer }
-        : {}),
-      ...(activeAppearance.value?.tokens.colorBgElevated
-        ? { colorBgElevated: activeAppearance.value.tokens.colorBgElevated }
-        : {}),
-      ...(activeAppearance.value?.tokens.colorText
-        ? { colorText: activeAppearance.value.tokens.colorText }
-        : {}),
-      ...(activeAppearance.value?.tokens.colorTextSecondary
-        ? { colorTextSecondary: activeAppearance.value.tokens.colorTextSecondary }
-        : {}),
-      ...(activeAppearance.value?.tokens.colorBorder
-        ? { colorBorder: activeAppearance.value.tokens.colorBorder }
-        : {}),
-      ...(activeAppearance.value?.tokens.colorBorderSecondary
-        ? { colorBorderSecondary: activeAppearance.value.tokens.colorBorderSecondary }
-        : {}),
-      ...(activeAppearance.value?.tokens.borderRadius !== undefined
-        ? { borderRadius: activeAppearance.value.tokens.borderRadius }
-        : {}),
+      colorPrimary: custom?.colorPrimary ?? themeColors[themeColor.value],
+      colorBgLayout: custom?.colorBgLayout ?? baseSurface.colorBgLayout,
+      colorBgContainer: custom?.colorBgContainer ?? baseSurface.colorBgContainer,
+      colorBgElevated: custom?.colorBgElevated ?? baseSurface.colorBgElevated,
+      colorText: custom?.colorText ?? baseSurface.colorText,
+      colorTextSecondary: custom?.colorTextSecondary ?? baseSurface.colorTextSecondary,
+      colorTextTertiary: baseSurface.colorTextTertiary,
+      colorBorder: custom?.colorBorder ?? baseSurface.colorBorder,
+      colorBorderSecondary: custom?.colorBorderSecondary ?? baseSurface.colorBorderSecondary,
+      colorSuccess: baseSurface.colorSuccess,
+      colorWarning: baseSurface.colorWarning,
+      colorError: baseSurface.colorError,
+      colorInfo: baseSurface.colorInfo,
+      borderRadius: radius,
+      borderRadiusLG: radius,
+      borderRadiusSM: Math.min(radius, 2),
+      fontFamily: RHINE_FONT_FAMILY,
+      fontFamilyCode: RHINE_FONT_MONO,
     },
     components: {
       InputNumber: {
         // 步进按钮（▲▼）常驻显示：antd 默认悬停才出现，快速连续调整不直观
         handleVisible: true as const,
+      },
+      Card: {
+        borderRadiusLG: radius,
+        headerBg: isDark.value ? '#141a1e' : '#ece9e2',
+      },
+      Button: {
+        borderRadius: radius,
+        borderRadiusLG: radius,
+        borderRadiusSM: Math.min(radius, 2),
+        primaryShadow: 'none',
+        defaultShadow: 'none',
+        dangerShadow: 'none',
+      },
+      Modal: {
+        borderRadiusLG: radius,
+        headerBg: custom?.colorBgElevated ?? baseSurface.colorBgElevated,
+        contentBg: custom?.colorBgElevated ?? baseSurface.colorBgElevated,
+      },
+      Table: {
+        borderRadius: radius,
+        headerBorderRadius: 0,
+        headerBg: isDark.value ? '#141a1e' : '#e6e3dc',
+      },
+      Tabs: {
+        cardBg: isDark.value ? '#13191d' : '#e8e5dd',
+        borderRadiusLG: 0,
+      },
+      Tag: {
+        borderRadiusSM: Math.min(radius, 2),
+      },
+      Segmented: {
+        borderRadius: radius,
+        borderRadiusSM: Math.min(radius, 2),
+      },
+      Select: {
+        borderRadius: radius,
+        borderRadiusLG: radius,
+      },
+      Input: {
+        borderRadius: radius,
+        borderRadiusLG: radius,
+      },
+      DatePicker: {
+        borderRadius: radius,
       },
     },
   }

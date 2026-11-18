@@ -189,9 +189,9 @@ const formatDateGroup = (date: string) => formatHistoryGroupLabel(date)
   display: flex;
   flex-direction: column;
   background: var(--ant-color-bg-container);
-  border-radius: 12px;
-  border: 1px solid var(--ant-color-border-secondary);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  border-radius: 2px;
+  border: 1px solid var(--ant-color-border);
+  box-shadow: var(--app-rhine-card-shadow);
   overflow: hidden;
 }
 
@@ -199,11 +199,13 @@ const formatDateGroup = (date: string) => formatHistoryGroupLabel(date)
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 16px;
-  font-size: 15px;
-  font-weight: 600;
+  padding: 12px 16px;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
   color: var(--ant-color-text);
-  border-bottom: 1px solid var(--ant-color-border-secondary);
+  background: var(--app-rhine-surface-subtle);
+  border-bottom: 1px solid var(--ant-color-border);
 }
 
 .date-list {
@@ -285,19 +287,22 @@ const formatDateGroup = (date: string) => formatHistoryGroupLabel(date)
   align-items: center;
   gap: 8px;
   padding: 10px 12px;
-  border-radius: 8px;
+  border-radius: 2px;
   cursor: pointer;
-  transition: all 0.2s ease;
-  background: var(--ant-color-fill-quaternary);
+  transition: all 0.16s ease;
+  background: var(--app-rhine-surface-subtle);
+  border: 1px solid transparent;
 }
 
 .user-item:hover {
-  background: var(--ant-color-fill-tertiary);
+  background: var(--app-rhine-hover-bg);
+  border-color: var(--ant-color-border);
 }
 
 .user-item.active {
-  background: var(--ant-color-primary-bg);
-  border: 1px solid var(--ant-color-primary);
+  background: var(--app-rhine-active-bg);
+  border: 1px solid var(--app-rhine-accent);
+  box-shadow: inset 3px 0 0 var(--app-rhine-accent);
 }
 
 .user-icon {

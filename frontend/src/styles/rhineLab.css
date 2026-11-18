@@ -1,0 +1,407 @@
+/* ============================================================================
+ * RHINE LAB · ANALYSIS OS — Global Visual Architecture
+ *
+ * Aesthetic language inspired by Arknights: Rhine Lab (明日方舟·莱茵生命)
+ * - Light mode: Warm archival laboratory paper, dense carbon ink, hairline rules,
+ *   Rhine research amber accents, olive-slate precision toggles.
+ * - Dark mode: Deep orbital control room slate, warm ivory ink, luminous amber
+ *   signals, crisp hairline structural borders.
+ *
+ * All custom properties are defined in useTheme.ts (with matching :root fallbacks
+ * below for pre-hydration consistency) and respect custom appearance overrides.
+ * ============================================================================ */
+
+:root {
+  --app-rhine-sider-bg: #dfdcd4;
+  --app-rhine-sider-border: #1c1f1b;
+  --app-rhine-rule: #1c1f1b;
+  --app-rhine-grid-line: rgba(17, 20, 17, 0.048);
+  --app-rhine-accent: #d96b27;
+  --app-rhine-accent-soft: rgba(217, 107, 39, 0.11);
+  --app-rhine-accent-border: rgba(217, 107, 39, 0.45);
+  --app-rhine-solid-bg: #1e211c;
+  --app-rhine-solid-text: #f2f0e8;
+  --app-rhine-olive: #4d5443;
+  --app-rhine-surface-subtle: #ece9e2;
+  --app-rhine-surface-header: #e6e3dc;
+  --app-rhine-card-shadow: 0 1px 0 rgba(17, 20, 17, 0.06), 0 8px 22px rgba(45, 38, 28, 0.05);
+  --app-rhine-modal-backdrop: rgba(224, 220, 212, 0.62);
+  --app-rhine-hover-bg: rgba(17, 20, 17, 0.055);
+  --app-rhine-active-bg: rgba(217, 107, 39, 0.1);
+  --app-rhine-muted-index: #858075;
+  --app-rhine-corner-mark: rgba(17, 20, 17, 0.34);
+  --app-rhine-font-sans:
+    'Bahnschrift', 'DIN Alternate', 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB',
+    'Microsoft YaHei', sans-serif;
+  --app-rhine-font-mono:
+    'Cascadia Mono', 'JetBrains Mono', ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+
+:root.dark {
+  --app-rhine-sider-bg: #0d1215;
+  --app-rhine-sider-border: #344248;
+  --app-rhine-rule: #d4d8cf;
+  --app-rhine-grid-line: rgba(226, 229, 222, 0.04);
+  --app-rhine-accent: #e8823a;
+  --app-rhine-accent-soft: rgba(232, 130, 58, 0.16);
+  --app-rhine-accent-border: rgba(232, 130, 58, 0.5);
+  --app-rhine-solid-bg: #e2e5de;
+  --app-rhine-solid-text: #111619;
+  --app-rhine-olive: #7d8c6d;
+  --app-rhine-surface-subtle: #13191d;
+  --app-rhine-surface-header: #141a1e;
+  --app-rhine-card-shadow: 0 1px 0 rgba(0, 0, 0, 0.45), 0 10px 26px rgba(0, 0, 0, 0.28);
+  --app-rhine-modal-backdrop: rgba(9, 13, 16, 0.72);
+  --app-rhine-hover-bg: rgba(226, 229, 222, 0.065);
+  --app-rhine-active-bg: rgba(232, 130, 58, 0.14);
+  --app-rhine-muted-index: #6f7d82;
+  --app-rhine-corner-mark: rgba(226, 229, 222, 0.3);
+}
+
+/* ── Base Document Surface & Typography ──────────────────────────────────── */
+html,
+body {
+  font-family: var(--app-rhine-font-sans);
+  background-color: var(--ant-color-bg-layout);
+  color: var(--ant-color-text);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+::selection {
+  background: var(--app-rhine-accent-soft);
+  color: var(--ant-color-text);
+}
+
+code,
+kbd,
+pre,
+.ant-statistic-content-value {
+  font-family: var(--app-rhine-font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Subtle Drafting Grid Workspace Canvas ───────────────────────────────── */
+html:not(.appearance-background-custom) .content-area {
+  background-color: var(--ant-color-bg-layout);
+  background-image:
+    linear-gradient(var(--app-rhine-grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--app-rhine-grid-line) 1px, transparent 1px);
+  background-size: 24px 24px;
+  background-position: -1px -1px;
+}
+
+/* ── Cards: Crisp Archival Dossier Plates ────────────────────────────────── */
+.ant-card {
+  border-radius: 2px;
+  border: 1px solid var(--ant-color-border);
+  box-shadow: var(--app-rhine-card-shadow);
+  transition:
+    border-color 0.18s cubic-bezier(0.2, 0.9, 0.3, 1),
+    box-shadow 0.18s cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+
+.ant-card .ant-card-head {
+  min-height: 46px;
+  border-bottom: 1px solid var(--ant-color-border);
+  border-radius: 0;
+}
+
+.ant-card .ant-card-head-title {
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+/* ── Buttons: Sharp Precision Controls ───────────────────────────────────── */
+.ant-btn {
+  border-radius: 2px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  box-shadow: none;
+  transition:
+    background-color 0.16s cubic-bezier(0.2, 0.9, 0.3, 1),
+    border-color 0.16s cubic-bezier(0.2, 0.9, 0.3, 1),
+    color 0.16s cubic-bezier(0.2, 0.9, 0.3, 1),
+    transform 0.12s ease;
+}
+
+.ant-btn-default:not(:disabled):hover {
+  border-color: var(--app-rhine-rule);
+  color: var(--ant-color-text);
+  background-color: var(--app-rhine-hover-bg);
+}
+
+.ant-btn-primary:not(:disabled):not(.ant-btn-background-ghost) {
+  border-color: transparent;
+}
+
+.ant-btn-primary:not(:disabled):not(.ant-btn-background-ghost):active,
+.ant-btn-default:not(:disabled):active {
+  transform: translateY(0.5px);
+}
+
+/* ── Form Inputs, Selects, Pickers ───────────────────────────────────────── */
+.ant-input,
+.ant-input-affix-wrapper,
+.ant-input-number,
+.ant-input-number-group-addon,
+.ant-picker,
+.ant-select:not(.ant-select-customize-input) .ant-select-selector {
+  border-radius: 2px;
+}
+
+.ant-input:focus,
+.ant-input-focused,
+.ant-input-affix-wrapper:focus,
+.ant-input-affix-wrapper-focused,
+.ant-input-number:focus,
+.ant-input-number-focused,
+.ant-picker-focused,
+.ant-select-focused:not(.ant-select-disabled) .ant-select-selector {
+  border-color: var(--app-rhine-accent);
+  box-shadow: 0 0 0 2px var(--app-rhine-accent-soft);
+}
+
+.ant-select-dropdown,
+.ant-picker-panel-container,
+.ant-dropdown .ant-dropdown-menu,
+.ant-popover .ant-popover-inner,
+.ant-tooltip .ant-tooltip-inner {
+  border-radius: 2px;
+  border: 1px solid var(--ant-color-border);
+}
+
+/* ── Industrial Rectangular Switches (RhineLabUI Settings Signature) ─────── */
+.ant-switch {
+  border-radius: 2px;
+  min-width: 42px;
+  background-color: var(--ant-color-border);
+}
+
+.ant-switch .ant-switch-handle {
+  top: 2px;
+  inset-inline-start: 2px;
+}
+
+.ant-switch .ant-switch-handle::before {
+  border-radius: 1px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+}
+
+.ant-switch.ant-switch-checked {
+  background-color: var(--app-rhine-olive);
+}
+
+.ant-switch.ant-switch-checked:hover:not(.ant-switch-disabled) {
+  background-color: var(--app-rhine-accent);
+}
+
+.ant-switch.ant-switch-checked .ant-switch-handle {
+  inset-inline-start: calc(100% - 20px);
+}
+
+.ant-switch.ant-switch-small {
+  min-width: 28px;
+}
+
+.ant-switch.ant-switch-small.ant-switch-checked .ant-switch-handle {
+  inset-inline-start: calc(100% - 14px);
+}
+
+/* ── Checkboxes & Radios ─────────────────────────────────────────────────── */
+.ant-checkbox-inner {
+  border-radius: 1px;
+}
+
+/* ── Tabs: Sharp Architectural Indexing ──────────────────────────────────── */
+.ant-tabs .ant-tabs-ink-bar {
+  height: 2px;
+  background: var(--app-rhine-accent);
+}
+
+.ant-tabs-card > .ant-tabs-nav .ant-tabs-tab,
+.ant-tabs-card > div > .ant-tabs-nav .ant-tabs-tab {
+  border-radius: 0;
+  border-color: var(--ant-color-border);
+  background: var(--app-rhine-surface-subtle);
+  transition:
+    background-color 0.16s ease,
+    border-color 0.16s ease,
+    color 0.16s ease;
+}
+
+.ant-tabs-card > .ant-tabs-nav .ant-tabs-tab-active,
+.ant-tabs-card > div > .ant-tabs-nav .ant-tabs-tab-active {
+  background: var(--ant-color-bg-container);
+  border-top: 2px solid var(--app-rhine-accent);
+  font-weight: 600;
+}
+
+.ant-tabs-card > .ant-tabs-nav .ant-tabs-tab-active .ant-tabs-tab-btn,
+.ant-tabs-card > div > .ant-tabs-nav .ant-tabs-tab-active .ant-tabs-tab-btn {
+  color: var(--ant-color-text);
+}
+
+/* ── Segmented Controls ──────────────────────────────────────────────────── */
+.ant-segmented {
+  border-radius: 2px;
+  background-color: var(--app-rhine-surface-subtle);
+  border: 1px solid var(--ant-color-border-secondary);
+}
+
+.ant-segmented .ant-segmented-item,
+.ant-segmented .ant-segmented-thumb {
+  border-radius: 1px;
+}
+
+.ant-segmented .ant-segmented-item-selected {
+  background-color: var(--ant-color-bg-container);
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.08);
+  font-weight: 600;
+}
+
+/* ── Tables: High-Precision Archival Grids ───────────────────────────────── */
+.ant-table-wrapper .ant-table {
+  border-radius: 2px;
+  font-variant-numeric: tabular-nums;
+}
+
+.ant-table-wrapper .ant-table-thead > tr > th {
+  background: var(--app-rhine-surface-header);
+  color: var(--ant-color-text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--ant-color-border);
+}
+
+.ant-table-wrapper .ant-table-tbody > tr:hover > td {
+  background: var(--app-rhine-hover-bg);
+}
+
+/* ── Tags: Classification Labels ─────────────────────────────────────────── */
+.ant-tag {
+  border-radius: 2px;
+  font-family: var(--app-rhine-font-sans);
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  font-weight: 500;
+}
+
+/* ── Alerts & Descriptions ───────────────────────────────────────────────── */
+.ant-alert {
+  border-radius: 2px;
+  border-left-width: 3px;
+}
+
+.ant-descriptions-bordered .ant-descriptions-view {
+  border-radius: 2px;
+  border-color: var(--ant-color-border);
+}
+
+.ant-descriptions-bordered .ant-descriptions-item-label {
+  background: var(--app-rhine-surface-header);
+  color: var(--ant-color-text-secondary);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+/* ── Modals & Drawers (RhineLabUI Terminal Modal Aesthetic) ──────────────── */
+.ant-modal-root .ant-modal-mask {
+  background-color: var(--app-rhine-modal-backdrop);
+  backdrop-filter: blur(8px);
+}
+
+.ant-modal-root .ant-modal-content {
+  border-radius: 2px;
+  border: 1px solid var(--ant-color-border);
+  border-top: 3px solid var(--app-rhine-rule);
+  box-shadow: 0 24px 72px rgba(17, 20, 17, 0.22);
+}
+
+.ant-modal-root .ant-modal-header {
+  padding-bottom: 14px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--ant-color-border);
+  border-radius: 0;
+}
+
+.ant-modal-root .ant-modal-title {
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
+.ant-modal-root .ant-modal-footer {
+  padding-top: 14px;
+  margin-top: 16px;
+  border-top: 1px solid var(--ant-color-border-secondary);
+}
+
+.ant-drawer .ant-drawer-mask {
+  background-color: var(--app-rhine-modal-backdrop);
+  backdrop-filter: blur(6px);
+}
+
+.ant-drawer .ant-drawer-content {
+  border-left: 2px solid var(--app-rhine-rule);
+}
+
+.ant-drawer .ant-drawer-header {
+  border-bottom: 1px solid var(--ant-color-border);
+  background: var(--app-rhine-surface-subtle);
+}
+
+/* ── Toast Messages & Notifications ──────────────────────────────────────── */
+.ant-message .ant-message-notice-content {
+  border-radius: 2px;
+  border: 1px solid var(--ant-color-border);
+  border-left: 3px solid var(--app-rhine-accent);
+  background: var(--ant-color-bg-elevated);
+  box-shadow: var(--app-rhine-card-shadow);
+}
+
+.ant-notification .ant-notification-notice {
+  border-radius: 2px;
+  border: 1px solid var(--ant-color-border);
+  border-top: 2px solid var(--app-rhine-accent);
+  background: var(--ant-color-bg-elevated);
+}
+
+/* ── Collapse Panels & Dividers ──────────────────────────────────────────── */
+.ant-collapse {
+  border-radius: 2px;
+  border-color: var(--ant-color-border);
+}
+
+.ant-divider {
+  border-block-start-color: var(--ant-color-border-secondary);
+}
+
+/* ── Progress Bars ───────────────────────────────────────────────────────── */
+.ant-progress .ant-progress-inner,
+.ant-progress .ant-progress-bg {
+  border-radius: 1px;
+}
+
+/* ── Shared Rhine Page Title Accent Class ────────────────────────────────── */
+.rhine-page-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+  font-family: var(--app-rhine-font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--app-rhine-muted-index);
+}
+
+.rhine-page-kicker::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  background: var(--app-rhine-accent);
+  display: inline-block;
+}

@@ -236,8 +236,9 @@ onUnmounted(() => {
 }
 
 .gamesign-header {
-  margin-bottom: 16px;
-  padding: 0 4px;
+  margin-bottom: 20px;
+  padding: 0 0 14px;
+  border-bottom: 2px solid var(--app-rhine-rule);
   display: flex;
   align-items: center;
   gap: 12px;
@@ -245,14 +246,17 @@ onUnmounted(() => {
 
 .page-title {
   margin: 0;
-  font-size: 32px;
+  font-size: 26px;
   font-weight: 700;
+  letter-spacing: 0.03em;
   color: var(--ant-color-text);
 }
 
 .gamesign-content {
   background: var(--ant-color-bg-container);
-  border-radius: 8px;
+  border: 1px solid var(--ant-color-border);
+  border-radius: 2px;
+  box-shadow: var(--app-rhine-card-shadow);
   width: 100%;
   flex: 1;
 }
@@ -272,14 +276,15 @@ onUnmounted(() => {
 }
 
 .community-tabs :deep(.ant-tabs-card > .ant-tabs-nav .ant-tabs-tab) {
-  margin-right: 8px;
-  background: transparent;
+  margin-right: 6px;
+  background: var(--app-rhine-surface-subtle);
   border: 1px solid var(--ant-color-border);
-  border-radius: 8px 8px 0 0;
+  border-radius: 0;
 }
 
 .community-tabs :deep(.ant-tabs-card > .ant-tabs-nav .ant-tabs-tab-active) {
   background: var(--ant-color-bg-container);
+  border-top: 2px solid var(--app-rhine-accent);
   border-bottom-color: var(--ant-color-bg-container);
 }
 
@@ -299,8 +304,8 @@ onUnmounted(() => {
 
 :deep(.section-header) {
   margin-bottom: 20px;
-  padding-bottom: 8px;
-  border-bottom: 2px solid var(--ant-color-border-secondary);
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--ant-color-border);
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -308,20 +313,21 @@ onUnmounted(() => {
 
 :deep(.section-header h3) {
   margin: 0;
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 700;
+  letter-spacing: 0.03em;
   color: var(--ant-color-text);
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
 }
 
 :deep(.section-header h3::before) {
   content: '';
-  width: 4px;
-  height: 24px;
-  background: var(--ant-color-primary);
-  border-radius: 2px;
+  width: 3px;
+  height: 18px;
+  background: var(--app-rhine-accent);
+  border-radius: 0;
 }
 
 :deep(.section-description) {

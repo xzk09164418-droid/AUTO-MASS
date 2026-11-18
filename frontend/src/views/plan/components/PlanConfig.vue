@@ -135,9 +135,9 @@ const handleRotateDaysChange = (value: number | string | null) => {
 
 <style scoped>
 .plan-config-card {
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
-  border-radius: 12px;
-  border: 1px solid var(--ant-color-border-secondary);
+  box-shadow: var(--app-rhine-card-shadow);
+  border-radius: 2px;
+  border: 1px solid var(--ant-color-border);
 }
 
 .mode-label,

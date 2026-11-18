@@ -572,25 +572,24 @@ onMounted(() => {
 }
 
 .settings-header {
-  margin-bottom: 16px;
-  padding: 0 4px;
+  margin-bottom: 20px;
+  padding: 0 0 14px;
+  border-bottom: 2px solid var(--app-rhine-rule);
 }
 
 .page-title {
   margin: 0;
-  font-size: 32px;
+  font-size: 26px;
   font-weight: 700;
+  letter-spacing: 0.03em;
   color: var(--ant-color-text);
-  background: linear-gradient(135deg, var(--ant-color-primary), var(--ant-color-primary-hover));
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
 }
 
 .settings-content {
   background: var(--ant-color-bg-container);
-  /* Rounded on all corners for a consistent card look */
-  border-radius: 12px;
+  border: 1px solid var(--ant-color-border);
+  border-radius: 2px;
+  box-shadow: var(--app-rhine-card-shadow);
   width: 100%;
   flex: 1;
   /* allow inner scrolling and cooperate with flexbox
@@ -622,14 +621,15 @@ onMounted(() => {
 }
 
 .settings-tabs :deep(.ant-tabs-card > .ant-tabs-nav .ant-tabs-tab) {
-  background: transparent;
+  background: var(--app-rhine-surface-subtle);
   border: 1px solid var(--ant-color-border);
-  border-radius: 8px 8px 0 0;
-  margin-right: 8px;
+  border-radius: 0;
+  margin-right: 6px;
 }
 
 .settings-tabs :deep(.ant-tabs-card > .ant-tabs-nav .ant-tabs-tab-active) {
   background: var(--ant-color-bg-container);
+  border-top: 2px solid var(--app-rhine-accent);
   border-bottom-color: var(--ant-color-bg-container);
 }
 
@@ -735,10 +735,10 @@ onMounted(() => {
 :deep(.link-card) {
   background: var(--ant-color-bg-container);
   border: 1px solid var(--ant-color-border);
-  border-radius: 8px;
+  border-radius: 2px;
   padding: 20px;
   text-align: center;
-  transition: all 0.3s ease;
+  transition: all 0.2s ease;
   height: 100%;
   display: flex;
   flex-direction: column;
@@ -746,9 +746,9 @@ onMounted(() => {
 }
 
 :deep(.link-card:hover) {
-  border-color: var(--ant-color-primary);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-  transform: translateY(-2px);
+  border-color: var(--app-rhine-accent);
+  box-shadow: var(--app-rhine-card-shadow);
+  transform: translateY(-1px);
 }
 
 :deep(.link-icon) {

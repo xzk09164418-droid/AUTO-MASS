@@ -443,14 +443,18 @@ onUnmounted(() => clearInterval(timer))
 }
 .page-heading {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   justify-content: space-between;
   gap: 24px;
   margin-bottom: 24px;
+  padding-bottom: 14px;
+  border-bottom: 2px solid var(--app-rhine-rule);
 }
 .page-heading h1 {
   margin: 0;
-  font-size: 28px;
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
   color: var(--ant-color-text);
 }
 .connection-addresses {

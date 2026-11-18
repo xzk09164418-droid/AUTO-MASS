@@ -137,11 +137,11 @@ const handleEndDateChange = (val: string) => {
 <style scoped>
 .search-panel {
   background: var(--ant-color-bg-container);
-  border-radius: 12px;
+  border-radius: 2px;
   padding: 20px;
   margin-bottom: 20px;
-  border: 1px solid var(--ant-color-border-secondary);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  border: 1px solid var(--ant-color-border);
+  box-shadow: var(--app-rhine-card-shadow);
 }
 
 .quick-time-section {

@@ -100,10 +100,10 @@ const logBackground = computed(() =>
   logThemeMode.value === 'theme'
     ? token.value.colorPrimaryBg
     : logIsDark.value
-      ? '#1e1e1e'
-      : '#ffffff'
+      ? '#13191d'
+      : '#f6f4ef'
 )
-const logForeground = computed(() => (logIsDark.value ? '#d4d4d4' : '#333333'))
+const logForeground = computed(() => (logIsDark.value ? '#e2e5de' : '#111411'))
 const editorColors = computed(() => ({
   'editor.background': logBackground.value,
   'editor.foreground': logForeground.value,
@@ -235,9 +235,9 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   background-color: var(--app-background-card-bg, var(--ant-color-bg-container));
-  border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
-  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 2px;
+  box-shadow: none;
+  border: 1px solid var(--ant-color-border);
   overflow: hidden;
 }
 
@@ -248,15 +248,17 @@ onUnmounted(() => {
   justify-content: space-between;
   align-items: center;
   width: 100%;
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--ant-color-border-secondary);
+  padding: 10px 16px;
+  background: var(--app-rhine-surface-subtle);
+  border-bottom: 1px solid var(--ant-color-border);
   flex-shrink: 0;
 }
 
 .scheduler-panel-header h3 {
   margin: 0;
-  font-size: 18px;
-  font-weight: 600;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
   color: var(--ant-color-text-heading);
 }
 

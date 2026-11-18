@@ -733,7 +733,7 @@ onMounted(() => {
 /* ==================== 签到设置（开关列表） ==================== */
 .settings-list {
   border: 1px solid var(--ant-color-border);
-  border-radius: 8px;
+  border-radius: 2px;
   overflow: hidden;
   background: var(--ant-color-bg-container);
 }
@@ -779,7 +779,7 @@ onMounted(() => {
 /* ==================== 用户列表表格 ==================== */
 .user-table-container {
   border: 1px solid var(--ant-color-border);
-  border-radius: 6px;
+  border-radius: 2px;
   overflow: hidden;
   background: var(--ant-color-bg-container);
 }

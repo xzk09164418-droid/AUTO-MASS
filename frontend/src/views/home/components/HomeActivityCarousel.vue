@@ -262,7 +262,8 @@ onBeforeUnmount(() => {
 .banner-viewport {
   position: relative;
   overflow: hidden;
-  border-radius: 12px;
+  border-radius: 2px;
+  border: 1px solid var(--ant-color-border);
 }
 
 .banner-arrow {
@@ -274,9 +275,9 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: center;
   color: #fff;
-  background: rgba(8, 10, 14, 0.42);
-  border: none;
-  border-radius: 50%;
+  background: rgba(17, 22, 25, 0.56);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 2px;
   cursor: pointer;
   opacity: 0;
   transform: translateY(-50%);
@@ -307,20 +308,20 @@ onBeforeUnmount(() => {
   gap: 4px;
   overflow-x: auto;
   padding: 5px;
-  border: 1px solid var(--ant-color-border-secondary);
-  border-radius: 12px;
+  border: 1px solid var(--ant-color-border);
+  border-radius: 2px;
   background: var(--ant-color-bg-container);
   scrollbar-width: thin;
 }
 
 .switcher-chip {
   flex: 0 0 auto;
-  padding: 9px 16px;
+  padding: 8px 16px;
   color: var(--ant-color-text-secondary);
   font-size: 13px;
-  background: var(--ant-color-fill-quaternary);
+  background: var(--app-rhine-surface-subtle);
   border: 1px solid transparent;
-  border-radius: 8px;
+  border-radius: 2px;
   cursor: pointer;
   transition:
     color 0.2s ease,

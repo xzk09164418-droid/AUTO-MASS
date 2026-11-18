@@ -95,13 +95,14 @@ const formatProxyDisplay = (dateString: string) => {
 
 .proxy-card {
   width: 100%;
-  border-radius: 8px;
-  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.04);
+  border-radius: 2px;
+  box-shadow: var(--app-rhine-card-shadow);
 }
 
 .proxy-card :deep(.ant-card-head-title) {
-  font-size: 18px;
-  font-weight: 600;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
 }
 
 .empty-state {
@@ -118,8 +119,10 @@ const formatProxyDisplay = (dateString: string) => {
 .proxy-list .proxy-item {
   min-height: 164px;
   padding: 16px;
+  background: var(--app-rhine-surface-subtle);
   border: 1px solid var(--ant-color-border);
-  border-radius: 8px;
+  border-left: 3px solid var(--app-rhine-accent);
+  border-radius: 2px;
 }
 
 .proxy-header {

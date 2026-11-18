@@ -23,31 +23,32 @@
   justify-content: space-between;
   align-items: center;
   margin-bottom: 20px;
-  padding-bottom: 8px;
-  border-bottom: 2px solid var(--ant-color-border-secondary);
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--ant-color-border);
 }
 
 .section-header h3 {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   margin: 0;
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 700;
+  letter-spacing: 0.03em;
   color: var(--ant-color-text);
 }
 
-/* 标题左侧的主题色竖条 */
+/* 标题左侧的莱茵标识竖条 */
 .section-header h3::before {
   content: '';
-  width: 4px;
-  height: 24px;
-  border-radius: 2px;
-  background: linear-gradient(135deg, var(--ant-color-primary), var(--ant-color-primary-hover));
+  width: 3px;
+  height: 18px;
+  border-radius: 0;
+  background: var(--app-rhine-accent);
 }
 
 /* 嵌在表单分区内部的子配置块标题（如 日志预处理）：
-   级别介于 .section-header（20px + 通栏分隔线）与表单标签（14px）之间；
+   级别介于 .section-header（18px + 通栏分隔线）与表单标签（14px）之间；
    不带通栏分隔线——子块后面紧跟着普通表单行时，不会被误读进子块的范围 */
 .sub-section-header {
   display: flex;
@@ -56,18 +57,20 @@
   gap: 12px;
   margin-bottom: 16px;
   padding: 8px 12px;
-  border: 1px solid var(--ant-color-border-secondary);
-  border-radius: 8px;
-  background: var(--ant-color-fill-quaternary);
+  border: 1px solid var(--ant-color-border);
+  border-left: 3px solid var(--app-rhine-rule);
+  border-radius: 2px;
+  background: var(--app-rhine-surface-subtle);
 }
 
 .sub-section-header h3 {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   margin: 0;
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 700;
+  letter-spacing: 0.02em;
   color: var(--ant-color-text);
 }
 
