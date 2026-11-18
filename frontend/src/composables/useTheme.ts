@@ -83,9 +83,9 @@ const RHINE_FONT_MONO =
 
 const RHINE_SURFACE_TOKENS = {
   light: {
-    colorBgLayout: '#e8e5e1',
-    colorBgContainer: '#f3f1ec',
-    colorBgElevated: '#f8f6f1',
+    colorBgLayout: '#e4e1db',
+    colorBgContainer: '#f6f4ef',
+    colorBgElevated: '#faf8f3',
     colorText: '#111411',
     colorTextSecondary: '#5a5850',
     colorTextTertiary: '#7e7a70',
@@ -97,9 +97,9 @@ const RHINE_SURFACE_TOKENS = {
     colorInfo: '#2b7a9b',
   },
   dark: {
-    colorBgLayout: '#111619',
-    colorBgContainer: '#171d21',
-    colorBgElevated: '#1f272c',
+    colorBgLayout: '#0f1417',
+    colorBgContainer: '#182025',
+    colorBgElevated: '#202a30',
     colorText: '#e2e5de',
     colorTextSecondary: '#9ea9ad',
     colorTextTertiary: '#6d7b80',
@@ -236,8 +236,32 @@ const updateCSSVariables = () => {
   root.style.setProperty(
     '--app-rhine-card-shadow',
     dark
-      ? '0 1px 0 rgba(0, 0, 0, 0.45), 0 10px 26px rgba(0, 0, 0, 0.28)'
-      : '0 1px 0 rgba(17, 20, 17, 0.06), 0 8px 22px rgba(45, 38, 28, 0.05)'
+      ? 'inset 0 1px 0 rgba(226, 229, 222, 0.11), inset 0 -1px 0 rgba(0, 0, 0, 0.55), 0 3px 0 rgba(4, 7, 9, 0.78), 0 10px 26px -4px rgba(0, 0, 0, 0.56), 0 18px 36px -12px rgba(0, 0, 0, 0.42)'
+      : 'inset 0 1px 0 rgba(255, 255, 255, 0.92), inset 0 -1px 0 rgba(28, 31, 27, 0.06), 0 3px 0 rgba(28, 31, 27, 0.14), 0 8px 20px -4px rgba(34, 30, 24, 0.14), 0 16px 32px -12px rgba(34, 30, 24, 0.1)'
+  )
+  root.style.setProperty(
+    '--app-rhine-card-shadow-hover',
+    dark
+      ? 'inset 0 1px 0 rgba(232, 130, 58, 0.26), inset 0 -1px 0 rgba(0, 0, 0, 0.65), 0 5px 0 rgba(4, 7, 9, 0.88), 0 16px 32px -6px rgba(0, 0, 0, 0.68), 0 24px 44px -12px rgba(0, 0, 0, 0.5)'
+      : 'inset 0 1px 0 rgba(255, 255, 255, 0.98), inset 0 -1px 0 rgba(28, 31, 27, 0.08), 0 5px 0 rgba(28, 31, 27, 0.18), 0 14px 28px -6px rgba(34, 30, 24, 0.18), 0 22px 40px -14px rgba(34, 30, 24, 0.12)'
+  )
+  root.style.setProperty(
+    '--app-rhine-subcard-shadow',
+    dark
+      ? 'inset 0 1px 0 rgba(226, 229, 222, 0.07), 0 2px 0 rgba(4, 7, 9, 0.55), 0 6px 14px -4px rgba(0, 0, 0, 0.4)'
+      : 'inset 0 1px 0 rgba(255, 255, 255, 0.84), 0 2px 0 rgba(28, 31, 27, 0.08), 0 4px 10px -3px rgba(34, 30, 24, 0.08)'
+  )
+  root.style.setProperty('--app-rhine-card-border-top', dark ? '#3f5058' : '#d8d4ca')
+  root.style.setProperty('--app-rhine-card-border-bottom', dark ? '#090e11' : '#aba598')
+  root.style.setProperty(
+    '--app-rhine-card-surface-sheen',
+    dark
+      ? 'linear-gradient(180deg, rgba(255, 255, 255, 0.042) 0%, rgba(255, 255, 255, 0) 34%, rgba(0, 0, 0, 0.14) 100%)'
+      : 'linear-gradient(180deg, rgba(255, 255, 255, 0.68) 0%, rgba(255, 255, 255, 0) 38%, rgba(28, 31, 27, 0.018) 100%)'
+  )
+  root.style.setProperty(
+    '--app-rhine-btn-shadow',
+    dark ? '0 2px 0 rgba(4, 7, 9, 0.62)' : '0 2px 0 rgba(28, 31, 27, 0.12)'
   )
   root.style.setProperty(
     '--app-rhine-modal-backdrop',

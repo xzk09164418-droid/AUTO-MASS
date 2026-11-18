@@ -158,7 +158,10 @@ const countdownFormat = (item: ActivityBannerItem) => {
   min-height: 240px;
   overflow: hidden;
   background: var(--ant-color-fill-secondary);
+  border: 1px solid var(--ant-color-border);
+  border-bottom-color: var(--app-rhine-card-border-bottom);
   border-radius: 2px;
+  box-shadow: var(--app-rhine-card-shadow);
 }
 
 .banner-cover {

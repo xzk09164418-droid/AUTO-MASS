@@ -482,7 +482,7 @@ onDeactivated(() => {
   height: calc(100vh - 237px);
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow: visible;
 }
 
 /* 根据状态变化的样式 */
@@ -502,9 +502,10 @@ onDeactivated(() => {
 .status-container {
   display: flex;
   flex: 1;
-  overflow: hidden;
+  overflow: visible;
+  min-height: 0;
   gap: 16px;
-  padding: 0;
+  padding: 0 0 8px;
   margin: 0;
 }
 
@@ -514,7 +515,8 @@ onDeactivated(() => {
   /* 占据1/3宽度 */
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  min-height: 0;
+  overflow: visible;
 }
 
 /* 日志面板容器 */
@@ -522,7 +524,8 @@ onDeactivated(() => {
   flex: 1;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  min-height: 0;
+  overflow: visible;
 }
 
 /* 电源操作倒计时弹窗样式已移至 GlobalPowerCountdown.vue */

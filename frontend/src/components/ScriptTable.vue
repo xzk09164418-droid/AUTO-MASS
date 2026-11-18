@@ -497,21 +497,29 @@ const onUserDragEnd = async (script: Script) => {
 .script-card {
   border-radius: 2px;
   border: 1px solid var(--ant-color-border);
+  border-top-color: var(--app-rhine-card-border-top);
+  border-bottom-color: var(--app-rhine-card-border-bottom);
   border-left: 3px solid var(--app-rhine-rule);
-  background: var(--ant-color-bg-container);
+  background-color: var(--ant-color-bg-container);
+  background-image: var(--app-rhine-card-surface-sheen);
   overflow: hidden;
   height: 100%;
   display: flex;
   flex-direction: column;
   box-shadow: var(--app-rhine-card-shadow);
   transition:
-    border-color 0.16s ease,
-    box-shadow 0.16s ease;
+    border-color 0.18s cubic-bezier(0.2, 0.9, 0.3, 1),
+    box-shadow 0.18s cubic-bezier(0.2, 0.9, 0.3, 1),
+    transform 0.18s cubic-bezier(0.2, 0.9, 0.3, 1);
 }
 
 .script-card:hover {
   border-color: var(--ant-color-border);
+  border-top-color: var(--app-rhine-card-border-top);
+  border-bottom-color: var(--app-rhine-card-border-bottom);
   border-left-color: var(--app-rhine-accent);
+  box-shadow: var(--app-rhine-card-shadow-hover);
+  transform: translateY(-2px);
 }
 
 /* 脚本头部 */

@@ -122,6 +122,7 @@ const quickActions = computed(() => [
   color: var(--app-rhine-accent);
   border-color: var(--app-rhine-accent-border);
   background: var(--app-rhine-accent-soft);
+  transform: translateY(-1px);
 }
 
 .quick-action:focus-visible {
@@ -139,12 +140,15 @@ const quickActions = computed(() => [
   color: var(--ant-color-text);
   background: var(--app-rhine-surface-subtle);
   border: 1px solid var(--ant-color-border);
+  border-bottom-color: var(--app-rhine-card-border-bottom);
   border-radius: 2px;
+  box-shadow: var(--app-rhine-subcard-shadow);
   font-size: 18px;
   transition:
     color 0.16s ease,
     border-color 0.16s ease,
-    background-color 0.16s ease;
+    background-color 0.16s ease,
+    transform 0.16s ease;
 }
 
 .quick-action-text {

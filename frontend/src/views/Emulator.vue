@@ -1413,10 +1413,13 @@ const handleBossKeyInputChange = (uuid: string) => {
   flex-direction: column;
   overflow: hidden;
   background-color: var(--ant-color-bg-container);
+  background-image: var(--app-rhine-card-surface-sheen);
   border-radius: 2px;
   padding: 16px;
   box-shadow: var(--app-rhine-card-shadow);
   border: 1px solid var(--ant-color-border);
+  border-top-color: var(--app-rhine-card-border-top);
+  border-bottom-color: var(--app-rhine-card-border-bottom);
 }
 
 .emulator-tabs :deep(.ant-tabs) {
@@ -1464,7 +1467,7 @@ const handleBossKeyInputChange = (uuid: string) => {
 .config-section {
   background-color: var(--ant-color-bg-container);
   border-radius: 2px;
-  box-shadow: none;
+  box-shadow: var(--app-rhine-subcard-shadow);
   border: 1px solid var(--ant-color-border);
   padding: 16px;
   overflow: hidden;

@@ -586,8 +586,11 @@ onMounted(() => {
 }
 
 .settings-content {
-  background: var(--ant-color-bg-container);
+  background-color: var(--ant-color-bg-container);
+  background-image: var(--app-rhine-card-surface-sheen);
   border: 1px solid var(--ant-color-border);
+  border-top-color: var(--app-rhine-card-border-top);
+  border-bottom-color: var(--app-rhine-card-border-bottom);
   border-radius: 2px;
   box-shadow: var(--app-rhine-card-shadow);
   width: 100%;
@@ -735,10 +738,12 @@ onMounted(() => {
 :deep(.link-card) {
   background: var(--ant-color-bg-container);
   border: 1px solid var(--ant-color-border);
+  border-bottom-color: var(--app-rhine-card-border-bottom);
   border-radius: 2px;
+  box-shadow: var(--app-rhine-subcard-shadow);
   padding: 20px;
   text-align: center;
-  transition: all 0.2s ease;
+  transition: all 0.18s cubic-bezier(0.2, 0.9, 0.3, 1);
   height: 100%;
   display: flex;
   flex-direction: column;
@@ -747,8 +752,8 @@ onMounted(() => {
 
 :deep(.link-card:hover) {
   border-color: var(--app-rhine-accent);
-  box-shadow: var(--app-rhine-card-shadow);
-  transform: translateY(-1px);
+  box-shadow: var(--app-rhine-card-shadow-hover);
+  transform: translateY(-2px);
 }
 
 :deep(.link-icon) {

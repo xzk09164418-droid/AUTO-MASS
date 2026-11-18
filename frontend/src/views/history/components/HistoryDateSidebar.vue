@@ -188,9 +188,12 @@ const formatDateGroup = (date: string) => formatHistoryGroupLabel(date)
   max-width: 300px;
   display: flex;
   flex-direction: column;
-  background: var(--ant-color-bg-container);
+  background-color: var(--ant-color-bg-container);
+  background-image: var(--app-rhine-card-surface-sheen);
   border-radius: 2px;
   border: 1px solid var(--ant-color-border);
+  border-top-color: var(--app-rhine-card-border-top);
+  border-bottom-color: var(--app-rhine-card-border-bottom);
   box-shadow: var(--app-rhine-card-shadow);
   overflow: hidden;
 }

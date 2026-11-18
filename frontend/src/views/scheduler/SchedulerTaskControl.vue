@@ -508,8 +508,11 @@ const onDropdownVisibleChange = (open: boolean) => {
   margin-bottom: 16px;
   border-radius: 2px;
   background-color: var(--app-background-card-bg, var(--ant-color-bg-container));
-  box-shadow: none;
+  background-image: var(--app-rhine-card-surface-sheen);
+  box-shadow: var(--app-rhine-card-shadow);
   border: 1px solid var(--ant-color-border);
+  border-top-color: var(--app-rhine-card-border-top);
+  border-bottom-color: var(--app-rhine-card-border-bottom);
   border-left: 3px solid var(--app-rhine-accent);
   overflow: hidden;
 }

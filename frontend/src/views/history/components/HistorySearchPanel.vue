@@ -136,11 +136,14 @@ const handleEndDateChange = (val: string) => {
 
 <style scoped>
 .search-panel {
-  background: var(--ant-color-bg-container);
+  background-color: var(--ant-color-bg-container);
+  background-image: var(--app-rhine-card-surface-sheen);
   border-radius: 2px;
   padding: 20px;
   margin-bottom: 20px;
   border: 1px solid var(--ant-color-border);
+  border-top-color: var(--app-rhine-card-border-top);
+  border-bottom-color: var(--app-rhine-card-border-bottom);
   box-shadow: var(--app-rhine-card-shadow);
 }
 

@@ -24,7 +24,26 @@
   --app-rhine-olive: #4d5443;
   --app-rhine-surface-subtle: #ece9e2;
   --app-rhine-surface-header: #e6e3dc;
-  --app-rhine-card-shadow: 0 1px 0 rgba(17, 20, 17, 0.06), 0 8px 22px rgba(45, 38, 28, 0.05);
+  --app-rhine-card-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.92), inset 0 -1px 0 rgba(28, 31, 27, 0.06),
+    0 3px 0 rgba(28, 31, 27, 0.14), 0 8px 20px -4px rgba(34, 30, 24, 0.14),
+    0 16px 32px -12px rgba(34, 30, 24, 0.1);
+  --app-rhine-card-shadow-hover:
+    inset 0 1px 0 rgba(255, 255, 255, 0.98), inset 0 -1px 0 rgba(28, 31, 27, 0.08),
+    0 5px 0 rgba(28, 31, 27, 0.18), 0 14px 28px -6px rgba(34, 30, 24, 0.18),
+    0 22px 40px -14px rgba(34, 30, 24, 0.12);
+  --app-rhine-subcard-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.84), 0 2px 0 rgba(28, 31, 27, 0.08),
+    0 4px 10px -3px rgba(34, 30, 24, 0.08);
+  --app-rhine-card-border-top: #d8d4ca;
+  --app-rhine-card-border-bottom: #aba598;
+  --app-rhine-card-surface-sheen: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.68) 0%,
+    rgba(255, 255, 255, 0) 38%,
+    rgba(28, 31, 27, 0.018) 100%
+  );
+  --app-rhine-btn-shadow: 0 2px 0 rgba(28, 31, 27, 0.12);
   --app-rhine-modal-backdrop: rgba(224, 220, 212, 0.62);
   --app-rhine-hover-bg: rgba(17, 20, 17, 0.055);
   --app-rhine-active-bg: rgba(217, 107, 39, 0.1);
@@ -50,7 +69,26 @@
   --app-rhine-olive: #7d8c6d;
   --app-rhine-surface-subtle: #13191d;
   --app-rhine-surface-header: #141a1e;
-  --app-rhine-card-shadow: 0 1px 0 rgba(0, 0, 0, 0.45), 0 10px 26px rgba(0, 0, 0, 0.28);
+  --app-rhine-card-shadow:
+    inset 0 1px 0 rgba(226, 229, 222, 0.11), inset 0 -1px 0 rgba(0, 0, 0, 0.55),
+    0 3px 0 rgba(4, 7, 9, 0.78), 0 10px 26px -4px rgba(0, 0, 0, 0.56),
+    0 18px 36px -12px rgba(0, 0, 0, 0.42);
+  --app-rhine-card-shadow-hover:
+    inset 0 1px 0 rgba(232, 130, 58, 0.26), inset 0 -1px 0 rgba(0, 0, 0, 0.65),
+    0 5px 0 rgba(4, 7, 9, 0.88), 0 16px 32px -6px rgba(0, 0, 0, 0.68),
+    0 24px 44px -12px rgba(0, 0, 0, 0.5);
+  --app-rhine-subcard-shadow:
+    inset 0 1px 0 rgba(226, 229, 222, 0.07), 0 2px 0 rgba(4, 7, 9, 0.55),
+    0 6px 14px -4px rgba(0, 0, 0, 0.4);
+  --app-rhine-card-border-top: #3f5058;
+  --app-rhine-card-border-bottom: #090e11;
+  --app-rhine-card-surface-sheen: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.042) 0%,
+    rgba(255, 255, 255, 0) 34%,
+    rgba(0, 0, 0, 0.14) 100%
+  );
+  --app-rhine-btn-shadow: 0 2px 0 rgba(4, 7, 9, 0.62);
   --app-rhine-modal-backdrop: rgba(9, 13, 16, 0.72);
   --app-rhine-hover-bg: rgba(226, 229, 222, 0.065);
   --app-rhine-active-bg: rgba(232, 130, 58, 0.14);
@@ -91,14 +129,34 @@ html:not(.appearance-background-custom) .content-area {
   background-position: -1px -1px;
 }
 
-/* ── Cards: Crisp Archival Dossier Plates ────────────────────────────────── */
+/* ── Cards: Tactile 3D Archival Dossier Slabs ────────────────────────────── */
 .ant-card {
   border-radius: 2px;
   border: 1px solid var(--ant-color-border);
+  border-top-color: var(--app-rhine-card-border-top);
+  border-bottom-color: var(--app-rhine-card-border-bottom);
+  background-image: var(--app-rhine-card-surface-sheen);
   box-shadow: var(--app-rhine-card-shadow);
   transition:
     border-color 0.18s cubic-bezier(0.2, 0.9, 0.3, 1),
-    box-shadow 0.18s cubic-bezier(0.2, 0.9, 0.3, 1);
+    box-shadow 0.18s cubic-bezier(0.2, 0.9, 0.3, 1),
+    transform 0.18s cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+
+.ant-card.ant-card-hoverable:hover {
+  border-color: var(--app-rhine-accent-border);
+  box-shadow: var(--app-rhine-card-shadow-hover);
+  transform: translateY(-2px);
+}
+
+/* Nested cards use a lighter recessed elevation to avoid stacking heavy shadows */
+.ant-card .ant-card,
+.ant-modal-content .ant-card,
+.ant-drawer-content .ant-card {
+  background-image: none;
+  border-top-color: var(--ant-color-border);
+  border-bottom-color: var(--ant-color-border);
+  box-shadow: var(--app-rhine-subcard-shadow);
 }
 
 .ant-card .ant-card-head {
@@ -122,7 +180,13 @@ html:not(.appearance-background-custom) .content-area {
     background-color 0.16s cubic-bezier(0.2, 0.9, 0.3, 1),
     border-color 0.16s cubic-bezier(0.2, 0.9, 0.3, 1),
     color 0.16s cubic-bezier(0.2, 0.9, 0.3, 1),
+    box-shadow 0.14s ease,
     transform 0.12s ease;
+}
+
+.ant-btn-default:not(:disabled),
+.ant-btn-primary:not(:disabled):not(.ant-btn-background-ghost) {
+  box-shadow: var(--app-rhine-btn-shadow);
 }
 
 .ant-btn-default:not(:disabled):hover {
@@ -137,7 +201,8 @@ html:not(.appearance-background-custom) .content-area {
 
 .ant-btn-primary:not(:disabled):not(.ant-btn-background-ghost):active,
 .ant-btn-default:not(:disabled):active {
-  transform: translateY(0.5px);
+  transform: translateY(1px);
+  box-shadow: none;
 }
 
 /* ── Form Inputs, Selects, Pickers ───────────────────────────────────────── */
