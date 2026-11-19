@@ -135,20 +135,107 @@ svg { display: block; }
 .ruler button.on i { height: 22px; background: var(--accent); }
 .ledger .grow { flex: 1; }
 
-/* 二级界面占位：从方块展开 */
-#detail { position: absolute; z-index: 30; background: var(--ink); color: #fff; display: none; overflow: hidden; transition: left .55s cubic-bezier(.7,0,.2,1), top .55s cubic-bezier(.7,0,.2,1), width .55s cubic-bezier(.7,0,.2,1), height .55s cubic-bezier(.7,0,.2,1), background .4s; }
-#detail.open { background: var(--paper); color: var(--ink); }
-#detail .d-body { position: absolute; inset: 0; padding: 72px 96px; opacity: 0; transition: opacity .25s; }
-#detail.open .d-body { opacity: 1; transition-delay: .45s; }
-.d-head { display: flex; align-items: baseline; gap: 28px; border-bottom: 2px solid var(--ink); padding-bottom: 18px; }
-.d-head .n { font-size: 64px; font-weight: 300; color: var(--muted); }
-.d-head .c { font-size: 88px; font-weight: 700; letter-spacing: -.02em; }
-.d-head .t { font-size: 32px; font-weight: 700; letter-spacing: .2em; }
-.d-note { margin-top: 48px; font-size: 22px; color: var(--muted); letter-spacing: .1em; }
-.d-grid { margin-top: 40px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 0; border-top: 1px solid var(--hair); border-left: 1px solid var(--hair); }
-.d-grid div { height: 180px; border-right: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 18px; font-size: 13px; letter-spacing: .2em; color: var(--muted); }
-#back { position: absolute; right: 96px; top: 88px; font: 700 15px var(--font); letter-spacing: .3em; background: none; border: 1.5px solid var(--ink); padding: 12px 22px; cursor: pointer; }
-#back:hover { background: var(--ink); color: #fff; }
+/* ─────────── 二级界面（参考 PV 1:19 之后）：方块左移 → 左下录像带轮盘 → 右侧档案 ─────────── */
+#hub.sectioned .tile:not(.s-clone), #hub.sectioned .hub-diag, #hub.sectioned #searching, #hub.sectioned .cross, #hub.sectioned .hint, #hub.sectioned .ghost-letters, #hub.sectioned .ghost-brand {
+  opacity: 0 !important; pointer-events: none; transition: opacity .28s ease !important;
+}
+#hub .hub-diag, #hub .cross, #hub .hint, #hub .ghost-letters, #hub .ghost-brand { transition: opacity .4s ease .35s; }
+#sect { position: absolute; inset: 0 0 56px 0; z-index: 30; pointer-events: none; }
+#sect.on { pointer-events: auto; }
+.s-clone { position: absolute; z-index: 31; opacity: 1 !important; transform-origin: 0 0 !important; transition: transform .7s cubic-bezier(.75,0,.15,1) !important; pointer-events: none; }
+.s-clone.focus { --s: 1; }
+
+/* 方块下方的部门说明 */
+.s-caption { position: absolute; left: 80px; top: 432px; width: 320px; opacity: 0; transform: translateX(-16px); transition: opacity .3s, transform .4s cubic-bezier(.2,.8,.2,1); }
+#sect.reel-in .s-caption { opacity: 1; transform: none; transition-delay: .1s; }
+.s-caption .k { font-size: 12px; font-weight: 700; letter-spacing: .24em; color: var(--muted); }
+.s-caption .z { margin-top: 8px; font-size: 30px; font-weight: 700; letter-spacing: .16em; }
+.s-caption .c { margin-top: 10px; font-size: 13px; color: var(--muted); letter-spacing: .1em; line-height: 1.7; }
+.s-caption .bar { margin-top: 14px; height: 2px; width: 100%; background: var(--ink); transform-origin: left; transform: scaleX(0); transition: transform .5s cubic-bezier(.7,0,.2,1) .2s; }
+#sect.reel-in .s-caption .bar { transform: scaleX(1); }
+
+/* 左下录像带轮盘 */
+#reel { position: absolute; left: -330px; top: 480px; width: 1000px; height: 1000px; pointer-events: none; overflow: visible; }
+#reel .ring { fill: none; stroke: var(--ink); stroke-dasharray: 2800; stroke-dashoffset: 2800; transition: stroke-dashoffset .9s cubic-bezier(.6,0,.2,1); }
+#sect.reel-in #reel .ring { stroke-dashoffset: 0; }
+#reel .spool { opacity: 0; transform: scale(.82) rotate(-60deg); transform-origin: 500px 500px; transition: opacity .35s, transform .9s cubic-bezier(.2,.8,.2,1); }
+#sect.reel-in #reel .spool { opacity: 1; transform: none; transition-delay: .15s; }
+#reel .ticks line { stroke: var(--hair); stroke-width: 1.2; }
+#reel .ticks line.major { stroke: var(--ink); stroke-width: 2; }
+#reel .ticks { opacity: 0; transition: opacity .4s .35s; }
+#sect.reel-in #reel .ticks { opacity: 1; }
+#reel-labels { position: absolute; inset: 0; pointer-events: none; }
+.r-label { position: absolute; display: flex; align-items: baseline; gap: 12px; white-space: nowrap; transform: translateY(-50%); cursor: pointer; pointer-events: auto; font-weight: 700; letter-spacing: .1em; color: var(--muted); transition: color .2s, font-size .2s; background: none; border: none; font-family: var(--font); padding: 4px 6px; }
+.r-label b { font-size: 12px; font-weight: 700; letter-spacing: .1em; color: var(--hair); }
+.r-label.on { color: var(--ink); font-size: 24px; }
+.r-label.on b { color: var(--accent); font-size: 14px; }
+.r-label:not(.on) { font-size: 17px; }
+.r-label:hover { color: var(--ink); }
+.r-pointer { position: absolute; height: 2px; background: var(--accent); transform-origin: 0 50%; opacity: 0; transition: opacity .3s .5s; }
+#sect.reel-in .r-pointer { opacity: 1; }
+.s-caption .hint2 { margin-top: 10px; font-size: 11px; letter-spacing: .2em; color: var(--muted); } .r-hint { position: absolute; left: 80px; top: 560px; font-size: 11px; letter-spacing: .24em; color: var(--muted); opacity: 0; transition: opacity .3s .6s; }
+#sect.reel-in .r-hint { opacity: 1; }
+
+/* 右侧档案面板 */
+#s-panel { position: absolute; left: 720px; right: 72px; top: 92px; bottom: 28px; display: flex; flex-direction: column; }
+#s-panel .sp-head, #s-panel .blk, #s-panel .sp-actions { opacity: 0; transform: translateY(14px); transition: opacity .3s ease, transform .45s cubic-bezier(.2,.8,.2,1); }
+#s-panel.show .sp-head, #s-panel.show .blk, #s-panel.show .sp-actions { opacity: 1; transform: none; }
+.sp-meta { display: flex; gap: 18px; font-size: 12px; font-weight: 700; letter-spacing: .24em; color: var(--muted); }
+.sp-meta .a { color: var(--accent); }
+.sp-title { margin-top: 12px; display: flex; align-items: baseline; gap: 22px; }
+.sp-title .sp-idx { font-size: 54px; font-weight: 300; color: var(--muted); font-variant-numeric: tabular-nums; }
+.sp-title h2 { margin: 0; font-size: 46px; font-weight: 700; letter-spacing: .08em; }
+.sp-title .en { font-size: 14px; font-weight: 700; letter-spacing: .3em; color: var(--muted); }
+.sp-rule { margin-top: 16px; height: 2px; background: var(--ink); transform-origin: left; transform: scaleX(0); transition: transform .6s cubic-bezier(.7,0,.2,1) .1s; }
+#s-panel.show .sp-rule { transform: scaleX(1); }
+.sp-body { flex: 1; min-height: 0; overflow: auto; margin-top: 26px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px 28px; align-content: start; padding-right: 6px; }
+.blk { min-width: 0; }
+.blk.wide { grid-column: 1 / -1; }
+.blk-h { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; font-size: 12px; font-weight: 700; letter-spacing: .22em; color: var(--muted); }
+.blk-h::after { content: ''; flex: 1; height: 1px; background: var(--hair); }
+.blk-h i { width: 14px; height: 2px; background: var(--accent); }
+.kv { display: grid; grid-template-columns: 140px 1fr; border-top: 1px solid var(--hair); }
+.kv > div { padding: 11px 4px; border-bottom: 1px solid var(--hair); font-size: 15px; }
+.kv .k { color: var(--muted); font-size: 13px; letter-spacing: .1em; }
+.tbl { width: 100%; border-collapse: collapse; font-size: 15px; }
+.tbl th { text-align: left; font-size: 12px; font-weight: 700; letter-spacing: .18em; color: var(--muted); padding: 8px 6px; border-bottom: 2px solid var(--ink); }
+.tbl td { padding: 11px 6px; border-bottom: 1px solid var(--hair); }
+.tbl td.n { width: 44px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.tag { display: inline-block; padding: 2px 9px; font-size: 12px; font-weight: 700; letter-spacing: .12em; border: 1px solid currentColor; }
+.tag.ok { color: #55785a; } .tag.warn { color: #b8752c; } .tag.err { color: #b6453c; } .tag.idle { color: var(--muted); } .tag.run { color: var(--paper); background: var(--ink); border-color: var(--ink); }
+.stats { display: grid; grid-template-columns: repeat(3, 1fr); border-top: 1px solid var(--hair); border-left: 1px solid var(--hair); }
+.stats div { padding: 14px 16px; border-right: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+.stats b { display: block; font-size: 40px; font-weight: 300; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.stats span { font-size: 12px; letter-spacing: .2em; color: var(--muted); }
+.quote { font-size: 30px; font-weight: 700; line-height: 1.5; letter-spacing: .04em; padding: 18px 0 8px; }
+.quote + .by { text-align: right; color: var(--muted); letter-spacing: .1em; }
+.lst { border-top: 1px solid var(--hair); }
+.lst div { display: flex; gap: 18px; padding: 11px 4px; border-bottom: 1px solid var(--hair); font-size: 15px; }
+.lst div em { font-style: normal; color: var(--muted); font-variant-numeric: tabular-nums; min-width: 64px; }
+.log { margin: 0; height: 230px; overflow: auto; background: var(--ink); color: #d9d6cf; font: 13px/1.7 Consolas, monospace; padding: 12px 16px; }
+.log .e { color: #e58a7f; } .log .s { color: #9cc79f; }
+.banner { position: relative; height: 210px; overflow: hidden; background: var(--bg-b, linear-gradient(120deg, #1d2a2a, #49573f 55%, #c9b27a)); color: #fff; padding: 22px 26px; display: flex; flex-direction: column; justify-content: space-between; }
+.banner .v { align-self: flex-start; font-size: 13px; font-weight: 700; letter-spacing: .2em; padding: 3px 10px; border: 1px solid rgba(255,255,255,.7); }
+.banner h3 { margin: 0; font-size: 40px; letter-spacing: .1em; }
+.banner .cd { position: absolute; right: 22px; bottom: 20px; text-align: right; font-size: 12px; letter-spacing: .2em; }
+.banner .cd b { display: block; font-size: 34px; letter-spacing: .04em; }
+.tog { display: inline-flex; align-items: center; gap: 8px; }
+.tog i { width: 34px; height: 16px; border: 1.5px solid var(--ink); position: relative; }
+.tog i::after { content: ''; position: absolute; top: 2px; left: 2px; width: 10px; height: 9px; background: var(--muted); transition: left .2s; }
+.tog.on i::after { left: 19px; background: var(--accent); }
+.sp-actions { display: flex; gap: 12px; margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--hair); }
+.btn { font: 700 14px var(--font); letter-spacing: .14em; padding: 11px 22px; border: 1.5px solid var(--ink); background: transparent; color: var(--ink); cursor: pointer; }
+.btn.pri { background: var(--ink); color: var(--paper); }
+.btn:hover { border-color: var(--accent); color: var(--accent); }
+.btn.pri:hover { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn.dng:hover { border-color: #b6453c; color: #b6453c; }
+#s-back { position: absolute; right: 72px; top: 30px; font: 700 13px var(--font); letter-spacing: .28em; background: none; border: 1.5px solid var(--ink); padding: 9px 18px; cursor: pointer; opacity: 0; transition: opacity .3s .5s; }
+#sect.reel-in #s-back { opacity: 1; }
+#s-back:hover { background: var(--ink); color: #fff; }
+/* 切换条目：PV 式黑条横扫 */
+#s-wipe { position: absolute; left: 720px; right: 72px; top: 150px; height: 60px; background: var(--ink); transform: scaleX(0); transform-origin: left; pointer-events: none; z-index: 2; }
+#s-wipe.go { animation: wipe .42s cubic-bezier(.7,0,.2,1); }
+@keyframes wipe { 0% { transform: scaleX(0); transform-origin: left; } 49% { transform: scaleX(1); transform-origin: left; } 51% { transform: scaleX(1); transform-origin: right; } 100% { transform: scaleX(0); transform-origin: right; } }
 
 .hint { position: absolute; right: 48px; bottom: 70px; font-size: 12px; letter-spacing: .2em; color: var(--muted); text-align: right; line-height: 1.8; }
 #replay { font: 600 12px var(--font); letter-spacing: .2em; background: none; border: 1px solid var(--hair); color: var(--muted); padding: 6px 12px; cursor: pointer; }
@@ -211,7 +298,7 @@ svg { display: block; }
       <span class="sq"></span>
       <span>SESSION ● AUTHORIZED</span>
       <nav class="ruler" id="ruler" aria-label="一级界面刻度"></nav>
-      <span id="ledger-label">X-005 调度中心</span>
+      <span id="ledger-label">X-001 主页</span>
       <span class="grow"></span>
       <span id="clock"></span>
       <span>POWERED BY AUTO-MAS</span>
@@ -219,14 +306,30 @@ svg { display: block; }
     <div class="hint">数字键 1–0 选择 · ENTER 进入 · ESC 返回<br /><button id="replay" type="button">REPLAY BOOT</button></div>
   </section>
 
-  <div id="detail" role="dialog" aria-modal="true">
-    <div class="d-body">
-      <div class="d-head"><span class="n" id="d-n"></span><span class="c" id="d-c"></span><span class="t" id="d-t"></span></div>
-      <button id="back" type="button">← RETURN TO INDEX</button>
-      <p class="d-note">二级界面将在下一轮设计。这里只演示从一级方块展开进入的过渡。</p>
-      <div class="d-grid"><div>MODULE A-01</div><div>MODULE A-02</div><div>MODULE A-03</div><div>MODULE A-04</div><div>MODULE A-05</div><div>MODULE A-06</div></div>
-    </div>
-  </div>
+  <section id="sect" aria-label="二级界面">
+    <svg id="reel" viewBox="0 0 1000 1000" aria-hidden="true">
+      <circle class="ring" cx="500" cy="500" r="440" stroke-width="1.5" />
+      <circle class="ring" cx="500" cy="500" r="372" stroke-width="2" />
+      <g id="reel-ticks" class="ticks"></g>
+      <g class="spool"><g id="reel-spool">
+        <circle cx="500" cy="500" r="330" fill="var(--paper)" stroke="var(--ink)" stroke-width="2" />
+        <circle cx="500" cy="500" r="312" fill="none" stroke="var(--hair)" stroke-width="1" stroke-dasharray="3 7" />
+        <path d="M791.5 551.4A296 296 0 0 1 448.6 791.5L475.7 637.9A140 140 0 0 0 637.9 524.3Z" fill="#262725"/><path d="M309.7 726.7A296 296 0 0 1 273.3 309.7L392.8 410.0A140 140 0 0 0 410.0 607.2Z" fill="#262725"/><path d="M398.8 221.9A296 296 0 0 1 778.1 398.8L631.6 452.1A140 140 0 0 0 452.1 368.4Z" fill="#262725"/>
+        <g clip-path="url(#tape-clip)"><circle cx="500" cy="500" r="170" fill="none" stroke="#3b3c39" stroke-width="1"/><circle cx="500" cy="500" r="200" fill="none" stroke="#3b3c39" stroke-width="1"/><circle cx="500" cy="500" r="230" fill="none" stroke="#3b3c39" stroke-width="1"/><circle cx="500" cy="500" r="260" fill="none" stroke="#3b3c39" stroke-width="1"/><circle cx="500" cy="500" r="285" fill="none" stroke="#3b3c39" stroke-width="1"/></g>
+        <circle cx="500" cy="500" r="120" fill="var(--paper)" stroke="var(--ink)" stroke-width="2" />
+        <rect x="493" y="382" width="14" height="22" fill="var(--ink)" transform="rotate(0 500 500)"/><rect x="493" y="382" width="14" height="22" fill="var(--ink)" transform="rotate(60 500 500)"/><rect x="493" y="382" width="14" height="22" fill="var(--ink)" transform="rotate(120 500 500)"/><rect x="493" y="382" width="14" height="22" fill="var(--ink)" transform="rotate(180 500 500)"/><rect x="493" y="382" width="14" height="22" fill="var(--ink)" transform="rotate(240 500 500)"/><rect x="493" y="382" width="14" height="22" fill="var(--ink)" transform="rotate(300 500 500)"/>
+        <circle cx="500" cy="500" r="44" fill="none" stroke="var(--accent)" stroke-width="6" />
+        <text x="500" y="590" text-anchor="middle" font-size="14" font-weight="700" letter-spacing="4" fill="var(--muted)">AUTO-MAS // REEL</text>
+      </g></g>
+      <defs><clipPath id="tape-clip"><path d="M791.5 551.4A296 296 0 0 1 448.6 791.5L475.7 637.9A140 140 0 0 0 637.9 524.3Z"/><path d="M309.7 726.7A296 296 0 0 1 273.3 309.7L392.8 410.0A140 140 0 0 0 410.0 607.2Z"/><path d="M398.8 221.9A296 296 0 0 1 778.1 398.8L631.6 452.1A140 140 0 0 0 452.1 368.4Z"/></clipPath></defs>
+    </svg>
+    <div id="r-pointer" class="r-pointer"></div>
+    <div id="reel-labels"></div>
+    <div class="s-caption"><div class="k" id="s-cap-k"></div><div class="z" id="s-cap-z"></div><div class="c" id="s-cap-c"></div><div class="bar"></div><div class="hint2">滚轮 / ↑↓ 切换条目 · ESC 返回</div></div>
+    <div id="s-wipe"></div>
+    <div id="s-panel"></div>
+    <button id="s-back" type="button">← RETURN TO INDEX</button>
+  </section>
 
   <!-- ═══ 启动动画（复刻 PV 0–27 秒的段落结构） ═══ -->
   <section id="boot" aria-hidden="true">
@@ -273,11 +376,11 @@ svg { display: block; }
 // ── 一级界面：01–10，不含计划管理 ──
 // style: card 白卡 / ink 黑块 / bare 直接排版；depth 越大，鼠标视差越明显
 const DEPTS = [
-  { n: '01', code: 'OVRV', sub: 'OVERVIEW SECTION', zh: '主页', x: 300, y: 330, w: 230, h: 230, style: 'card', size: 66, depth: 10 },
+  { n: '01', code: 'MAIN\nOVRV', sub: 'MAIN OVERVIEW SECTION', zh: '主页', x: 960, y: 540, w: 340, h: 340, style: 'ink', size: 112, depth: 4, center: true, textured: true },
   { n: '02', code: 'CSTD', sub: 'SCRIPT CUSTODY SECTION', zh: '托管管理', x: 600, y: 300, w: 200, h: 200, style: 'card', size: 62, depth: 16 },
   { n: '03', code: 'EMUL', sub: 'EMULATOR SECTION', zh: '模拟器管理', x: 560, y: 560, w: 260, h: 120, style: 'bare', size: 84, depth: 22, accent: true },
   { n: '04', code: 'QUE', sub: 'QUEUE DISPATCH SECTION', zh: '调度队列', x: 270, y: 720, w: 220, h: 220, style: 'ink', size: 70, depth: 12, textured: true },
-  { n: '05', code: 'SCHD\nCTRL', sub: 'SCHEDULING CONTROL SECTION', zh: '调度中心', x: 960, y: 540, w: 340, h: 340, style: 'ink', size: 112, depth: 4, center: true, textured: true },
+  { n: '05', code: 'SCHD', sub: 'SCHEDULING CONTROL SECTION', zh: '调度中心', x: 300, y: 330, w: 230, h: 230, style: 'card', size: 66, depth: 10 },
   { n: '06', code: 'LOCL', sub: 'LOCAL CONTROL SECTION', zh: '本地控制', x: 1320, y: 300, w: 200, h: 200, style: 'card', size: 60, depth: 18 },
   { n: '07', code: 'SIGN', sub: 'COMMUNITY SIGN SECTION', zh: '签到', x: 1640, y: 300, w: 270, h: 170, style: 'card', size: 70, depth: 10 },
   { n: '08', code: 'HIST', sub: 'HISTORICAL RECORD SECTION', zh: '历史记录', x: 1430, y: 560, w: 280, h: 120, style: 'bare', size: 92, depth: 24 },
@@ -329,7 +432,7 @@ DEPTS.forEach((d, i) => {
   </div>`
   b.addEventListener('mouseenter', () => focusTile(i))
   b.addEventListener('focus', () => focusTile(i))
-  b.addEventListener('click', () => openDetail(i))
+  b.addEventListener('click', () => openSection(i))
   tilesEl.appendChild(b)
   tiles.push({ el: b, d })
 
@@ -337,7 +440,7 @@ DEPTS.forEach((d, i) => {
   r.type = 'button'
   r.setAttribute('aria-label', `${d.n} ${d.zh}`)
   r.innerHTML = `<b>${d.n}</b><i></i>`
-  r.addEventListener('click', () => { focusTile(i); openDetail(i) })
+  r.addEventListener('click', () => { focusTile(i); openSection(i) })
   r.addEventListener('mouseenter', () => focusTile(i))
   ruler.appendChild(r)
 })
@@ -350,7 +453,8 @@ DECOS.forEach(d => {
   tiles.push({ el, d })
 })
 
-let current = 4
+const CENTER = DEPTS.findIndex(d => d.center)
+let current = CENTER
 function focusTile(i) {
   current = i
   tiles.forEach((t, j) => t.el.classList.toggle('focus', j === i))
@@ -358,7 +462,7 @@ function focusTile(i) {
   const d = DEPTS[i]
   searching.style.left = d.x + 'px'
   searching.style.top = (d.y - d.h / 2 - 22) + 'px'
-  searching.querySelector('span').textContent = i === 4 && !hub.dataset.touched ? 'SEARCHING' : `ACCESS // ${d.zh}`
+  searching.querySelector('span').textContent = i === CENTER && !hub.dataset.touched ? 'SEARCHING' : `ACCESS // ${d.zh}`
   hub.dataset.touched = '1'
   ;[...ruler.children].forEach((r, j) => r.classList.toggle('on', j === i))
   ledgerLabel.textContent = `X-0${d.n} ${d.zh}`
@@ -385,37 +489,294 @@ function loop(t) {
 document.addEventListener('visibilitychange', () => { cancelAnimationFrame(raf); if (!document.hidden) raf = requestAnimationFrame(loop) })
 raf = requestAnimationFrame(loop)
 
-// 二级界面：方块原地展开成整屏
-const detail = document.getElementById('detail')
-let openIdx = -1
-function openDetail(i) {
-  const d = DEPTS[i]; openIdx = i
-  document.getElementById('d-n').textContent = d.n
-  document.getElementById('d-c').textContent = d.code.replace('\n', ' ')
-  document.getElementById('d-t').textContent = d.zh
-  Object.assign(detail.style, { display: 'block', left: d.x - d.w / 2 + 'px', top: d.y - d.h / 2 + 'px', width: d.w + 'px', height: d.h + 'px' })
-  detail.offsetWidth
-  Object.assign(detail.style, { left: '0px', top: '0px', width: '1920px', height: '1080px' })
-  detail.classList.add('open')
-  document.getElementById('back').focus({ preventScroll: true })
+// ── 二级界面：点击方块 → 方块移到左侧 → 左下录像带轮盘绘出 → 右侧档案逐块显现 ──
+// 演示数据只为展示版式，功能对应原有界面；正式实现接入后端接口。
+const kv = (title, rows) => ({ t: 'kv', title, rows })
+const table = (title, cols, rows, wide = true) => ({ t: 'table', title, cols, rows, wide })
+const stats = (title, rows) => ({ t: 'stats', title, rows })
+const quote = (text, by) => ({ t: 'quote', text, by, wide: true })
+const list = (title, rows) => ({ t: 'list', title, rows })
+const log = (title, lines) => ({ t: 'log', title, lines, wide: true })
+const banner = (o) => ({ t: 'banner', ...o, wide: true })
+const tog = on => `<span class="tog${on ? ' on' : ''}"><i></i>${on ? '开' : '关'}</span>`
+const tag = (text, kind) => `<span class="tag ${kind}">${text}</span>`
+const OK = tag('完成', 'ok'), RUN = tag('运行', 'run'), WAIT = tag('等待', 'idle'), ERR = tag('异常', 'err'), ON = tag('启用', 'ok'), OFF = tag('禁用', 'idle')
+
+const SECTIONS = {
+  '01': { caption: '总览今日托管、快速启动任务与系统公告。', items: [
+    { name: '快速启动', en: 'QUICK START', blocks: [
+      kv('START TARGET', [['当前目标', '队列 · 日常托管'], ['上次运行', '今天 06:00 · 全部完成'], ['下次定时', '明天 06:00'], ['完成后', '无动作']]),
+      stats('TODAY', [['今日已代理', '6'], ['待运行', '2'], ['异常', '0']]),
+    ], actions: ['开始执行', '选择任务'] },
+    { name: '代理概览', en: 'PROXY OVERVIEW', blocks: [
+      table('ACCOUNTS', ['账号', '托管', '今日', '最近状态'], [['主号', 'BGI 每日', '1 / 1', OK], ['小号', 'BGI 每日', '0 / 1', WAIT], ['鸣潮主号', '鸣潮日常', '1 / 1', OK], ['星铁', '星铁清体力', '1 / 2', ERR]]),
+    ], actions: ['查看历史记录'] },
+    { name: '每日寄语', en: 'DAILY NOTE', blocks: [quote('自动化不是为了偷懒，而是把时间留给值得的事。', '—— AUTO-MAS')], actions: ['换一句'] },
+    { name: '系统公告', en: 'NOTICE', blocks: [list('NOTICE BOARD', [['11-18', 'v5.7.0：仅保留通用脚本，计划管理下线'], ['11-10', '调度队列支持循环运行'], ['10-27', '本地远程桌面分身（与 BGI 同款 RDP）上线']])], actions: ['查看全部公告'] },
+  ] },
+  '02': { caption: '通用脚本托管：程序路径、日志判定与账号。', items: [
+    { name: 'BGI 每日', en: 'GENERAL · RDP', blocks: [
+      kv('SCRIPT', [['类型', '通用脚本'], ['程序', 'D:\\BetterGI\\BetterGI.exe'], ['成功判定', '日志 · “一条龙完成”'], ['运行环境', '本地远程桌面分身']]),
+      stats('RUN LIMIT', [['单次限时', '60m'], ['重试', '3'], ['今日上限', '2']]),
+      table('ACCOUNTS', ['账号', '状态', '剩余天数', '今日代理'], [['主号', ON, '永久', '1 / 2'], ['小号', ON, '30 天', '0 / 2']]),
+    ], actions: ['编辑托管', '添加账号', '复制', '删除'] },
+    { name: '鸣潮日常', en: 'GENERAL', blocks: [
+      kv('SCRIPT', [['类型', '通用脚本'], ['程序', 'D:\\ok-ww\\ok-ww.exe'], ['成功判定', '进程正常退出'], ['游戏', '启动器 · 鸣潮']]),
+      table('ACCOUNTS', ['账号', '状态', '剩余天数', '今日代理'], [['鸣潮主号', ON, '永久', '1 / 1']]),
+    ], actions: ['编辑托管', '添加账号', '复制', '删除'] },
+    { name: '星铁清体力', en: 'GENERAL', blocks: [
+      kv('SCRIPT', [['类型', '通用脚本'], ['程序', 'D:\\M7A\\March7th.exe'], ['成功判定', '日志 · “任务完成”'], ['失败判定', '日志 · “ERROR”']]),
+      table('ACCOUNTS', ['账号', '状态', '剩余天数', '今日代理'], [['星铁', ON, '12 天', '1 / 2'], ['星铁小号', OFF, '—', '0 / 2']]),
+    ], actions: ['编辑托管', '添加账号', '复制', '删除'] },
+    { name: '自定义脚本', en: 'GENERAL', blocks: [
+      kv('SCRIPT', [['类型', '通用脚本'], ['程序', 'C:\\Tools\\daily.bat'], ['成功判定', '进程正常退出'], ['配置模式', '文件']]),
+      table('ACCOUNTS', ['账号', '状态', '剩余天数', '今日代理'], [['默认', ON, '永久', '0 / 1']]),
+    ], actions: ['编辑托管', '添加账号', '复制', '删除'] },
+  ] },
+  '03': { caption: '模拟器实例：启动、关闭、显示与设备检测。', items: [
+    { name: 'MuMu 12', en: 'EMULATOR', blocks: [
+      kv('INSTALL', [['类型', 'MuMu 模拟器 12'], ['路径', 'D:\\MuMuPlayer-12.0'], ['实例数', '3']]),
+      table('DEVICES', ['名称', '状态', 'ADB 地址'], [['MuMu-0', RUN, '127.0.0.1:16384'], ['MuMu-1', WAIT, '127.0.0.1:16416'], ['MuMu-2', WAIT, '127.0.0.1:16448']]),
+    ], actions: ['启动', '关闭', '显示 / 隐藏', '刷新设备'] },
+    { name: '雷电 9', en: 'EMULATOR', blocks: [
+      kv('INSTALL', [['类型', '雷电模拟器 9'], ['路径', 'D:\\leidian\\LDPlayer9'], ['实例数', '1']]),
+      table('DEVICES', ['名称', '状态', 'ADB 地址'], [['雷电-0', WAIT, 'emulator-5554']]),
+    ], actions: ['启动', '关闭', '显示 / 隐藏', '刷新设备'] },
+    { name: 'Android AVD', en: 'EMULATOR 2.0', blocks: [
+      kv('INSTALL', [['类型', 'Android Studio AVD'], ['SDK', 'C:\\Android\\Sdk'], ['实例数', '2']]),
+      table('DEVICES', ['名称', '状态', 'ADB 地址'], [['Pixel_7', WAIT, 'emulator-5556'], ['Tablet', WAIT, 'emulator-5558']]),
+    ], actions: ['启动', '关闭', '刷新设备'] },
+  ] },
+  '04': { caption: '调度队列：定时、开机启动、循环与完成后动作。', items: [
+    { name: '日常托管', en: 'QUEUE', blocks: [
+      kv('SCHEDULE', [['定时启动', '06:00 / 18:00'], ['开机启动', '每日首次'], ['循环运行', tog(false)], ['完成后', '无动作']]),
+      kv('SCRIPT HOOKS', [['队列前脚本', tog(false)], ['队列后脚本', tog(true)], ['后脚本路径', 'C:\\Tools\\after.bat']]),
+      table('ITEMS', ['托管', '账号范围', '状态'], [['BGI 每日', '全部账号', ON], ['鸣潮日常', '全部账号', ON], ['星铁清体力', '星铁', ON]]),
+    ], actions: ['立即运行', '编辑队列', '添加托管'] },
+    { name: '周常收尾', en: 'QUEUE', blocks: [
+      kv('SCHEDULE', [['定时启动', '周日 22:00'], ['开机启动', '从不'], ['循环运行', tog(false)], ['完成后', '睡眠']]),
+      table('ITEMS', ['托管', '账号范围', '状态'], [['自定义脚本', '默认', ON]]),
+    ], actions: ['立即运行', '编辑队列', '添加托管'] },
+    { name: '夜间循环', en: 'QUEUE · CYCLE', blocks: [
+      kv('SCHEDULE', [['定时启动', '23:30'], ['开机启动', '从不'], ['循环运行', tog(true)], ['完成后', '关机']]),
+      table('ITEMS', ['托管', '账号范围', '状态'], [['BGI 每日', '小号', ON], ['星铁清体力', '星铁小号', OFF]]),
+    ], actions: ['立即运行', '编辑队列', '添加托管'] },
+  ] },
+  '05': { caption: '调度中心：执行面板、任务总览与实时日志。', items: [
+    { name: '主执行面板', en: 'PANEL 01', blocks: [
+      kv('TASK', [['任务', '队列 · 日常托管'], ['模式', '自动代理'], ['状态', RUN + ' 已运行 02:13'], ['完成后', '无动作']]),
+      table('TASK TREE', ['托管', '账号', '状态'], [['BGI 每日', '主号', OK], ['BGI 每日', '小号', RUN], ['鸣潮日常', '鸣潮主号', WAIT]], false),
+      log('LOG', ['<span>06:00:02</span> 队列开始：日常托管', '<span>06:00:05</span> BGI 每日 · 主号：启动远程桌面分身', '<span class="s">06:12:40</span> <span class="s">主号 · 一条龙完成 → Success!</span>', '<span>06:12:44</span> BGI 每日 · 小号：启动中…']),
+    ], actions: ['停止任务', '从指定托管继续'] },
+    { name: '面板 02', en: 'PANEL 02', blocks: [
+      kv('TASK', [['任务', '未选择'], ['模式', '自动代理'], ['状态', WAIT]]),
+      log('LOG', ['<span>—</span> 选择队列或托管后开始执行']),
+    ], actions: ['开始执行', '关闭面板'] },
+  ] },
+  '06': { caption: '本机连接、远程桌面分身、显示守卫与全局热键。', items: [
+    { name: '连接端口', en: 'HOST', blocks: [kv('PORTS', [['页面端口', '36262'], ['后端端口', '36263'], ['实例标识', '372fa7a8…'], ['后端状态', OK + ' 已连接']])], actions: ['复制地址', '修改端口'] },
+    { name: '远程桌面分身', en: 'CHILD SESSION · RDP', blocks: [kv('SESSION', [['启用', tog(true)], ['分辨率', '1920 × 1080'], ['当前状态', WAIT + ' 空闲'], ['说明', '与 BetterGI 相同的 RDP 技术，任务在独立会话中运行']])], actions: ['打开分身', '重建会话'] },
+    { name: '显示输出守卫', en: 'DESKTOP GUARD', blocks: [kv('GUARD', [['启用', tog(true)], ['虚拟显示器', '已安装'], ['无显示器时', '自动挂载虚拟显示器']])], actions: ['检测显示器'] },
+    { name: '全局热键', en: 'HOTKEY', blocks: [table('BINDINGS', ['动作', '快捷键'], [['暂停 / 继续', 'Ctrl + Alt + P'], ['下一个托管', 'Ctrl + Alt + →'], ['停止任务', 'Ctrl + Alt + S']])], actions: ['修改热键'] },
+  ] },
+  '07': { caption: '游戏社区签到：账号组、签到结果与定时。', items: [
+    { name: '森空岛', en: 'SKLAND', blocks: [kv('SCHEDULE', [['定时签到', '08:00'], ['启动时签到', tog(true)]]), table('ACCOUNTS', ['账号', '结果', '时间'], [['博士 A', OK, '08:00:12'], ['博士 B', OK, '08:00:15']])], actions: ['立即签到', '管理账号'] },
+    { name: '米游社', en: 'MIYOUSHE', blocks: [kv('SCHEDULE', [['定时签到', '08:05'], ['启动时签到', tog(true)]]), table('ACCOUNTS', ['账号', '结果', '时间'], [['旅行者', OK, '08:05:03'], ['开拓者', ERR, '需要重新登录']])], actions: ['立即签到', '管理账号'] },
+    { name: '库街区', en: 'KURO', blocks: [kv('SCHEDULE', [['定时签到', '08:10'], ['启动时签到', tog(false)]]), table('ACCOUNTS', ['账号', '结果', '时间'], [['漂泊者', WAIT, '—']])], actions: ['立即签到', '管理账号'] },
+  ] },
+  '08': { caption: '历史记录：按日查看每个账号的代理结果与日志。', items: [
+    { name: '11-20', en: 'TODAY', blocks: [stats('SUMMARY', [['代理次数', '6'], ['成功', '5'], ['异常', '1']]), table('RECORDS', ['时间', '账号', '托管', '结果'], [['06:12', '主号', 'BGI 每日', OK], ['06:30', '小号', 'BGI 每日', OK], ['06:52', '星铁', '星铁清体力', ERR]])], actions: ['查看日志', '导出'] },
+    { name: '11-19', en: 'HISTORY', blocks: [stats('SUMMARY', [['代理次数', '8'], ['成功', '8'], ['异常', '0']]), table('RECORDS', ['时间', '账号', '托管', '结果'], [['06:10', '主号', 'BGI 每日', OK], ['18:02', '鸣潮主号', '鸣潮日常', OK]])], actions: ['查看日志', '导出'] },
+    { name: '11-18', en: 'HISTORY', blocks: [stats('SUMMARY', [['代理次数', '7'], ['成功', '6'], ['异常', '1']]), table('RECORDS', ['时间', '账号', '托管', '结果'], [['06:15', '小号', 'BGI 每日', ERR]])], actions: ['查看日志', '导出'] },
+    { name: '11-17', en: 'HISTORY', blocks: [stats('SUMMARY', [['代理次数', '6'], ['成功', '6'], ['异常', '0']])], actions: ['查看日志', '导出'] },
+  ] },
+  '09': { caption: '游戏活动：版本、活动时间、剩余时间与卡池。', items: [
+    { name: '终末地', en: 'ENDFIELD', blocks: [banner({ v: '1.6 版本', title: '丹青渡', left: '6 天 5 时', bg: 'linear-gradient(120deg,#203030,#5b6a4c 55%,#d6c28c)' }), kv('PERIOD', [['活动时间', '10/15 12:00 – 11/26 06:00']]), list('POOLS', [['特许', '烟火邀星河'], ['武器', '丹青长卷']])], actions: ['打开活动页'] },
+    { name: '崩坏：星穹铁道', en: 'STAR RAIL', blocks: [banner({ v: '3.7 版本', title: '向星而行', left: '12 天 3 时', bg: 'linear-gradient(120deg,#1a1d3a,#4a3f7a 55%,#d9a8c7)' }), kv('PERIOD', [['活动时间', '11/12 – 12/02']])], actions: ['打开活动页'] },
+    { name: '原神', en: 'GENSHIN', blocks: [banner({ v: '6.2 版本', title: '霜夜灵嗣', left: '20 天', bg: 'linear-gradient(120deg,#1d3346,#3f6f8a 55%,#e3d3a1)' }), kv('PERIOD', [['活动时间', '11/19 – 12/30']])], actions: ['打开活动页'] },
+    { name: '鸣潮', en: 'WUTHERING', blocks: [banner({ v: '2.8 版本', title: '回声之岸', left: '4 天 11 时', bg: 'linear-gradient(120deg,#16242a,#2f5d5e 55%,#b9d3c5)' }), kv('PERIOD', [['活动时间', '10/30 – 11/24']])], actions: ['打开活动页'] },
+    { name: '明日方舟', en: 'ARKNIGHTS', blocks: [banner({ v: 'SIDE STORY', title: '新活动', left: '9 天', bg: 'linear-gradient(120deg,#222,#555 55%,#bbb)' }), kv('PERIOD', [['活动时间', '11/14 – 11/28']])], actions: ['打开活动页'] },
+  ] },
+  '10': { caption: '设置：常规、功能、通知、高级、更新与关于。', items: [
+    { name: '常规', en: 'GENERAL', blocks: [kv('APPEARANCE', [['主题', '跟随系统'], ['主题色', '金色'], ['语言', '简体中文'], ['开机自启', tog(true)]])], actions: ['恢复默认'] },
+    { name: '功能', en: 'FUNCTION', blocks: [kv('BEHAVIOR', [['允许睡眠', tog(false)], ['静默模式', tog(false)], ['历史保留', '永久'], ['启动时签到', tog(true)]])], actions: ['恢复默认'] },
+    { name: '通知', en: 'NOTIFY', blocks: [kv('CHANNELS', [['系统通知', tog(true)], ['邮件', tog(false)], ['Server 酱', tog(true)], ['Webhook', '2 个']])], actions: ['测试通知', '管理 Webhook'] },
+    { name: '高级', en: 'ADVANCED', blocks: [kv('RUNTIME', [['Runtime 启动方式', '自动'], ['日志导出', '打包 logs / debug'], ['数据备份', '导出配置']])], actions: ['导出日志', '导出备份'] },
+    { name: '更新', en: 'UPDATE', blocks: [kv('VERSION', [['当前版本', 'v5.7.0'], ['更新渠道', '稳定版'], ['自动检查', tog(true)]])], actions: ['检查更新'] },
+    { name: '其他', en: 'MISC', blocks: [kv('ATTRIBUTION', [['字体', 'MiSans（小米）· 许可见 NOTICE'], ['视觉参考', 'LBEILC / RhineLabUI（MIT）']])], actions: ['查看许可'] },
+  ] },
 }
-function closeDetail() {
-  if (openIdx < 0) return
-  const d = DEPTS[openIdx]
-  detail.classList.remove('open')
-  Object.assign(detail.style, { left: d.x - d.w / 2 + 'px', top: d.y - d.h / 2 + 'px', width: d.w + 'px', height: d.h + 'px' })
-  setTimeout(() => { detail.style.display = 'none' }, 560)
-  tiles[openIdx].el.focus({ preventScroll: true })
-  openIdx = -1
+
+function renderBlock(b) {
+  const head = b.title ? `<div class="blk-h"><i></i>${b.title}</div>` : ''
+  let body = ''
+  if (b.t === 'kv') body = `<div class="kv">${b.rows.map(([k, v]) => `<div class="k">${k}</div><div>${v}</div>`).join('')}</div>`
+  else if (b.t === 'table') body = `<table class="tbl"><thead><tr><th>#</th>${b.cols.map(c => `<th>${c}</th>`).join('')}</tr></thead><tbody>${b.rows.map((r, i) => `<tr><td class="n">${String(i + 1).padStart(2, '0')}</td>${r.map(c => `<td>${c}</td>`).join('')}</tr>`).join('')}</tbody></table>`
+  else if (b.t === 'stats') body = `<div class="stats">${b.rows.map(([k, v]) => `<div><b>${v}</b><span>${k}</span></div>`).join('')}</div>`
+  else if (b.t === 'quote') body = `<div class="quote">“${b.text}”</div><div class="by">${b.by}</div>`
+  else if (b.t === 'list') body = `<div class="lst">${b.rows.map(([a, c]) => `<div><em>${a}</em>${c}</div>`).join('')}</div>`
+  else if (b.t === 'log') body = `<pre class="log">${b.lines.join('\n')}</pre>`
+  else if (b.t === 'banner') body = `<div class="banner" style="--bg-b:${b.bg}"><span class="v">● ${b.v}</span><h3>${b.title}</h3><div class="cd">活动剩余时间<b>${b.left}</b></div></div>`
+  return `<div class="blk${b.wide ? ' wide' : ''}">${head}${body}</div>`
 }
-document.getElementById('back').addEventListener('click', closeDetail)
+
+const sect = document.getElementById('sect')
+const panel = document.getElementById('s-panel')
+const reelEl = document.getElementById('reel')
+const reelSpool = document.getElementById('reel-spool')
+const labelsEl = document.getElementById('reel-labels')
+const pointer = document.getElementById('r-pointer')
+const wipe = document.getElementById('s-wipe')
+const REEL = { cx: 170, cy: 980, r: 420, step: 13, focus: -42 }
+const state = { open: -1, items: [], pos: 0, target: 0, shown: -1, clone: null, raf: 0, timers: [] }
+const later = (ms, fn) => state.timers.push(setTimeout(fn, ms))
+
+// 刻度环一次画好；轮盘中心在左下 (170, 980)
+;(function buildTicks() {
+  const g = document.getElementById('reel-ticks')
+  let html = ''
+  for (let a = 0; a < 360; a += 3) {
+    const major = a % 15 === 0
+    const r1 = major ? 352 : 358, r2 = 366
+    const t = (a * Math.PI) / 180
+    html += `<line class="${major ? 'major' : ''}" x1="${500 + r1 * Math.cos(t)}" y1="${500 + r1 * Math.sin(t)}" x2="${500 + r2 * Math.cos(t)}" y2="${500 + r2 * Math.sin(t)}"/>`
+  }
+  g.innerHTML = html
+  const p = (REEL.focus * Math.PI) / 180
+  Object.assign(pointer.style, { left: REEL.cx + 372 * Math.cos(p) + 'px', top: REEL.cy + 372 * Math.sin(p) + 'px', width: '40px', transform: `rotate(${REEL.focus}deg)` })
+})()
+
+function layoutLabels() {
+  const nodes = labelsEl.children
+  for (let i = 0; i < nodes.length; i++) {
+    const a = REEL.focus + (i - state.pos) * REEL.step
+    const t = (a * Math.PI) / 180
+    const el = nodes[i]
+    const dist = Math.abs(i - state.pos)
+    el.style.left = REEL.cx + REEL.r * Math.cos(t) + 'px'
+    el.style.top = REEL.cy + REEL.r * Math.sin(t) + 'px'
+    el.style.opacity = a < -112 || a > 18 ? 0 : Math.max(0, 1 - dist * 0.22)
+    el.classList.toggle('on', i === state.target)
+  }
+  // 卷盘随选择转动，像磁带走带
+  reelSpool.setAttribute('transform', `rotate(${-state.pos * 38} 500 500)`)
+}
+
+function tick() {
+  state.pos += (state.target - state.pos) * 0.16
+  if (Math.abs(state.target - state.pos) < 0.001) state.pos = state.target
+  layoutLabels()
+  if (state.open >= 0 && state.pos !== state.target) state.raf = requestAnimationFrame(tick)
+  else state.raf = 0
+}
+const kick = () => { if (!state.raf) state.raf = requestAnimationFrame(tick) }
+
+function renderPanel(withWipe) {
+  const d = DEPTS[state.open]
+  const item = state.items[state.target]
+  const paint = () => {
+    panel.classList.remove('show')
+    panel.innerHTML = `
+      <div class="sp-head">
+        <div class="sp-meta"><span class="a">X-0${d.n}</span><span>${d.code.replace('\n', ' ')}</span><span>${d.sub}</span></div>
+        <div class="sp-title"><span class="sp-idx">${d.n}-${String(state.target + 1).padStart(2, '0')}</span><h2>${item.name}</h2><span class="en">${item.en}</span></div>
+        <div class="sp-rule"></div>
+      </div>
+      <div class="sp-body">${item.blocks.map(renderBlock).join('')}</div>
+      <div class="sp-actions">${item.actions.map((a, i) => `<button class="btn${i === 0 ? ' pri' : ''}${/删除|停止/.test(a) ? ' dng' : ''}" type="button">${a}</button>`).join('')}</div>`
+    // 逐块错开显现
+    ;[...panel.querySelectorAll('.sp-head, .blk, .sp-actions')].forEach((el, k) => { el.style.transitionDelay = `${k * 70}ms` })
+    panel.offsetWidth
+    panel.classList.add('show')
+    state.shown = state.target
+  }
+  if (withWipe) {
+    wipe.classList.remove('go'); wipe.offsetWidth; wipe.classList.add('go')
+    later(200, paint)
+  } else paint()
+}
+
+let selectTimer = 0
+function select(i) {
+  if (state.open < 0) return
+  const next = Math.max(0, Math.min(state.items.length - 1, i))
+  if (next === state.target) return
+  state.target = next
+  kick()
+  clearTimeout(selectTimer)
+  selectTimer = setTimeout(() => { if (state.shown !== state.target) renderPanel(true) }, 140)
+}
+
+function openSection(i) {
+  if (state.open >= 0 || booting) return
+  const d = DEPTS[i]
+  const conf = SECTIONS[d.n]
+  state.open = i; state.items = conf.items; state.target = 0; state.pos = -3; state.shown = -1
+  focusTile(i)
+  hub.classList.add('sectioned')
+  // ① 方块复制一份，从原位飞到左侧
+  const src = tiles[i].el
+  const clone = src.cloneNode(true)
+  clone.classList.add('s-clone')
+  clone.classList.remove('focus')
+  Object.assign(clone.style, { left: d.x - d.w / 2 + 'px', top: d.y - d.h / 2 + 'px', transform: 'none', transitionDelay: '0ms' })
+  clone.removeAttribute('aria-label'); clone.tabIndex = -1
+  hub.appendChild(clone)
+  state.clone = clone
+  const size = 300, s = size / Math.max(d.w, d.h)
+  const tx = 80 - (d.x - d.w / 2), ty = 110 - (d.y - d.h / 2) + (size - d.h * s) / 2
+  clone.offsetWidth
+  clone.style.transform = `translate(${tx}px, ${ty}px) scale(${s})`
+  document.getElementById('s-cap-k').textContent = `X-0${d.n} // ${d.sub}`
+  document.getElementById('s-cap-z').textContent = d.zh
+  document.getElementById('s-cap-c').textContent = `${conf.caption} 共 ${conf.items.length} 项。`
+  // ② 轮盘绘出、条目从下方转入
+  labelsEl.innerHTML = conf.items.map((it, k) => `<button type="button" class="r-label" data-k="${k}"><b>${d.n}-${String(k + 1).padStart(2, '0')}</b>${it.name}</button>`).join('')
+  layoutLabels()
+  later(420, () => { sect.classList.add('on', 'reel-in'); kick() })
+  // ③ 右侧档案
+  later(760, () => renderPanel(false))
+  later(800, () => document.getElementById('s-back').focus({ preventScroll: true }))
+}
+
+function closeSection() {
+  if (state.open < 0) return
+  const i = state.open
+  state.timers.forEach(clearTimeout); state.timers = []
+  panel.classList.remove('show')
+  sect.classList.remove('reel-in')
+  state.target = -3; kick()
+  setTimeout(() => { if (state.clone) state.clone.style.transform = 'none' }, 220)
+  setTimeout(() => {
+    state.clone?.remove(); state.clone = null
+    hub.classList.remove('sectioned')
+    sect.classList.remove('on')
+    panel.innerHTML = ''; labelsEl.innerHTML = ''
+    state.open = -1
+    tiles[i].el.focus({ preventScroll: true })
+  }, 950)
+}
+
+labelsEl.addEventListener('click', e => {
+  const b = e.target.closest('.r-label')
+  if (b) select(+b.dataset.k)
+})
+sect.addEventListener('wheel', e => {
+  if (state.open < 0) return
+  e.preventDefault()
+  select(state.target + (e.deltaY > 0 ? 1 : -1))
+}, { passive: false })
+document.getElementById('s-back').addEventListener('click', closeSection)
 
 addEventListener('keydown', e => {
   if (booting) { if (e.key === 'Escape' || e.key === ' ') finishBoot(); return }
-  if (e.key === 'Escape') return closeDetail()
-  if (openIdx >= 0) return
+  if (state.open >= 0) {
+    if (e.key === 'Escape') closeSection()
+    else if (e.key === 'ArrowDown' || e.key === 'ArrowRight') { e.preventDefault(); select(state.target + 1) }
+    else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') { e.preventDefault(); select(state.target - 1) }
+    return
+  }
   if (/^[0-9]$/.test(e.key)) { const i = e.key === '0' ? 9 : +e.key - 1; tiles[i].el.focus() }
-  if (e.key === 'Enter' && document.activeElement?.classList.contains('tile')) { /* 按钮自身会触发 click */ }
 })
 
 const clock = document.getElementById('clock')
@@ -482,12 +843,12 @@ function finishBoot() {
   booting = false
   boot.style.display = 'none'; skip.style.display = 'none'
   hub.classList.add('in')
-  focusTile(4)
-  tiles[4].el.focus({ preventScroll: true })
+  focusTile(CENTER)
+  tiles[CENTER].el.focus({ preventScroll: true })
 }
 skip.addEventListener('click', finishBoot)
 boot.addEventListener('click', finishBoot)
-document.getElementById('replay').addEventListener('click', () => { closeDetail(); runBoot() })
+document.getElementById('replay').addEventListener('click', () => { closeSection(); runBoot() })
 runBoot()
 </script>
 </body>

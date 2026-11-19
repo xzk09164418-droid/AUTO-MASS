@@ -10,7 +10,8 @@ FocusScope {
     id: hub
 
     property bool active: false
-    property int current: 4
+    readonly property int centerIndex: departments.findIndex(d => d.center)
+    property int current: centerIndex
     property bool paused: false          // 二级界面打开时暂停视差与漂浮
     property string backendStatus: ""
     property bool scanning: false
@@ -48,7 +49,7 @@ FocusScope {
 
     // 方块 i 的入场进度：中央先出，其余按编号错开
     function tileIntro(i) {
-        const start = departments[i].center ? 0 : 0.28 + 0.045 * (i < 4 ? i : i - 1)
+        const start = departments[i].center ? 0 : 0.28 + 0.045 * (i < centerIndex ? i : i - 1)
         return Math.max(0, Math.min(1, (intro - start) / 0.22))
     }
 
@@ -72,7 +73,7 @@ FocusScope {
                 hub.current = step
                 step++
             } else {
-                hub.current = 4
+                hub.current = hub.centerIndex
                 step = 0
                 hub.scanning = false
                 hub.focusCurrent()
