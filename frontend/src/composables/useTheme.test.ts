@@ -317,14 +317,14 @@ describe('useTheme custom appearance persistence', () => {
     await theme.resetTheme()
 
     expect(theme.themeMode.value).toBe('system')
-    expect(theme.themeColor.value).toBe('blue')
+    expect(theme.themeColor.value).toBe('gold')
     expect(theme.appearanceId.value).toBe(null)
     expect(theme.activeAppearance.value).toBe(null)
     expect(theme.isDark.value).toBe(false)
     expect(theme.appearances.value.map(item => item.id)).toEqual(['demo'])
     expect(removeAppearance).not.toHaveBeenCalled()
     expect(saveConfig).toHaveBeenCalledExactlyOnceWith(
-      { themeMode: 'system', themeColor: 'blue', appearanceId: null },
+      { themeMode: 'system', themeColor: 'gold', appearanceId: null },
       expect.any(Object)
     )
     expect(rootClassList.remove).toHaveBeenCalledWith('appearance-cursor-custom')

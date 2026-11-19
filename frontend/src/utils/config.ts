@@ -68,7 +68,7 @@ export interface FrontendConfig {
 
 const DEFAULT_CONFIG: FrontendConfig = {
   themeMode: 'system',
-  themeColor: 'blue',
+  themeColor: 'gold',
   desktopMascotFps: null,
   cursorEffect: 'none',
   lowPerformanceMode: false,
@@ -163,7 +163,7 @@ async function getConfigInternal(): Promise<FrontendConfig> {
         config.themeMode = parsed.themeMode || 'system'
       }
       if (!fileConfig || fileConfig.themeColor === undefined) {
-        config.themeColor = parsed.themeColor || 'blue'
+        config.themeColor = parsed.themeColor || 'gold'
       }
       logger.info(`从localStorage迁移主题配置: ${JSON.stringify(parsed)}`)
     }

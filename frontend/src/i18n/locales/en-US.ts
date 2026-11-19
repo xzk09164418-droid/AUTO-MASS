@@ -71,6 +71,9 @@ export default {
     unknown: 'Unknown',
   },
   comp: {
+    mainNavigation: 'Main navigation',
+    utilityNavigation: 'Utilities',
+    pageRuler: 'Page ruler',
     currentConfig: 'Configuration: {source}',
     configSourceShared: 'Shared',
     configSourceIndependent: 'Independent',

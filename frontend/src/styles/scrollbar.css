@@ -2,12 +2,12 @@
   --app-scrollbar-size: 7px;
   --app-scrollbar-track: transparent;
   --app-scrollbar-thumb: rgba(28, 31, 27, 0.24);
-  --app-scrollbar-thumb-hover: rgba(217, 107, 39, 0.65);
+  --app-scrollbar-thumb-hover: rgba(155, 114, 71, 0.7);
 }
 
 :root.dark {
   --app-scrollbar-thumb: rgba(166, 181, 188, 0.28);
-  --app-scrollbar-thumb-hover: rgba(232, 130, 58, 0.72);
+  --app-scrollbar-thumb-hover: rgba(197, 161, 107, 0.72);
 }
 
 * {

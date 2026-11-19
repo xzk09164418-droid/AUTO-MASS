@@ -1,108 +1,81 @@
 /* ============================================================================
- * RHINE LAB · ANALYSIS OS — Global Visual Architecture
+ * AUTO-MAS · ANALYSIS OS — 莱茵生命 PV 视觉体系
  *
- * Aesthetic language inspired by Arknights: Rhine Lab (明日方舟·莱茵生命)
- * - Light mode: Warm archival laboratory paper, dense carbon ink, hairline rules,
- *   Rhine research amber accents, olive-slate precision toggles.
- * - Dark mode: Deep orbital control room slate, warm ivory ink, luminous amber
- *   signals, crisp hairline structural borders.
+ * 参考《明日方舟》莱茵生命 PV 与社区复刻 LBEILC/RhineLabUI 的设计规范：
+ * - 浅色：暖灰白档案底 #eae5e1、近黑正文 #080a08、#aaa59a 细线、暖棕 #9b7247 选中信号。
+ * - 深色：#11181b 控制室底、#e0e3dc 正文、#536166 分隔线、琥珀 #c5a16b 选中信号。
+ * - 平面化：去掉立体阴影与网格底纹，以细线、编号与紧凑排字组织信息；不使用绿色强调。
  *
- * All custom properties are defined in useTheme.ts (with matching :root fallbacks
- * below for pre-hydration consistency) and respect custom appearance overrides.
+ * 变量由 useTheme.ts 注入，下方 :root 为首帧兜底，二者保持一致。
  * ============================================================================ */
 
 :root {
   color-scheme: light;
-  --app-rhine-canvas-bg: #e4e1db;
-  --app-rhine-canvas-text: #111411;
-  --app-rhine-sider-bg: #dfdcd4;
-  --app-rhine-sider-border: #1c1f1b;
-  --app-rhine-rule: #1c1f1b;
-  --app-rhine-grid-line: rgba(17, 20, 17, 0.048);
-  --app-rhine-accent: #d96b27;
-  --app-rhine-accent-soft: rgba(217, 107, 39, 0.11);
-  --app-rhine-accent-border: rgba(217, 107, 39, 0.45);
-  --app-rhine-solid-bg: #1e211c;
-  --app-rhine-solid-text: #f2f0e8;
-  --app-rhine-olive: #4d5443;
-  --app-rhine-surface-subtle: #ece9e2;
-  --app-rhine-surface-header: #e6e3dc;
-  --app-rhine-card-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.92), inset 0 -1px 0 rgba(28, 31, 27, 0.06),
-    0 3px 0 rgba(28, 31, 27, 0.14), 0 8px 20px -4px rgba(34, 30, 24, 0.14),
-    0 16px 32px -12px rgba(34, 30, 24, 0.1);
-  --app-rhine-card-shadow-hover:
-    inset 0 1px 0 rgba(255, 255, 255, 0.98), inset 0 -1px 0 rgba(28, 31, 27, 0.08),
-    0 5px 0 rgba(28, 31, 27, 0.18), 0 14px 28px -6px rgba(34, 30, 24, 0.18),
-    0 22px 40px -14px rgba(34, 30, 24, 0.12);
-  --app-rhine-subcard-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.84), 0 2px 0 rgba(28, 31, 27, 0.08),
-    0 4px 10px -3px rgba(34, 30, 24, 0.08);
-  --app-rhine-card-border-top: #d8d4ca;
-  --app-rhine-card-border-bottom: #aba598;
-  --app-rhine-card-surface-sheen: linear-gradient(
-    180deg,
-    rgba(255, 255, 255, 0.68) 0%,
-    rgba(255, 255, 255, 0) 38%,
-    rgba(28, 31, 27, 0.018) 100%
-  );
-  --app-rhine-btn-shadow: 0 2px 0 rgba(28, 31, 27, 0.12);
-  --app-rhine-modal-backdrop: rgba(224, 220, 212, 0.62);
-  --app-rhine-hover-bg: rgba(17, 20, 17, 0.055);
-  --app-rhine-active-bg: rgba(217, 107, 39, 0.1);
-  --app-rhine-muted-index: #858075;
-  --app-rhine-corner-mark: rgba(17, 20, 17, 0.34);
+  --app-rhine-canvas-bg: #eae5e1;
+  --app-rhine-canvas-text: #080a08;
+  --app-rhine-chrome-bg: rgba(234, 229, 225, 0.92);
+  --app-rhine-chrome-border: #aaa59a;
+  --app-rhine-rule: #080a08;
+  --app-rhine-hairline: #aaa59a;
+  --app-rhine-grid-line: rgba(8, 10, 8, 0.05);
+  --app-rhine-accent: #9b7247;
+  --app-rhine-accent-soft: rgba(155, 114, 71, 0.12);
+  --app-rhine-accent-border: rgba(155, 114, 71, 0.55);
+  --app-rhine-solid-bg: #080a08;
+  --app-rhine-solid-text: #eae5e1;
+  --app-rhine-olive: #77756d;
+  --app-rhine-surface-subtle: rgba(255, 255, 255, 0.34);
+  --app-rhine-surface-header: rgba(8, 10, 8, 0.035);
+  --app-rhine-card-shadow: none;
+  --app-rhine-card-shadow-hover: 0 10px 28px -18px rgba(8, 10, 8, 0.45);
+  --app-rhine-subcard-shadow: none;
+  --app-rhine-card-border-top: #aaa59a;
+  --app-rhine-card-border-bottom: #aaa59a;
+  --app-rhine-card-surface-sheen: none;
+  --app-rhine-btn-shadow: none;
+  --app-rhine-modal-backdrop: rgba(234, 229, 225, 0.66);
+  --app-rhine-hover-bg: rgba(8, 10, 8, 0.045);
+  --app-rhine-active-bg: rgba(155, 114, 71, 0.1);
+  --app-rhine-muted-index: #77756d;
+  --app-rhine-corner-mark: #080a08;
   --app-rhine-font-sans:
-    'Bahnschrift', 'DIN Alternate', 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB',
-    'Microsoft YaHei', sans-serif;
+    'AUTO-MAS MiSans', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', system-ui, sans-serif;
   --app-rhine-font-mono:
     'Cascadia Mono', 'JetBrains Mono', ui-monospace, SFMono-Regular, Consolas, monospace;
 }
 
 :root.dark {
   color-scheme: dark;
-  --app-rhine-canvas-bg: #0f1417;
-  --app-rhine-canvas-text: #e2e5de;
-  --app-rhine-sider-bg: #0d1215;
-  --app-rhine-sider-border: #344248;
-  --app-rhine-rule: #d4d8cf;
-  --app-rhine-grid-line: rgba(226, 229, 222, 0.04);
-  --app-rhine-accent: #e8823a;
-  --app-rhine-accent-soft: rgba(232, 130, 58, 0.16);
-  --app-rhine-accent-border: rgba(232, 130, 58, 0.5);
-  --app-rhine-solid-bg: #e2e5de;
-  --app-rhine-solid-text: #111619;
-  --app-rhine-olive: #7d8c6d;
-  --app-rhine-surface-subtle: #13191d;
-  --app-rhine-surface-header: #141a1e;
-  --app-rhine-card-shadow:
-    inset 0 1px 0 rgba(226, 229, 222, 0.11), inset 0 -1px 0 rgba(0, 0, 0, 0.55),
-    0 3px 0 rgba(4, 7, 9, 0.78), 0 10px 26px -4px rgba(0, 0, 0, 0.56),
-    0 18px 36px -12px rgba(0, 0, 0, 0.42);
-  --app-rhine-card-shadow-hover:
-    inset 0 1px 0 rgba(232, 130, 58, 0.26), inset 0 -1px 0 rgba(0, 0, 0, 0.65),
-    0 5px 0 rgba(4, 7, 9, 0.88), 0 16px 32px -6px rgba(0, 0, 0, 0.68),
-    0 24px 44px -12px rgba(0, 0, 0, 0.5);
-  --app-rhine-subcard-shadow:
-    inset 0 1px 0 rgba(226, 229, 222, 0.07), 0 2px 0 rgba(4, 7, 9, 0.55),
-    0 6px 14px -4px rgba(0, 0, 0, 0.4);
-  --app-rhine-card-border-top: #3f5058;
-  --app-rhine-card-border-bottom: #090e11;
-  --app-rhine-card-surface-sheen: linear-gradient(
-    180deg,
-    rgba(255, 255, 255, 0.042) 0%,
-    rgba(255, 255, 255, 0) 34%,
-    rgba(0, 0, 0, 0.14) 100%
-  );
-  --app-rhine-btn-shadow: 0 2px 0 rgba(4, 7, 9, 0.62);
-  --app-rhine-modal-backdrop: rgba(9, 13, 16, 0.72);
-  --app-rhine-hover-bg: rgba(226, 229, 222, 0.065);
-  --app-rhine-active-bg: rgba(232, 130, 58, 0.14);
-  --app-rhine-muted-index: #6f7d82;
-  --app-rhine-corner-mark: rgba(226, 229, 222, 0.3);
+  --app-rhine-canvas-bg: #11181b;
+  --app-rhine-canvas-text: #e0e3dc;
+  --app-rhine-chrome-bg: rgba(17, 24, 27, 0.92);
+  --app-rhine-chrome-border: #536166;
+  --app-rhine-rule: #e0e3dc;
+  --app-rhine-hairline: #536166;
+  --app-rhine-grid-line: rgba(224, 227, 220, 0.045);
+  --app-rhine-accent: #c5a16b;
+  --app-rhine-accent-soft: rgba(197, 161, 107, 0.14);
+  --app-rhine-accent-border: rgba(197, 161, 107, 0.55);
+  --app-rhine-solid-bg: #e0e3dc;
+  --app-rhine-solid-text: #11181b;
+  --app-rhine-olive: #a6b0b1;
+  --app-rhine-surface-subtle: rgba(255, 255, 255, 0.025);
+  --app-rhine-surface-header: rgba(224, 227, 220, 0.04);
+  --app-rhine-card-shadow: none;
+  --app-rhine-card-shadow-hover: 0 12px 30px -18px rgba(0, 0, 0, 0.8);
+  --app-rhine-subcard-shadow: none;
+  --app-rhine-card-border-top: #536166;
+  --app-rhine-card-border-bottom: #536166;
+  --app-rhine-card-surface-sheen: none;
+  --app-rhine-btn-shadow: none;
+  --app-rhine-modal-backdrop: rgba(10, 15, 17, 0.72);
+  --app-rhine-hover-bg: rgba(224, 227, 220, 0.055);
+  --app-rhine-active-bg: rgba(197, 161, 107, 0.12);
+  --app-rhine-muted-index: #7e8a8c;
+  --app-rhine-corner-mark: #e0e3dc;
 }
 
-/* ── Base Document Surface & Typography ──────────────────────────────────── */
+/* ── 基础排版 ──────────────────────────────────────────────────────────── */
 html,
 body {
   font-family: var(--app-rhine-font-sans);
@@ -119,287 +92,180 @@ body {
 
 code,
 kbd,
-pre,
-.ant-statistic-content-value {
+pre {
   font-family: var(--app-rhine-font-mono);
+}
+
+.ant-statistic-content-value {
   font-variant-numeric: tabular-nums;
 }
 
-/* ── Subtle Drafting Grid Workspace Canvas ───────────────────────────────── */
+/* ── 工作区底：PV 暖灰白场，自上而下轻微压暗，不再使用网格底纹 ───────────── */
 html:not(.appearance-background-custom) .content-area {
   background-color: var(--ant-color-bg-layout);
-  background-image:
-    linear-gradient(var(--app-rhine-grid-line) 1px, transparent 1px),
-    linear-gradient(90deg, var(--app-rhine-grid-line) 1px, transparent 1px);
-  background-size: 24px 24px;
-  background-position: -1px -1px;
+  background-image: linear-gradient(180deg, transparent 0%, var(--app-rhine-grid-line) 100%);
 }
 
-/* ── Cards: Tactile 3D Archival Dossier Slabs ────────────────────────────── */
+/* ── 卡片：细线档案面板，左上角短刻线作为档案标记 ───────────────────────── */
 .ant-card {
-  border-radius: 2px;
-  border: 1px solid var(--ant-color-border);
-  border-top-color: var(--app-rhine-card-border-top);
-  border-bottom-color: var(--app-rhine-card-border-bottom);
-  background-image: var(--app-rhine-card-surface-sheen);
-  box-shadow: var(--app-rhine-card-shadow);
+  border-radius: 0;
+  border: 1px solid var(--app-rhine-hairline);
+  background-image: linear-gradient(var(--app-rhine-rule), var(--app-rhine-rule));
+  background-size: 18px 2px;
+  background-position: -1px -1px;
+  background-repeat: no-repeat;
+  box-shadow: none;
   transition:
-    border-color 0.18s cubic-bezier(0.2, 0.9, 0.3, 1),
-    box-shadow 0.18s cubic-bezier(0.2, 0.9, 0.3, 1),
-    transform 0.18s cubic-bezier(0.2, 0.9, 0.3, 1);
+    border-color 0.2s cubic-bezier(0.2, 0.9, 0.3, 1),
+    box-shadow 0.2s cubic-bezier(0.2, 0.9, 0.3, 1);
 }
 
 .ant-card.ant-card-hoverable:hover {
   border-color: var(--app-rhine-accent-border);
   box-shadow: var(--app-rhine-card-shadow-hover);
-  transform: translateY(-2px);
 }
 
-/* Nested cards use a lighter recessed elevation to avoid stacking heavy shadows */
 .ant-card .ant-card,
 .ant-modal-content .ant-card,
 .ant-drawer-content .ant-card {
   background-image: none;
-  border-top-color: var(--ant-color-border);
-  border-bottom-color: var(--ant-color-border);
-  box-shadow: var(--app-rhine-subcard-shadow);
+  border-color: var(--ant-color-border-secondary);
 }
 
 .ant-card .ant-card-head {
   min-height: 46px;
-  border-bottom: 1px solid var(--ant-color-border);
+  border-bottom: 1px solid var(--ant-color-border-secondary);
   border-radius: 0;
 }
 
 .ant-card .ant-card-head-title {
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.02em;
 }
 
-/* ── Buttons: Sharp Precision Controls ───────────────────────────────────── */
+/* ── 按钮：直角、细线 ─────────────────────────────────────────────────────── */
 .ant-btn {
-  border-radius: 2px;
-  font-weight: 500;
+  border-radius: 0;
   letter-spacing: 0.02em;
   box-shadow: none;
   transition:
     background-color 0.16s cubic-bezier(0.2, 0.9, 0.3, 1),
     border-color 0.16s cubic-bezier(0.2, 0.9, 0.3, 1),
-    color 0.16s cubic-bezier(0.2, 0.9, 0.3, 1),
-    box-shadow 0.14s ease,
-    transform 0.12s ease;
-}
-
-.ant-btn-default:not(:disabled),
-.ant-btn-primary:not(:disabled):not(.ant-btn-background-ghost) {
-  box-shadow: var(--app-rhine-btn-shadow);
+    color 0.16s cubic-bezier(0.2, 0.9, 0.3, 1);
 }
 
 .ant-btn-default:not(:disabled):hover {
-  border-color: var(--app-rhine-rule);
-  color: var(--ant-color-text);
-  background-color: var(--app-rhine-hover-bg);
+  border-color: var(--app-rhine-accent);
+  color: var(--app-rhine-accent);
 }
 
 .ant-btn-primary:not(:disabled):not(.ant-btn-background-ghost) {
   border-color: transparent;
 }
 
-.ant-btn-primary:not(:disabled):not(.ant-btn-background-ghost):active,
-.ant-btn-default:not(:disabled):active {
-  transform: translateY(1px);
-  box-shadow: none;
-}
-
-/* ── Form Inputs, Selects, Pickers ───────────────────────────────────────── */
+/* ── 表单控件 ────────────────────────────────────────────────────────────── */
 .ant-input,
 .ant-input-affix-wrapper,
 .ant-input-number,
-.ant-input-number-group-addon,
 .ant-picker,
 .ant-select:not(.ant-select-customize-input) .ant-select-selector {
-  border-radius: 2px;
+  box-shadow: none;
 }
 
-.ant-input:focus,
-.ant-input-focused,
-.ant-input-affix-wrapper:focus,
-.ant-input-affix-wrapper-focused,
-.ant-input-number:focus,
-.ant-input-number-focused,
-.ant-picker-focused,
-.ant-select-focused:not(.ant-select-disabled) .ant-select-selector {
-  border-color: var(--app-rhine-accent);
-  box-shadow: 0 0 0 2px var(--app-rhine-accent-soft);
-}
-
-.ant-select-dropdown,
-.ant-picker-panel-container,
-.ant-dropdown .ant-dropdown-menu,
-.ant-popover .ant-popover-inner,
 .ant-tooltip .ant-tooltip-inner {
-  border-radius: 2px;
-  border: 1px solid var(--ant-color-border);
+  border-radius: 0;
 }
 
-/* ── Industrial Rectangular Switches (RhineLabUI Settings Signature) ─────── */
-.ant-switch {
-  border-radius: 2px;
-  min-width: 42px;
-  background-color: var(--ant-color-border);
-}
-
-.ant-switch .ant-switch-handle {
-  top: 2px;
-  inset-inline-start: 2px;
-}
-
+/* ── 开关 ─────────────────────────────────────────────────────────────────── */
+.ant-switch,
 .ant-switch .ant-switch-handle::before {
-  border-radius: 1px;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  border-radius: 0;
 }
 
-.ant-switch.ant-switch-checked {
-  background-color: var(--app-rhine-olive);
-}
-
-.ant-switch.ant-switch-checked:hover:not(.ant-switch-disabled) {
-  background-color: var(--app-rhine-accent);
-}
-
-.ant-switch.ant-switch-checked .ant-switch-handle {
-  inset-inline-start: calc(100% - 20px);
-}
-
-.ant-switch.ant-switch-small {
-  min-width: 28px;
-}
-
-.ant-switch.ant-switch-small.ant-switch-checked .ant-switch-handle {
-  inset-inline-start: calc(100% - 14px);
-}
-
-/* ── Checkboxes & Radios ─────────────────────────────────────────────────── */
-.ant-checkbox-inner {
-  border-radius: 1px;
-}
-
-/* ── Tabs: Sharp Architectural Indexing ──────────────────────────────────── */
+/* ── 页签：细线下划线 ─────────────────────────────────────────────────────── */
 .ant-tabs .ant-tabs-ink-bar {
   height: 2px;
   background: var(--app-rhine-accent);
 }
 
-.ant-tabs-card > .ant-tabs-nav .ant-tabs-tab,
 .ant-tabs-card > div > .ant-tabs-nav .ant-tabs-tab {
-  border-radius: 0;
-  border-color: var(--ant-color-border);
-  background: var(--app-rhine-surface-subtle);
-  transition:
-    background-color 0.16s ease,
-    border-color 0.16s ease,
-    color 0.16s ease;
+  border-radius: 0 !important; /* 覆盖 antd 卡片页签的内联圆角选择器优先级 */
 }
 
-.ant-tabs-card > .ant-tabs-nav .ant-tabs-tab-active,
-.ant-tabs-card > div > .ant-tabs-nav .ant-tabs-tab-active {
-  background: var(--ant-color-bg-container);
-  border-top: 2px solid var(--app-rhine-accent);
-  font-weight: 600;
-}
-
-.ant-tabs-card > .ant-tabs-nav .ant-tabs-tab-active .ant-tabs-tab-btn,
-.ant-tabs-card > div > .ant-tabs-nav .ant-tabs-tab-active .ant-tabs-tab-btn {
-  color: var(--ant-color-text);
-}
-
-/* ── Segmented Controls ──────────────────────────────────────────────────── */
-.ant-segmented {
-  border-radius: 2px;
-  background-color: var(--app-rhine-surface-subtle);
-  border: 1px solid var(--ant-color-border-secondary);
-}
-
+.ant-segmented,
 .ant-segmented .ant-segmented-item,
 .ant-segmented .ant-segmented-thumb {
-  border-radius: 1px;
+  border-radius: 0;
 }
 
-.ant-segmented .ant-segmented-item-selected {
-  background-color: var(--ant-color-bg-container);
-  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.08);
-  font-weight: 600;
-}
-
-/* ── Tables: High-Precision Archival Grids ───────────────────────────────── */
+/* ── 表格：档案清单 ───────────────────────────────────────────────────────── */
 .ant-table-wrapper .ant-table {
-  border-radius: 2px;
+  border-radius: 0;
   font-variant-numeric: tabular-nums;
 }
 
 .ant-table-wrapper .ant-table-thead > tr > th {
   background: var(--app-rhine-surface-header);
-  color: var(--ant-color-text-secondary);
+  color: var(--ant-color-text-tertiary);
   font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  border-bottom: 1px solid var(--ant-color-border);
+  font-weight: 400;
+  letter-spacing: 0.06em;
+  border-bottom: 1px solid var(--app-rhine-rule);
+}
+
+.ant-table-wrapper .ant-table-thead > tr > th::before {
+  display: none;
 }
 
 .ant-table-wrapper .ant-table-tbody > tr:hover > td {
   background: var(--app-rhine-hover-bg);
 }
 
-/* ── Tags: Classification Labels ─────────────────────────────────────────── */
+/* ── 标签 ─────────────────────────────────────────────────────────────────── */
 .ant-tag {
-  border-radius: 2px;
-  font-family: var(--app-rhine-font-sans);
+  border-radius: 0;
   font-size: 12px;
   letter-spacing: 0.02em;
-  font-weight: 500;
 }
 
-/* ── Alerts & Descriptions ───────────────────────────────────────────────── */
+/* ── 提示与描述 ───────────────────────────────────────────────────────────── */
 .ant-alert {
-  border-radius: 2px;
-  border-left-width: 3px;
+  border-radius: 0;
+  border-left-width: 2px;
 }
 
 .ant-descriptions-bordered .ant-descriptions-view {
-  border-radius: 2px;
-  border-color: var(--ant-color-border);
+  border-radius: 0;
+  border-color: var(--ant-color-border-secondary);
 }
 
 .ant-descriptions-bordered .ant-descriptions-item-label {
   background: var(--app-rhine-surface-header);
   color: var(--ant-color-text-secondary);
-  font-weight: 600;
-  letter-spacing: 0.02em;
 }
 
-/* ── Modals & Drawers (RhineLabUI Terminal Modal Aesthetic) ──────────────── */
+/* ── 弹窗与抽屉：磨砂遮罩 + 顶部粗线 ─────────────────────────────────────── */
 .ant-modal-root .ant-modal-mask {
   background-color: var(--app-rhine-modal-backdrop);
-  backdrop-filter: blur(8px);
+  backdrop-filter: blur(10px);
 }
 
 .ant-modal-root .ant-modal-content {
-  border-radius: 2px;
-  border: 1px solid var(--ant-color-border);
-  border-top: 3px solid var(--app-rhine-rule);
-  box-shadow: 0 24px 72px rgba(17, 20, 17, 0.22);
+  border-radius: 0;
+  border: 1px solid var(--app-rhine-hairline);
+  border-top: 2px solid var(--app-rhine-rule);
+  box-shadow: 0 30px 80px -30px rgba(8, 10, 8, 0.4);
 }
 
 .ant-modal-root .ant-modal-header {
   padding-bottom: 14px;
   margin-bottom: 16px;
-  border-bottom: 1px solid var(--ant-color-border);
+  border-bottom: 1px solid var(--ant-color-border-secondary);
   border-radius: 0;
 }
 
 .ant-modal-root .ant-modal-title {
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.03em;
 }
 
@@ -411,7 +277,7 @@ html:not(.appearance-background-custom) .content-area {
 
 .ant-drawer .ant-drawer-mask {
   background-color: var(--app-rhine-modal-backdrop);
-  backdrop-filter: blur(6px);
+  backdrop-filter: blur(8px);
 }
 
 .ant-drawer .ant-drawer-content {
@@ -419,60 +285,135 @@ html:not(.appearance-background-custom) .content-area {
 }
 
 .ant-drawer .ant-drawer-header {
-  border-bottom: 1px solid var(--ant-color-border);
-  background: var(--app-rhine-surface-subtle);
+  border-bottom: 1px solid var(--ant-color-border-secondary);
 }
 
-/* ── Toast Messages & Notifications ──────────────────────────────────────── */
+/* ── 消息与通知 ───────────────────────────────────────────────────────────── */
 .ant-message .ant-message-notice-content {
-  border-radius: 2px;
-  border: 1px solid var(--ant-color-border);
-  border-left: 3px solid var(--app-rhine-accent);
+  border-radius: 0;
+  border: 1px solid var(--app-rhine-hairline);
+  border-left: 2px solid var(--app-rhine-accent);
   background: var(--ant-color-bg-elevated);
-  box-shadow: var(--app-rhine-card-shadow);
 }
 
 .ant-notification .ant-notification-notice {
-  border-radius: 2px;
-  border: 1px solid var(--ant-color-border);
+  border-radius: 0;
+  border: 1px solid var(--app-rhine-hairline);
   border-top: 2px solid var(--app-rhine-accent);
   background: var(--ant-color-bg-elevated);
 }
 
-/* ── Collapse Panels & Dividers ──────────────────────────────────────────── */
+/* ── 折叠面板、分隔线与进度 ───────────────────────────────────────────────── */
 .ant-collapse {
-  border-radius: 2px;
-  border-color: var(--ant-color-border);
+  border-radius: 0;
+  border-color: var(--ant-color-border-secondary);
 }
 
 .ant-divider {
   border-block-start-color: var(--ant-color-border-secondary);
 }
 
-/* ── Progress Bars ───────────────────────────────────────────────────────── */
 .ant-progress .ant-progress-inner,
 .ant-progress .ant-progress-bg {
-  border-radius: 1px;
+  border-radius: 0;
 }
 
-/* ── Shared Rhine Page Title Accent Class ────────────────────────────────── */
+/* ── 共享页面结构：PV 档案页头 ──────────────────────────────────────────────
+ * <header class="rhine-page-head">
+ *   <span class="rhine-page-index" aria-hidden="true">X-002</span>
+ *   <div class="rhine-page-title-group">
+ *     <span class="rhine-page-kicker" aria-hidden="true">SCRIPT ARCHIVE</span>
+ *     <h1 class="rhine-page-title">脚本管理</h1>
+ *   </div>
+ *   <div class="rhine-page-actions">…</div>
+ * </header>
+ */
+.rhine-page-head {
+  display: flex;
+  align-items: flex-end;
+  gap: 20px;
+  padding-bottom: 14px;
+  margin-bottom: 20px;
+  border-bottom: 1px solid var(--app-rhine-rule);
+}
+
+.rhine-page-index {
+  font-size: 13px;
+  line-height: 1;
+  letter-spacing: 0.08em;
+  color: var(--app-rhine-accent);
+  padding-bottom: 6px;
+  font-variant-numeric: tabular-nums;
+  user-select: none;
+}
+
+.rhine-page-title-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.rhine-page-title {
+  margin: 0;
+  font-size: 26px;
+  line-height: 1.2;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--ant-color-text);
+}
+
+.rhine-page-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
 .rhine-page-kicker {
   display: inline-flex;
   align-items: center;
   gap: 8px;
   margin-bottom: 4px;
-  font-family: var(--app-rhine-font-mono);
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.16em;
+  font-size: 11px;
+  letter-spacing: 0.18em;
   text-transform: uppercase;
   color: var(--app-rhine-muted-index);
+  user-select: none;
 }
 
 .rhine-page-kicker::before {
   content: '';
-  width: 6px;
-  height: 6px;
+  width: 14px;
+  height: 2px;
   background: var(--app-rhine-accent);
   display: inline-block;
+}
+
+/* 档案分节标题：编号 + 名称 + 贯穿细线 */
+.rhine-section-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 12px;
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  color: var(--app-rhine-muted-index);
+  user-select: none;
+}
+
+.rhine-section-label::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--app-rhine-hairline);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ant-card,
+  .ant-btn {
+    transition: none;
+  }
 }

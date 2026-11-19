@@ -1,105 +1,117 @@
 <template>
   <a-layout class="rhine-app-shell">
-    <a-layout-sider :width="SIDER_WIDTH" :theme="isDark ? 'dark' : 'light'" class="rhine-sider">
-      <div class="sider-content">
-        <!-- 莱茵生命风格终端品牌区 -->
-        <div class="rhine-brand-header" aria-label="AUTO-MAS Analysis OS">
-          <div class="rhine-brand-top">
-            <svg
-              class="rhine-emblem"
-              viewBox="0 0 310 145"
-              fill="none"
-              aria-hidden="true"
-              focusable="false"
-            >
-              <path
-                d="M156 75C127 48 103 15 70 15C37 15 15 39 15 70S38 128 70 128C103 128 127 96 176 52M155 75C182 99 208 128 240 128C273 128 295 105 295 73S273 15 240 15C221 15 207 23 192 38"
-                stroke="currentColor"
-                stroke-width="26"
-              />
-              <path
-                d="M44 70h50M69 45v50M219 70h44"
-                stroke="currentColor"
-                stroke-width="16"
-              />
-            </svg>
-            <span class="rhine-brand-serial">RL-MAS</span>
-          </div>
-          <div class="rhine-brand-wordmark">
-            <span class="rhine-brand-title">AUTO-MAS</span>
-            <span class="rhine-brand-sub">SYNTHESIZE AUTOMATION</span>
-            <span class="rhine-brand-os">
-              <span>ANALYSIS</span>
-              <strong>OS</strong>
-            </span>
-          </div>
-        </div>
-
-        <div class="rhine-nav-section-label">DEPARTMENT INDEX</div>
-
-        <a-menu
-          v-model:selected-keys="selectedKeys"
-          mode="inline"
-          :theme="isDark ? 'dark' : 'light'"
-          class="rhine-nav-menu"
-          :items="mainMenuItems"
-          @click="onMenuClick"
-        />
-        <!-- 测试路由分隔区域 -->
-        <a-menu
-          v-if="isDevelopment"
-          v-model:selected-keys="selectedKeys"
-          mode="inline"
-          :theme="isDark ? 'dark' : 'light'"
-          class="rhine-nav-menu dev-menu"
-          :items="devMenuItems"
-          @click="onMenuClick"
-        />
-        <a-menu
-          v-model:selected-keys="selectedKeys"
-          mode="inline"
-          :theme="isDark ? 'dark' : 'light'"
-          class="rhine-nav-menu bottom-menu"
-          :items="bottomMenuItems"
-          @click="onMenuClick"
-        />
-
-        <div class="rhine-sider-footer">
-          <span class="rhine-status-dot" aria-hidden="true"></span>
-          <span class="rhine-status-text">SESSION AUTHORIZED</span>
-        </div>
-      </div>
-    </a-layout-sider>
-
-    <a-layout class="rhine-main-column">
-      <!-- 顶部档案遥测信息栏（只读状态展示，不遮挡页面内容） -->
-      <header class="rhine-telemetry-bar" aria-hidden="true">
-        <div class="telemetry-left">
-          <span class="telemetry-kicker">RL / ARCHIVE</span>
-          <span class="telemetry-sep">//</span>
-          <span class="telemetry-index">{{ currentRouteIndex }}</span>
-          <span class="telemetry-name">{{ currentRouteLabel }}</span>
-        </div>
-        <div class="telemetry-right">
-          <span class="telemetry-meta">INTERNAL TERMINAL</span>
-          <span class="telemetry-dot"></span>
-          <span class="telemetry-clock">{{ liveClock }}</span>
-          <span class="telemetry-powered">
-            POWERED BY <strong>AUTO-MAS</strong>
-            <i class="telemetry-bar-mark"></i>
+    <!-- 顶部档案抬头：左侧品牌三行字，中部编号部门导航，右侧常用工具 -->
+    <header class="rhine-masthead">
+      <div class="rhine-brand" aria-label="AUTO-MAS Analysis OS">
+        <svg
+          class="rhine-mark"
+          viewBox="0 0 48 48"
+          fill="none"
+          aria-hidden="true"
+          focusable="false"
+        >
+          <circle cx="24" cy="24" r="15" stroke="currentColor" stroke-width="2.5" />
+          <circle cx="24" cy="24" r="5" class="rhine-mark-core" />
+          <path
+            d="M24 2v8M24 38v8M2 24h8M38 24h8"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="square"
+          />
+          <path d="M35 13l6-6" stroke="currentColor" stroke-width="2" />
+        </svg>
+        <div class="rhine-brand-lines" aria-hidden="true">
+          <span class="rhine-brand-title">AUTO-MAS</span>
+          <span class="rhine-brand-os">
+            <span>ANALYSIS</span>
+            <strong>OS</strong>
           </span>
         </div>
-      </header>
+      </div>
 
-      <a-layout-content class="content-area">
-        <a-result v-if="!isAppReady" status="info" :title="t('launch.starting')" />
-        <router-view v-else v-slot="{ Component, route: currentRoute }">
-          <keep-alive :include="['SchedulerPage']">
-            <component :is="Component" :key="currentRoute.path" />
-          </keep-alive>
-        </router-view>
-      </a-layout-content>
-    </a-layout>
+      <nav class="rhine-dept-nav" :aria-label="t('comp.mainNavigation')">
+        <button
+          v-for="item in primaryNavItems"
+          :key="item.key"
+          type="button"
+          class="rhine-dept-item"
+          :class="{ 'is-active': item.key === activeKey }"
+          :aria-current="item.key === activeKey ? 'page' : undefined"
+          :data-route="item.key"
+          @click="navigate(item.key)"
+        >
+          <span class="rhine-dept-index" aria-hidden="true">{{ item.index }}</span>
+          <span v-if="hasAppearanceMenuIcons" class="rhine-dept-icon" aria-hidden="true">
+            <component :is="item.icon" />
+          </span>
+          <span class="rhine-dept-label">{{ item.label }}</span>
+        </button>
+      </nav>
+
+      <div class="rhine-utility-nav" role="group" :aria-label="t('comp.utilityNavigation')">
+        <a-tooltip
+          v-for="item in utilityNavItems"
+          :key="item.key"
+          :title="item.label"
+          placement="bottom"
+        >
+          <button
+            type="button"
+            class="rhine-utility-item"
+            :class="{ 'is-active': item.key === activeKey, 'is-dev': item.dev }"
+            :aria-label="item.label"
+            :aria-current="item.key === activeKey ? 'page' : undefined"
+            :data-route="item.key"
+            @click="navigate(item.key)"
+          >
+            <component :is="item.icon" />
+          </button>
+        </a-tooltip>
+      </div>
+    </header>
+
+    <a-layout-content class="content-area">
+      <a-result v-if="!isAppReady" status="info" :title="t('launch.starting')" />
+      <router-view v-else v-slot="{ Component, route: currentRoute }">
+        <keep-alive :include="['SchedulerPage']">
+          <component :is="Component" :key="currentRoute.path" />
+        </keep-alive>
+      </router-view>
+    </a-layout-content>
+
+    <!-- 底部档案刻度栏：会话状态、页面刻度（可点击跳转）、当前档案编号与时钟 -->
+    <footer class="rhine-ledger">
+      <div class="rhine-ledger-session" aria-hidden="true">
+        <span class="rhine-ledger-key">SESSION</span>
+        <span class="rhine-ledger-dot"></span>
+        <span class="rhine-ledger-value">AUTHORIZED</span>
+      </div>
+
+      <div class="rhine-ledger-ruler" role="group" :aria-label="t('comp.pageRuler')">
+        <button
+          v-for="item in rulerItems"
+          :key="item.key"
+          type="button"
+          class="rhine-ledger-tick"
+          :class="{ 'is-active': item.key === activeKey }"
+          :aria-label="item.label"
+          :title="item.label"
+          @click="navigate(item.key)"
+        >
+          <i aria-hidden="true"></i>
+        </button>
+      </div>
+
+      <div class="rhine-ledger-current" aria-hidden="true">
+        <span class="rhine-ledger-serial">X-0{{ currentRouteIndex }}</span>
+        <span class="rhine-ledger-name">{{ currentRouteLabel }}</span>
+      </div>
+
+      <div class="rhine-ledger-right" aria-hidden="true">
+        <span class="rhine-ledger-clock">{{ liveClock }}</span>
+        <span class="rhine-ledger-powered"> POWERED BY <strong>AUTO-MAS</strong> </span>
+      </div>
+    </footer>
   </a-layout>
 </template>
 
@@ -119,23 +131,28 @@ import {
   UnorderedListOutlined,
 } from '@ant-design/icons-vue'
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import type { Component } from 'vue'
+import type { Component, VNode } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useTheme } from '../composables/useTheme.ts'
 import { useRouteLock } from '../composables/useRouteLock.ts'
-import type { MenuProps } from 'ant-design-vue'
 import type { AppearanceMenuIconKey } from '@/types/appearance'
 import { createAppearanceMenuIcon } from './appearanceMenuIcon'
 import { useAppInitialization } from '@/composables/useAppInitialization'
 
+interface ShellNavItem {
+  key: string
+  label: string
+  index: string
+  icon: () => VNode
+  dev?: boolean
+}
+
 const { t } = useI18n()
 const { isAppReady } = useAppInitialization()
 
-const SIDER_WIDTH = 204
-
 const router = useRouter()
 const route = useRoute()
-const { isDark, activeAppearance } = useTheme()
+const { activeAppearance } = useTheme()
 const { isRouteLocked, triggerBlockCallback } = useRouteLock()
 
 // 菜单图标依次使用外观包的专属图标、默认图标和内置图标。
@@ -144,96 +161,15 @@ const icon =
   () =>
     createAppearanceMenuIcon(key, Comp, menuIcons)
 
-// 判断是否为开发环境。必须与 router/index.ts 里注册调试路由的条件保持一致，
-// 否则菜单项会指向未注册的路由。之前这里还额外判断了 hostname === 'localhost'，
-// 生产环境走 loadFile（file:// 协议，hostname 为空）不会命中，但用 vite preview
-// 预览生产构建时会命中，导致菜单显示了实际不存在的路由。
-const isDevelopment = computed(() => import.meta.env.DEV)
-
-const mainMenuItems = computed(() => [
-  { key: '/home', label: t('comp.home'), icon: icon('home', HomeOutlined) },
-  { key: '/scripts', label: t('comp.scripts'), icon: icon('scripts', FileTextOutlined) },
-  { key: '/plans', label: t('comp.plans'), icon: icon('plans', CalendarOutlined) },
-  { key: '/emulators', label: t('comp.emulators'), icon: icon('emulators', DatabaseOutlined) },
-  { key: '/queue', label: t('comp.queue'), icon: icon('queue', UnorderedListOutlined) },
-  { key: '/scheduler', label: t('comp.scheduler'), icon: icon('scheduler', ControlOutlined) },
-  ...(window.__AUTO_MAS_BROWSER_HOST__
-    ? [
-        {
-          key: '/local-controls',
-          label: t('localControls.title'),
-          icon: icon('tools', ControlOutlined),
-        },
-      ]
-    : []),
-])
-
-// 开发环境专用菜单项
-const devMenuItems = computed(() => [
-  { key: '/TestRouter', label: t('comp.testRoute'), icon: icon('testRouter', SettingOutlined) },
-  {
-    key: '/OverlayMaskDev',
-    label: t('comp.overlayEasterEggTest'),
-    icon: icon('overlayMaskDev', SettingOutlined),
-  },
-  ...(import.meta.env.DEV
-    ? [
-        {
-          key: '/update-download-dev',
-          label: t('comp.updateDownloadTest'),
-          icon: icon('updateDownloadDev', BugOutlined),
-        },
-      ]
-    : []),
-])
-
-const bottomMenuItems = computed(() => [
-  { key: '/gamesign', label: t('comp.checkIns'), icon: icon('gameSign', CarryOutOutlined) },
-  { key: '/history', label: t('comp.history'), icon: icon('history', HistoryOutlined) },
-  ...(!window.__AUTO_MAS_BROWSER_HOST__
-    ? [{ key: '/theme-store', label: t('comp.themeStore'), icon: icon('themeStore', SkinOutlined) }]
-    : []),
-  { key: '/settings', label: t('comp.settings'), icon: icon('settings', SettingOutlined) },
-])
-
-type MenuEntry = NonNullable<MenuProps['items']>[number]
-type KeyedMenuEntry = Exclude<MenuEntry, null> & { key: string | number }
-
-const hasMenuKey = (item: MenuEntry): item is KeyedMenuEntry =>
-  item !== null && 'key' in item && item.key !== undefined
-
-const flattenMenuItems = (items: readonly MenuEntry[]): MenuEntry[] => {
-  const flattened: MenuEntry[] = []
-  for (const item of items) {
-    if (!item) continue
-    flattened.push(item)
-    if ('children' in item && item.children) {
-      flattened.push(...flattenMenuItems(item.children))
-    }
-  }
-  return flattened
-}
-
-const allItems = computed(() => [
-  ...mainMenuItems.value,
-  ...(isDevelopment.value ? devMenuItems.value : []),
-  ...bottomMenuItems.value,
-])
-
-const flatItems = computed(() => flattenMenuItems(allItems.value))
-
-// 选中项：优先精确匹配，再按路径边界匹配当前菜单。
-const selectedKeys = computed(() => {
-  const path = route.path
-  const matched = flatItems.value
-    .filter(hasMenuKey)
-    .filter(item => {
-      const key = String(item.key)
-      return path === key || path.startsWith(`${key}/`)
-    })
-    .sort((left, right) => String(right.key).length - String(left.key).length)[0]
-  return [matched?.key || '/home']
+// PV 风格的主导航只排编号与文字；外观包提供了专属菜单图标时再显示图标，保留外观包能力。
+const hasAppearanceMenuIcons = computed(() => {
+  const icons = activeAppearance.value?.menuIconUrls
+  return !!icons && Object.values(icons).some(Boolean)
 })
+
+// 判断是否为开发环境。必须与 router/index.ts 里注册调试路由的条件保持一致，
+// 否则菜单项会指向未注册的路由。
+const isDevelopment = computed(() => import.meta.env.DEV)
 
 const ROUTE_INDEX_MAP: Record<string, string> = {
   '/home': '01',
@@ -249,19 +185,130 @@ const ROUTE_INDEX_MAP: Record<string, string> = {
   '/settings': '11',
 }
 
-const currentRouteIndex = computed(() => {
-  const key = String(selectedKeys.value[0] || '/home')
-  return ROUTE_INDEX_MAP[key] ?? '00'
+const indexOf = (key: string) => ROUTE_INDEX_MAP[key] ?? '00'
+
+const primaryNavItems = computed<ShellNavItem[]>(() => [
+  { key: '/home', label: t('comp.home'), index: '01', icon: icon('home', HomeOutlined) },
+  {
+    key: '/scripts',
+    label: t('comp.scripts'),
+    index: '02',
+    icon: icon('scripts', FileTextOutlined),
+  },
+  { key: '/plans', label: t('comp.plans'), index: '03', icon: icon('plans', CalendarOutlined) },
+  {
+    key: '/emulators',
+    label: t('comp.emulators'),
+    index: '04',
+    icon: icon('emulators', DatabaseOutlined),
+  },
+  {
+    key: '/queue',
+    label: t('comp.queue'),
+    index: '05',
+    icon: icon('queue', UnorderedListOutlined),
+  },
+  {
+    key: '/scheduler',
+    label: t('comp.scheduler'),
+    index: '06',
+    icon: icon('scheduler', ControlOutlined),
+  },
+  ...(window.__AUTO_MAS_BROWSER_HOST__
+    ? [
+        {
+          key: '/local-controls',
+          label: t('localControls.title'),
+          index: '07',
+          icon: icon('tools', ControlOutlined),
+        },
+      ]
+    : []),
+])
+
+// 开发环境专用入口，并入右侧工具组
+const devNavItems = computed<ShellNavItem[]>(() =>
+  isDevelopment.value
+    ? [
+        {
+          key: '/TestRouter',
+          label: t('comp.testRoute'),
+          index: '00',
+          icon: icon('testRouter', SettingOutlined),
+          dev: true,
+        },
+        {
+          key: '/OverlayMaskDev',
+          label: t('comp.overlayEasterEggTest'),
+          index: '00',
+          icon: icon('overlayMaskDev', SettingOutlined),
+          dev: true,
+        },
+        {
+          key: '/update-download-dev',
+          label: t('comp.updateDownloadTest'),
+          index: '00',
+          icon: icon('updateDownloadDev', BugOutlined),
+          dev: true,
+        },
+      ]
+    : []
+)
+
+const utilityNavItems = computed<ShellNavItem[]>(() => [
+  {
+    key: '/gamesign',
+    label: t('comp.checkIns'),
+    index: '08',
+    icon: icon('gameSign', CarryOutOutlined),
+  },
+  {
+    key: '/history',
+    label: t('comp.history'),
+    index: '09',
+    icon: icon('history', HistoryOutlined),
+  },
+  ...(!window.__AUTO_MAS_BROWSER_HOST__
+    ? [
+        {
+          key: '/theme-store',
+          label: t('comp.themeStore'),
+          index: '10',
+          icon: icon('themeStore', SkinOutlined),
+        },
+      ]
+    : []),
+  {
+    key: '/settings',
+    label: t('comp.settings'),
+    index: '11',
+    icon: icon('settings', SettingOutlined),
+  },
+  ...devNavItems.value,
+])
+
+// 底部刻度只覆盖正式页面，调试入口不进刻度
+const rulerItems = computed(() => [
+  ...primaryNavItems.value,
+  ...utilityNavItems.value.filter(item => !item.dev),
+])
+
+const allNavItems = computed(() => [...primaryNavItems.value, ...utilityNavItems.value])
+
+// 选中项：优先精确匹配，再按路径边界匹配当前导航。
+const activeKey = computed(() => {
+  const path = route.path
+  const matched = allNavItems.value
+    .filter(item => path === item.key || path.startsWith(`${item.key}/`))
+    .sort((left, right) => right.key.length - left.key.length)[0]
+  return matched?.key || '/home'
 })
 
+const currentRouteIndex = computed(() => indexOf(activeKey.value))
+
 const currentRouteLabel = computed(() => {
-  const key = String(selectedKeys.value[0] || '/home')
-  const matched = flatItems.value
-    .filter(hasMenuKey)
-    .find(item => String(item.key) === key)
-  if (matched && 'label' in matched && typeof matched.label === 'string') {
-    return matched.label
-  }
+  const matched = allNavItems.value.find(item => item.key === activeKey.value)
+  if (matched) return matched.label
   return typeof route.meta?.title === 'string' ? route.meta.title : 'AUTO-MAS'
 })
 
@@ -289,9 +336,7 @@ onUnmounted(() => {
   }
 })
 
-const onMenuClick: MenuProps['onClick'] = info => {
-  const target = String(info.key)
-
+const navigate = (target: string) => {
   // 检查路由是否被锁定
   if (isRouteLocked.value) {
     // 如果路由被锁定，触发回调而不进行路由跳转
@@ -322,374 +367,390 @@ const onMenuClick: MenuProps['onClick'] = info => {
   z-index: 1;
   flex: 1;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
   background: transparent;
 }
 
-.rhine-sider {
-  background: var(--app-rhine-sider-bg) !important;
-  border-right: 1px solid var(--app-rhine-sider-border);
-}
-
-:global(html.appearance-background-custom) .rhine-sider {
-  background: var(--app-appearance-elevated-surface-bg) !important;
-}
-
-.rhine-main-column {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  background: transparent;
-}
-
-.sider-content {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  padding: 0;
-}
-
-/* ── 莱茵生命终端品牌抬头 ────────────────────────────────────────────── */
-.rhine-brand-header {
-  padding: 16px 14px 12px;
-  border-bottom: 1px solid var(--app-rhine-sider-border);
+/* ── 顶部抬头 ─────────────────────────────────────────────────────────── */
+.rhine-masthead {
+  flex-shrink: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: stretch;
+  gap: 28px;
+  height: 64px;
+  padding: 0 24px 0 28px;
+  background: var(--app-rhine-chrome-bg);
+  border-bottom: 1px solid var(--app-rhine-rule);
   user-select: none;
 }
 
-.rhine-brand-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 8px;
+:global(html.appearance-background-custom) .rhine-masthead,
+:global(html.appearance-background-custom) .rhine-ledger {
+  background: var(--app-appearance-elevated-surface-bg);
 }
 
-.rhine-emblem {
-  width: 44px;
-  height: 21px;
+.rhine-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
   color: var(--ant-color-text);
+}
+
+.rhine-mark {
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
   display: block;
 }
 
-.rhine-brand-serial {
-  font-family: var(--app-rhine-font-mono);
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  color: var(--app-rhine-accent);
-  padding: 2px 5px;
-  border: 1px solid var(--app-rhine-accent-border);
-  line-height: 1;
+.rhine-mark-core {
+  fill: var(--app-rhine-accent);
 }
 
-.rhine-brand-wordmark {
+.rhine-brand-lines {
   display: flex;
   flex-direction: column;
-  gap: 1px;
-  color: var(--ant-color-text);
+  white-space: nowrap;
 }
 
 .rhine-brand-title {
   font-size: 20px;
-  font-weight: 800;
+  line-height: 22px;
+  font-weight: 700;
   letter-spacing: 0.06em;
-  line-height: 1.05;
-}
-
-.rhine-brand-sub {
-  font-size: 8.5px;
-  font-weight: 600;
-  letter-spacing: 0.12em;
-  color: var(--ant-color-text-secondary);
-  line-height: 1.3;
 }
 
 .rhine-brand-os {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  margin-top: 2px;
-  font-size: 13px;
-  letter-spacing: 0.22em;
-  line-height: 1.1;
+  gap: 8px;
+  font-size: 11px;
+  line-height: 16px;
+  letter-spacing: 0.3em;
+  color: var(--ant-color-text-secondary);
 }
 
 .rhine-brand-os strong {
-  font-weight: 800;
+  font-weight: 700;
   letter-spacing: 0.08em;
+  color: var(--ant-color-text);
 }
 
-.rhine-nav-section-label {
-  padding: 10px 14px 4px;
-  font-family: var(--app-rhine-font-mono);
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.16em;
-  color: var(--app-rhine-muted-index);
-  user-select: none;
-}
-
-/* ── 导航菜单 ─────────────────────────────────────────────────────────── */
-.sider-content :deep(.ant-menu) {
-  border-inline-end: none !important;
-  background: transparent !important;
-}
-
-.sider-content :deep(.ant-menu .ant-menu-item) {
-  color: var(--ant-color-text-secondary);
-  margin: 2px 8px;
-  width: calc(100% - 16px);
-  border-radius: 1px;
-  padding: 0 12px !important;
-  line-height: 36px;
-  height: 36px;
+/* ── 部门导航 ─────────────────────────────────────────────────────────── */
+.rhine-dept-nav {
   display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 8px;
-  font-size: 13.5px;
-  font-weight: 500;
-  letter-spacing: 0.03em;
-  transition:
-    background-color 0.14s ease,
-    color 0.14s ease,
-    box-shadow 0.14s ease;
-  text-align: left;
+  align-items: stretch;
+  gap: 4px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
 }
 
-.sider-content :deep(.ant-menu .ant-menu-submenu) {
-  width: calc(100% - 16px);
-  margin: 2px 8px;
-  border-radius: 1px;
-}
-
-.sider-content :deep(.ant-menu .ant-menu-submenu-title) {
-  height: 36px;
-  margin: 0;
-  padding: 0 12px !important;
-  line-height: 36px;
-  border-radius: 1px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--ant-color-text-secondary);
-  transition:
-    background-color 0.14s ease,
-    color 0.14s ease;
-}
-
-.sider-content :deep(.ant-menu .ant-menu-submenu-title .anticon) {
-  color: var(--ant-color-text-secondary);
-  font-size: 16px;
-}
-
-.sider-content :deep(.ant-menu .ant-menu-submenu-title:hover) {
-  background: var(--app-rhine-hover-bg);
-  color: var(--ant-color-text);
-}
-
-.sider-content :deep(.ant-menu .ant-menu-submenu > .ant-menu) {
-  background: transparent !important;
-}
-
-.sider-content :deep(.ant-menu .ant-menu-submenu .ant-menu-item) {
-  width: calc(100% - 8px);
-  margin: 2px 4px;
-  padding-left: 36px !important;
-  height: 34px;
-  line-height: 34px;
-}
-
-.sider-content :deep(.ant-menu .ant-menu-item .anticon) {
-  color: var(--ant-color-text-secondary);
-  font-size: 16px;
-  line-height: 1;
-  transition: color 0.14s ease;
-  margin-right: 0;
-}
-
-.sider-content :deep(.appearance-menu-icon) {
-  width: 22px;
-  height: 22px;
-  object-fit: contain;
-  flex: 0 0 22px;
-}
-
-.sider-content :deep(.appearance-menu-icon + .ant-menu-title-content) {
-  margin-inline-start: 0 !important;
-}
-
-/* Hover */
-.sider-content :deep(.ant-menu .ant-menu-item:hover) {
-  background: var(--app-rhine-hover-bg);
-  color: var(--ant-color-text);
-}
-
-.sider-content :deep(.ant-menu .ant-menu-item:hover .anticon) {
-  color: var(--ant-color-text);
-}
-
-/* Selected: 莱茵生命经典左竖条激活指示 */
-.sider-content :deep(.ant-menu .ant-menu-item-selected) {
-  background: var(--app-rhine-active-bg);
-  box-shadow: inset 3px 0 0 var(--app-rhine-accent);
-  color: var(--ant-color-text) !important;
-  font-weight: 700;
-}
-
-.sider-content :deep(.ant-menu .ant-menu-item-selected .anticon) {
-  color: var(--app-rhine-accent);
-}
-
-.sider-content :deep(.ant-menu-light .ant-menu-item::after),
-.sider-content :deep(.ant-menu-dark .ant-menu-item::after) {
+.rhine-dept-nav::-webkit-scrollbar {
   display: none;
 }
 
-/* 开发菜单区域 - 细线分隔 */
-.dev-menu {
-  margin-top: 10px;
-  padding-top: 10px;
-  border-top: 1px solid var(--ant-color-border);
-}
-
-.bottom-menu {
-  margin-top: auto;
-  padding-top: 8px;
-  border-top: 1px solid var(--ant-color-border);
-}
-
-/* 侧栏底部状态标牌 */
-.rhine-sider-footer {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 14px;
-  margin-top: 6px;
-  border-top: 1px solid var(--ant-color-border);
-  font-family: var(--app-rhine-font-mono);
-  font-size: 9px;
-  letter-spacing: 0.12em;
-  color: var(--app-rhine-muted-index);
-  user-select: none;
-}
-
-.rhine-status-dot {
-  width: 5px;
-  height: 5px;
-  background: var(--app-rhine-olive);
-  flex-shrink: 0;
-}
-
-.rhine-status-text {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-/* ── 顶部工作区档案遥测栏 ──────────────────────────────────────────────── */
-.rhine-telemetry-bar {
-  height: 34px;
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 0 32px;
-  background: var(--app-rhine-surface-subtle);
-  border-bottom: 1px solid var(--ant-color-border);
-  font-family: var(--app-rhine-font-mono);
-  font-size: 10px;
-  letter-spacing: 0.12em;
-  color: var(--app-rhine-muted-index);
-  user-select: none;
-}
-
-.telemetry-left,
-.telemetry-right {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-}
-
-.telemetry-kicker {
-  color: var(--app-rhine-accent);
-  font-weight: 700;
-}
-
-.telemetry-sep {
-  opacity: 0.5;
-}
-
-.telemetry-index {
-  font-weight: 700;
-  color: var(--ant-color-text);
-}
-
-.telemetry-name {
-  font-family: var(--app-rhine-font-sans);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  color: var(--ant-color-text-secondary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.telemetry-dot {
-  width: 5px;
-  height: 5px;
-  background: var(--app-rhine-olive);
-  display: inline-block;
-}
-
-.telemetry-clock {
-  font-variant-numeric: tabular-nums;
-  color: var(--ant-color-text-secondary);
-}
-
-.telemetry-powered {
+.rhine-dept-item {
+  position: relative;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  margin-left: 8px;
+  gap: 8px;
+  flex-shrink: 0;
+  padding: 0 14px;
+  border: 0;
+  background: transparent;
   color: var(--ant-color-text-secondary);
+  font: inherit;
+  font-size: 15px;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  transition: color 0.18s ease;
 }
 
-.telemetry-powered strong {
+.rhine-dept-item::after {
+  content: '';
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: -1px;
+  height: 3px;
+  background: var(--app-rhine-accent);
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform 0.18s cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+
+.rhine-dept-item:hover {
   color: var(--ant-color-text);
-  font-weight: 700;
 }
 
-.telemetry-bar-mark {
-  display: inline-block;
-  width: 16px;
-  height: 4px;
-  background: var(--app-rhine-rule);
+.rhine-dept-item:focus-visible {
+  outline: 1px solid var(--app-rhine-accent);
+  outline-offset: -6px;
 }
 
+.rhine-dept-item.is-active {
+  color: var(--ant-color-text);
+  font-weight: 600;
+}
+
+.rhine-dept-item.is-active::after {
+  transform: scaleX(1);
+}
+
+.rhine-dept-index {
+  font-size: 11px;
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  color: var(--app-rhine-muted-index);
+  font-variant-numeric: tabular-nums;
+  align-self: flex-start;
+  margin-top: 19px;
+}
+
+.rhine-dept-item.is-active .rhine-dept-index {
+  color: var(--app-rhine-accent);
+}
+
+.rhine-dept-icon {
+  display: inline-flex;
+  font-size: 16px;
+}
+
+.rhine-dept-icon :deep(.appearance-menu-icon) {
+  width: 20px;
+  height: 20px;
+}
+
+.rhine-dept-label {
+  white-space: nowrap;
+}
+
+/* ── 右侧常用工具 ─────────────────────────────────────────────────────── */
+.rhine-utility-nav {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding-left: 16px;
+  border-left: 1px solid var(--app-rhine-hairline);
+  margin: 14px 0;
+}
+
+.rhine-utility-item {
+  position: relative;
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--ant-color-text-secondary);
+  font-size: 17px;
+  cursor: pointer;
+  transition:
+    color 0.18s ease,
+    border-color 0.18s ease;
+}
+
+.rhine-utility-item :deep(.appearance-menu-icon) {
+  width: 20px;
+  height: 20px;
+}
+
+.rhine-utility-item:hover {
+  color: var(--ant-color-text);
+  border-color: var(--app-rhine-hairline);
+}
+
+.rhine-utility-item:focus-visible {
+  outline: 1px solid var(--app-rhine-accent);
+  outline-offset: 1px;
+}
+
+.rhine-utility-item.is-active {
+  color: var(--app-rhine-accent);
+  border-color: var(--app-rhine-accent-border);
+}
+
+.rhine-utility-item.is-dev {
+  color: var(--ant-color-text-tertiary);
+  border-style: dashed;
+  border-color: var(--ant-color-border-secondary);
+}
+
+/* ── 内容区 ───────────────────────────────────────────────────────────── */
 .content-area {
   min-height: 0;
   flex: 1;
   overflow: auto;
   scrollbar-width: none;
   -ms-overflow-style: none;
-  padding: 28px 32px;
+  padding: 24px 32px;
 }
 
 .content-area::-webkit-scrollbar {
   display: none;
 }
 
-@media (max-width: 960px) {
-  .telemetry-meta,
-  .telemetry-powered {
+/* ── 底部刻度栏 ───────────────────────────────────────────────────────── */
+.rhine-ledger {
+  flex-shrink: 0;
+  height: 32px;
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 24px;
+  padding: 0 24px 0 28px;
+  background: var(--app-rhine-chrome-bg);
+  border-top: 1px solid var(--app-rhine-hairline);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  color: var(--app-rhine-muted-index);
+  font-variant-numeric: tabular-nums;
+  user-select: none;
+}
+
+.rhine-ledger-session {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.rhine-ledger-key {
+  color: var(--ant-color-text);
+}
+
+.rhine-ledger-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--app-rhine-accent);
+  animation: rhine-ledger-pulse 2.4s ease-in-out infinite;
+}
+
+@keyframes rhine-ledger-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.rhine-ledger-ruler {
+  display: flex;
+  align-items: flex-end;
+  height: 100%;
+  gap: 0;
+}
+
+.rhine-ledger-tick {
+  width: 12px;
+  height: 100%;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 0 0 8px;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.rhine-ledger-tick i {
+  display: block;
+  width: 1px;
+  height: 6px;
+  background: var(--app-rhine-hairline);
+  transition:
+    height 0.4s cubic-bezier(0.2, 0.9, 0.3, 1),
+    background-color 0.2s ease;
+}
+
+.rhine-ledger-tick:hover i {
+  height: 10px;
+  background: var(--ant-color-text-secondary);
+}
+
+.rhine-ledger-tick.is-active i {
+  width: 2px;
+  height: 16px;
+  background: var(--app-rhine-accent);
+}
+
+.rhine-ledger-tick:focus-visible {
+  outline: 1px solid var(--app-rhine-accent);
+  outline-offset: -2px;
+}
+
+.rhine-ledger-current {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.rhine-ledger-serial {
+  color: var(--app-rhine-accent);
+}
+
+.rhine-ledger-name {
+  color: var(--ant-color-text-secondary);
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rhine-ledger-right {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.rhine-ledger-clock {
+  color: var(--ant-color-text);
+}
+
+.rhine-ledger-powered strong {
+  color: var(--ant-color-text);
+  font-weight: 700;
+}
+
+@media (max-width: 1180px) {
+  .rhine-masthead {
+    gap: 16px;
+    padding: 0 16px;
+  }
+
+  .rhine-brand-lines {
     display: none;
   }
 
-  .rhine-telemetry-bar {
+  .rhine-dept-item {
+    padding: 0 10px;
+  }
+
+  .rhine-dept-item::after {
+    left: 10px;
+    right: 10px;
+  }
+}
+
+@media (max-width: 960px) {
+  .rhine-dept-index,
+  .rhine-ledger-powered,
+  .rhine-ledger-session {
+    display: none;
+  }
+
+  .rhine-ledger {
+    grid-template-columns: auto minmax(0, 1fr) auto;
     padding: 0 16px;
   }
 
@@ -697,6 +758,15 @@ const onMenuClick: MenuProps['onClick'] = info => {
     padding: 20px 16px;
   }
 }
-</style>
 
-<!-- 使用标准 Sider 布局，保留原有导航、路由锁与滚动行为，融合莱茵生命终端视觉语言 -->
+@media (prefers-reduced-motion: reduce) {
+  .rhine-ledger-dot {
+    animation: none;
+  }
+
+  .rhine-dept-item::after,
+  .rhine-ledger-tick i {
+    transition: none;
+  }
+}
+</style>

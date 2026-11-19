@@ -1,0 +1,5 @@
+/* MiSans 4.003（小米 & 汉仪），取自 misans-webfont@4.3.1 的 cn-font-split 分片，按 unicode-range 按需加载。
+   家族名改为 "AUTO-MAS MiSans" 并移除 local()，避免设备上安装的其他版本覆盖。许可见同目录 NOTICE.md。 */
+@import url('./regular/result.css');
+@import url('./semibold/result.css');
+@import url('./bold/result.css');

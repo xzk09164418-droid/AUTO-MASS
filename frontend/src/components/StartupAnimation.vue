@@ -125,10 +125,10 @@ onBeforeUnmount(() => {
   background: transparent;
 }
 .startup-animation-pending {
-  background: #e4e1db;
+  background: #eae5e1;
 }
 .startup-animation-pending.is-dark,
 :global(html.dark) .startup-animation-pending {
-  background: #0f1417;
+  background: #11181b;
 }
 </style>

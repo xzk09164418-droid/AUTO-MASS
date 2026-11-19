@@ -251,7 +251,7 @@ describe('共享前端配置读写', () => {
     const config = await import('./config')
     loadConfig.mockRejectedValueOnce(new Error('IPC unavailable'))
 
-    expect(await config.getConfig()).toMatchObject({ themeMode: 'system', themeColor: 'blue' })
+    expect(await config.getConfig()).toMatchObject({ themeMode: 'system', themeColor: 'gold' })
   })
 
   it('迁移检查异常会拒绝，修复存储后可重新加载', async () => {

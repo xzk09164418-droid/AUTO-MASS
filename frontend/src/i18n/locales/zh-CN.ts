@@ -206,6 +206,9 @@ export default {
     unknown: '未知',
   },
   comp: {
+    mainNavigation: '主导航',
+    utilityNavigation: '常用工具',
+    pageRuler: '页面刻度',
     currentConfig: '当前配置：{source}',
     configSourceShared: '共享配置',
     configSourceIndependent: '独立配置',

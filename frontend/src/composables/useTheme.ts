@@ -26,7 +26,7 @@ export type ThemeColor =
   | 'gold'
 
 const themeMode = ref<ThemeMode>('system')
-const themeColor = ref<ThemeColor>('blue')
+const themeColor = ref<ThemeColor>('gold')
 const appearanceId = ref<string | null>(null)
 const activeAppearance = ref<InstalledAppearance | null>(null)
 const appearances = ref<InstalledAppearance[]>([])
@@ -54,7 +54,7 @@ type ThemeSnapshot = {
 
 let persistedThemeSnapshot: ThemeSnapshot = {
   themeMode: 'system',
-  themeColor: 'blue',
+  themeColor: 'gold',
   appearanceId: null,
 }
 
@@ -72,43 +72,52 @@ const themeColors: Record<ThemeColor, string> = {
   volcano: '#cf5727',
   geekblue: '#395a8c',
   lime: '#729434',
-  gold: '#b8843b',
+  // 莱茵生命 PV 暖棕；深色下由 resolveThemeColor 换成琥珀 #c5a16b
+  gold: '#9b7247',
 }
+
+// 主题色在深色下的替换值：PV 原作浅色用暖棕、深色用琥珀，其余预设色沿用同一值
+const DARK_THEME_COLOR_OVERRIDES: Partial<Record<ThemeColor, string>> = {
+  gold: '#c5a16b',
+}
+
+const resolveThemeColor = (color: ThemeColor, dark: boolean) =>
+  (dark ? DARK_THEME_COLOR_OVERRIDES[color] : undefined) ?? themeColors[color]
 
 // 莱茵生命（Rhine Lab）默认明暗表面与排版基准
 const RHINE_FONT_FAMILY =
-  "'Bahnschrift', 'DIN Alternate', 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif"
+  "'AUTO-MAS MiSans', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', system-ui, sans-serif"
 const RHINE_FONT_MONO =
   "'Cascadia Mono', 'JetBrains Mono', ui-monospace, SFMono-Regular, Consolas, monospace"
 
 const RHINE_SURFACE_TOKENS = {
   light: {
-    colorBgLayout: '#e4e1db',
-    colorBgContainer: '#f6f4ef',
-    colorBgElevated: '#faf8f3',
-    colorText: '#111411',
-    colorTextSecondary: '#5a5850',
-    colorTextTertiary: '#7e7a70',
-    colorBorder: '#c4bfb4',
-    colorBorderSecondary: '#dad6cc',
-    colorSuccess: '#4a7c59',
-    colorWarning: '#d47322',
-    colorError: '#c43e38',
-    colorInfo: '#2b7a9b',
+    colorBgLayout: '#eae5e1',
+    colorBgContainer: '#f4f1ed',
+    colorBgElevated: '#f8f6f3',
+    colorText: '#080a08',
+    colorTextSecondary: '#5f5d56',
+    colorTextTertiary: '#77756d',
+    colorBorder: '#aaa59a',
+    colorBorderSecondary: '#d3cec5',
+    colorSuccess: '#55785a',
+    colorWarning: '#b8752c',
+    colorError: '#b6453c',
+    colorInfo: '#4f7487',
   },
   dark: {
-    colorBgLayout: '#0f1417',
-    colorBgContainer: '#182025',
-    colorBgElevated: '#202a30',
-    colorText: '#e2e5de',
-    colorTextSecondary: '#9ea9ad',
-    colorTextTertiary: '#6d7b80',
-    colorBorder: '#354349',
-    colorBorderSecondary: '#253036',
-    colorSuccess: '#5da678',
-    colorWarning: '#e68a3e',
-    colorError: '#e2635b',
-    colorInfo: '#58b4cc',
+    colorBgLayout: '#11181b',
+    colorBgContainer: '#162024',
+    colorBgElevated: '#1c272c',
+    colorText: '#e0e3dc',
+    colorTextSecondary: '#a6b0b1',
+    colorTextTertiary: '#7e8a8c',
+    colorBorder: '#536166',
+    colorBorderSecondary: '#2a363b',
+    colorSuccess: '#7fa784',
+    colorWarning: '#d39a55',
+    colorError: '#d9695f',
+    colorInfo: '#7ea7b9',
   },
 } as const
 
@@ -237,85 +246,74 @@ const updateCSSVariables = () => {
     activeAppearance.value?.background?.size ?? 'cover'
   )
 
-  // ===== 莱茵生命（Rhine Lab）语义变量 =====
-  // 独立于 AntD token bridge 注入，保证首帧即呈现暖灰档案纸（浅色）或深轨道控制室（深色）质感。
+  // ===== 莱茵生命（Rhine Lab）PV 语义变量 =====
+  // 取自 PV 原作：暖灰白档案底、近黑正文、细线结构、暖棕（浅色）/琥珀（深色）选中信号，不使用绿色强调。
+  // 与 rhineLab.css 的 :root 兜底值一一对应，保证首帧即呈现最终配色。
   const dark = isDark.value
-  root.style.setProperty('--app-rhine-canvas-bg', dark ? '#0f1417' : '#e4e1db')
-  root.style.setProperty('--app-rhine-canvas-text', dark ? '#e2e5de' : '#111411')
-  root.style.setProperty('--app-rhine-sider-bg', dark ? '#0d1215' : '#dfdcd4')
-  root.style.setProperty('--app-rhine-sider-border', dark ? '#344248' : '#1c1f1b')
-  root.style.setProperty('--app-rhine-rule', dark ? '#d4d8cf' : '#1c1f1b')
+  root.style.setProperty('--app-rhine-canvas-bg', dark ? '#11181b' : '#eae5e1')
+  root.style.setProperty('--app-rhine-canvas-text', dark ? '#e0e3dc' : '#080a08')
+  root.style.setProperty(
+    '--app-rhine-chrome-bg',
+    dark ? 'rgba(17, 24, 27, 0.92)' : 'rgba(234, 229, 225, 0.92)'
+  )
+  root.style.setProperty('--app-rhine-chrome-border', dark ? '#536166' : '#aaa59a')
+  root.style.setProperty('--app-rhine-rule', dark ? '#e0e3dc' : '#080a08')
+  root.style.setProperty('--app-rhine-hairline', dark ? '#536166' : '#aaa59a')
   root.style.setProperty(
     '--app-rhine-grid-line',
-    dark ? 'rgba(226, 229, 222, 0.04)' : 'rgba(17, 20, 17, 0.048)'
+    dark ? 'rgba(224, 227, 220, 0.045)' : 'rgba(8, 10, 8, 0.05)'
   )
-  root.style.setProperty('--app-rhine-accent', dark ? '#e8823a' : '#d96b27')
+  root.style.setProperty('--app-rhine-accent', dark ? '#c5a16b' : '#9b7247')
   root.style.setProperty(
     '--app-rhine-accent-soft',
-    dark ? 'rgba(232, 130, 58, 0.16)' : 'rgba(217, 107, 39, 0.11)'
+    dark ? 'rgba(197, 161, 107, 0.14)' : 'rgba(155, 114, 71, 0.12)'
   )
   root.style.setProperty(
     '--app-rhine-accent-border',
-    dark ? 'rgba(232, 130, 58, 0.5)' : 'rgba(217, 107, 39, 0.45)'
+    dark ? 'rgba(197, 161, 107, 0.55)' : 'rgba(155, 114, 71, 0.55)'
   )
-  root.style.setProperty('--app-rhine-solid-bg', dark ? '#e2e5de' : '#1e211c')
-  root.style.setProperty('--app-rhine-solid-text', dark ? '#111619' : '#f2f0e8')
-  root.style.setProperty('--app-rhine-olive', dark ? '#7d8c6d' : '#4d5443')
-  root.style.setProperty('--app-rhine-surface-subtle', dark ? '#13191d' : '#ece9e2')
-  root.style.setProperty('--app-rhine-surface-header', dark ? '#141a1e' : '#e6e3dc')
+  root.style.setProperty('--app-rhine-solid-bg', dark ? '#e0e3dc' : '#080a08')
+  root.style.setProperty('--app-rhine-solid-text', dark ? '#11181b' : '#eae5e1')
+  root.style.setProperty('--app-rhine-olive', dark ? '#a6b0b1' : '#77756d')
   root.style.setProperty(
-    '--app-rhine-card-shadow',
-    dark
-      ? 'inset 0 1px 0 rgba(226, 229, 222, 0.11), inset 0 -1px 0 rgba(0, 0, 0, 0.55), 0 3px 0 rgba(4, 7, 9, 0.78), 0 10px 26px -4px rgba(0, 0, 0, 0.56), 0 18px 36px -12px rgba(0, 0, 0, 0.42)'
-      : 'inset 0 1px 0 rgba(255, 255, 255, 0.92), inset 0 -1px 0 rgba(28, 31, 27, 0.06), 0 3px 0 rgba(28, 31, 27, 0.14), 0 8px 20px -4px rgba(34, 30, 24, 0.14), 0 16px 32px -12px rgba(34, 30, 24, 0.1)'
+    '--app-rhine-surface-subtle',
+    dark ? 'rgba(255, 255, 255, 0.025)' : 'rgba(255, 255, 255, 0.34)'
   )
+  root.style.setProperty(
+    '--app-rhine-surface-header',
+    dark ? 'rgba(224, 227, 220, 0.04)' : 'rgba(8, 10, 8, 0.035)'
+  )
+  root.style.setProperty('--app-rhine-card-shadow', dark ? 'none' : 'none')
   root.style.setProperty(
     '--app-rhine-card-shadow-hover',
-    dark
-      ? 'inset 0 1px 0 rgba(232, 130, 58, 0.26), inset 0 -1px 0 rgba(0, 0, 0, 0.65), 0 5px 0 rgba(4, 7, 9, 0.88), 0 16px 32px -6px rgba(0, 0, 0, 0.68), 0 24px 44px -12px rgba(0, 0, 0, 0.5)'
-      : 'inset 0 1px 0 rgba(255, 255, 255, 0.98), inset 0 -1px 0 rgba(28, 31, 27, 0.08), 0 5px 0 rgba(28, 31, 27, 0.18), 0 14px 28px -6px rgba(34, 30, 24, 0.18), 0 22px 40px -14px rgba(34, 30, 24, 0.12)'
+    dark ? '0 12px 30px -18px rgba(0, 0, 0, 0.8)' : '0 10px 28px -18px rgba(8, 10, 8, 0.45)'
   )
-  root.style.setProperty(
-    '--app-rhine-subcard-shadow',
-    dark
-      ? 'inset 0 1px 0 rgba(226, 229, 222, 0.07), 0 2px 0 rgba(4, 7, 9, 0.55), 0 6px 14px -4px rgba(0, 0, 0, 0.4)'
-      : 'inset 0 1px 0 rgba(255, 255, 255, 0.84), 0 2px 0 rgba(28, 31, 27, 0.08), 0 4px 10px -3px rgba(34, 30, 24, 0.08)'
-  )
-  root.style.setProperty('--app-rhine-card-border-top', dark ? '#3f5058' : '#d8d4ca')
-  root.style.setProperty('--app-rhine-card-border-bottom', dark ? '#090e11' : '#aba598')
-  root.style.setProperty(
-    '--app-rhine-card-surface-sheen',
-    dark
-      ? 'linear-gradient(180deg, rgba(255, 255, 255, 0.042) 0%, rgba(255, 255, 255, 0) 34%, rgba(0, 0, 0, 0.14) 100%)'
-      : 'linear-gradient(180deg, rgba(255, 255, 255, 0.68) 0%, rgba(255, 255, 255, 0) 38%, rgba(28, 31, 27, 0.018) 100%)'
-  )
-  root.style.setProperty(
-    '--app-rhine-btn-shadow',
-    dark ? '0 2px 0 rgba(4, 7, 9, 0.62)' : '0 2px 0 rgba(28, 31, 27, 0.12)'
-  )
+  root.style.setProperty('--app-rhine-subcard-shadow', dark ? 'none' : 'none')
+  root.style.setProperty('--app-rhine-card-border-top', dark ? '#536166' : '#aaa59a')
+  root.style.setProperty('--app-rhine-card-border-bottom', dark ? '#536166' : '#aaa59a')
+  root.style.setProperty('--app-rhine-card-surface-sheen', dark ? 'none' : 'none')
+  root.style.setProperty('--app-rhine-btn-shadow', dark ? 'none' : 'none')
   root.style.setProperty(
     '--app-rhine-modal-backdrop',
-    dark ? 'rgba(9, 13, 16, 0.72)' : 'rgba(224, 220, 212, 0.62)'
+    dark ? 'rgba(10, 15, 17, 0.72)' : 'rgba(234, 229, 225, 0.66)'
   )
   root.style.setProperty(
     '--app-rhine-hover-bg',
-    dark ? 'rgba(226, 229, 222, 0.065)' : 'rgba(17, 20, 17, 0.055)'
+    dark ? 'rgba(224, 227, 220, 0.055)' : 'rgba(8, 10, 8, 0.045)'
   )
   root.style.setProperty(
     '--app-rhine-active-bg',
-    dark ? 'rgba(232, 130, 58, 0.14)' : 'rgba(217, 107, 39, 0.1)'
+    dark ? 'rgba(197, 161, 107, 0.12)' : 'rgba(155, 114, 71, 0.1)'
   )
-  root.style.setProperty('--app-rhine-muted-index', dark ? '#6f7d82' : '#858075')
-  root.style.setProperty(
-    '--app-rhine-corner-mark',
-    dark ? 'rgba(226, 229, 222, 0.3)' : 'rgba(17, 20, 17, 0.34)'
-  )
+  root.style.setProperty('--app-rhine-muted-index', dark ? '#7e8a8c' : '#77756d')
+  root.style.setProperty('--app-rhine-corner-mark', dark ? '#e0e3dc' : '#080a08')
   root.style.setProperty('--app-rhine-font-sans', RHINE_FONT_FAMILY)
   root.style.setProperty('--app-rhine-font-mono', RHINE_FONT_MONO)
 
   if (!resolvedAntTokens.value) return
   const customTokens = activeAppearance.value?.tokens
-  const primaryColor = customTokens?.colorPrimary ?? themeColors[themeColor.value]
+  const primaryColor =
+    customTokens?.colorPrimary ?? resolveThemeColor(themeColor.value, isDark.value)
   // 由 ConfigProvider 内的 ThemeTokenBridge 传入最终 token，包含包内的 alias overrides。
   const antTokens = resolvedAntTokens.value
 
@@ -624,7 +622,7 @@ function getThemeConfig() {
   return {
     algorithm: isDark.value ? theme.darkAlgorithm : theme.defaultAlgorithm,
     token: {
-      colorPrimary: custom?.colorPrimary ?? themeColors[themeColor.value],
+      colorPrimary: custom?.colorPrimary ?? resolveThemeColor(themeColor.value, isDark.value),
       colorBgLayout: custom?.colorBgLayout ?? baseSurface.colorBgLayout,
       colorBgContainer: custom?.colorBgContainer ?? baseSurface.colorBgContainer,
       colorBgElevated: custom?.colorBgElevated ?? baseSurface.colorBgElevated,
@@ -650,7 +648,7 @@ function getThemeConfig() {
       },
       Card: {
         borderRadiusLG: radius,
-        headerBg: isDark.value ? '#141a1e' : '#ece9e2',
+        headerBg: 'transparent',
       },
       Button: {
         borderRadius: radius,
@@ -705,7 +703,7 @@ export function useTheme() {
       const savedConfigRevision = configRevision
       const defaults: ThemeSnapshot = {
         themeMode: 'system',
-        themeColor: 'blue',
+        themeColor: 'gold',
         appearanceId: null,
       }
       themeHydrated = true

@@ -73,6 +73,9 @@ export default {
     unknown: '不明',
   },
   comp: {
+    mainNavigation: 'メインナビゲーション',
+    utilityNavigation: 'ユーティリティ',
+    pageRuler: 'ページ目盛り',
     currentConfig: '使用設定：{source}',
     configSourceShared: '共有設定',
     configSourceIndependent: '独立設定',
