@@ -10,27 +10,6 @@ export type UserIndexItem = {
     /**
      * 配置类型
      */
-    type: UserIndexItem.type;
+    type: string;
 };
-export namespace UserIndexItem {
-    /**
-     * 配置类型
-     */
-    export enum type {
-        MAA_USER_CONFIG = 'MaaUserConfig',
-        GENERAL_USER_CONFIG = 'GeneralUserConfig',
-        OKWW_USER_CONFIG = 'OkwwUserConfig',
-        OK_NTE_USER_CONFIG = 'OkNteUserConfig',
-        SRC_USER_CONFIG = 'SrcUserConfig',
-        MAA_END_USER_CONFIG = 'MaaEndUserConfig',
-        M9AUSER_CONFIG = 'M9AUserConfig',
-        MAA_FWUSER_CONFIG = 'MaaFWUserConfig',
-        HSRUSER_CONFIG = 'HSRUserConfig',
-        BETTER_GIUSER_CONFIG = 'BetterGIUserConfig',
-        ZZZ_OD_USER_CONFIG = 'ZzzOdUserConfig',
-        BAAHUSER_CONFIG = 'BAAHUserConfig',
-        WHIMBOX_USER_CONFIG = 'WhimboxUserConfig',
-        MSSUSER_CONFIG = 'MSSUserConfig',
-    }
-}
 

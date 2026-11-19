@@ -233,7 +233,6 @@ const { t } = useI18n()
 
 interface Props {
   scripts: Script[]
-  activeConnections: Map<string, { subscriptionIds: string[]; taskId: string }>
   copyingScriptId?: string | null
   searching?: boolean
 }
@@ -250,16 +249,6 @@ interface Emits {
   (e: 'editUser', user: User): void
 
   (e: 'deleteUser', user: User): void
-
-  (e: 'startMaaConfig', script: Script): void
-
-  (e: 'startSrcConfig', script: Script): void
-
-  (e: 'startMaaEndConfig', script: Script): void
-
-  (e: 'startOkwwConfig', script: Script): void
-
-  (e: 'startWhimboxConfig', script: Script): void
 
   (e: 'toggleUserStatus', user: User): void
 

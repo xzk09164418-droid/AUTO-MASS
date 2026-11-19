@@ -1,8 +1,7 @@
 import { translate as t } from '@/i18n'
-import { h, ref, watch } from 'vue'
+import { ref, watch } from 'vue'
 import { message, Modal, notification } from 'ant-design-vue'
 import { Service } from '@/api/services/Service'
-import { useMaaEndIssueReport } from '@/composables/useMaaEndIssueReport'
 import { TaskCreateIn } from '@/api/models/TaskCreateIn'
 import { PowerIn } from '@/api/models/PowerIn'
 import { useWebSocket } from '@/composables/useWebSocket'
@@ -94,7 +93,6 @@ let schedulerViewActive = true
 // 是否离开过调度台；用于区分「首次激活」与「切走再切回」
 let schedulerViewLeft = false
 // MaaEnd 失败导出弹窗全局去重，避免同一批错误连环弹窗
-let maaEndFailureModalOpen = false
 
 const getDefaultTabRuntimeState = () => ({
   logBuffer: '',
@@ -298,7 +296,6 @@ let _disposeTaskRuntimeListener: (() => void) | null = null
 export function useSchedulerLogic() {
   // WebSocket 实例
   const ws = useWebSocket()
-  const { exportMaaEndIssueReport } = useMaaEndIssueReport(logger)
 
   const handleTaskCreated = (state: TaskRuntimeState) => {
     if (!state.taskName && !state.taskType) return
@@ -1156,11 +1153,6 @@ export function useSchedulerLogic() {
 
     if (data.level === 'error') {
       const errorMsg = String(data.message).toLowerCase()
-      const taskLabel =
-        taskOptions.value.find(item => item.value === tab.selectedTaskId)?.label || ''
-      const isMaaEndTask = [taskLabel, tab.runningTaskLabel, tab.runningModeLabel]
-        .filter(Boolean)
-        .some(value => value?.toLowerCase().includes('maaend') ?? false)
 
       // 根据错误内容匹配具体的 noisy 模式音频
       if (
@@ -1190,31 +1182,7 @@ export function useSchedulerLogic() {
         await playSound('error_occurred')
       }
 
-      const isMaaEndError = isMaaEndTask || errorMsg.includes('maaend')
-      if (isMaaEndError) {
-        if (!maaEndFailureModalOpen) {
-          maaEndFailureModalOpen = true
-          Modal.error({
-            centered: true,
-            closable: true,
-            maskClosable: true,
-            keyboard: true,
-            title: t('scheduler.modal.maaEndFailTitle'),
-            content: h('div', [h('p', noticeMessage), h('p', t('scheduler.modal.maaEndFailHint'))]),
-            okCancel: true,
-            okText: t('scheduler.modal.maaEndExport'),
-            cancelText: t('scheduler.modal.maaEndSkip'),
-            onOk: () => {
-              void exportMaaEndIssueReport()
-            },
-            afterClose: () => {
-              maaEndFailureModalOpen = false
-            },
-          })
-        }
-      } else {
-        notification.error({ message: t('scheduler.toast.taskError'), description: noticeMessage })
-      }
+      notification.error({ message: t('scheduler.toast.taskError'), description: noticeMessage })
     } else if (data.level === 'warning') {
       // 播放异常音频
       await playSound('exception_occurred')

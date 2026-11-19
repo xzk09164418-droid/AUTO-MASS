@@ -1,5 +1,4 @@
-import type { MaaFWScriptConfig, Script, User } from '@/types/script'
-import { isMaaFWFamily, resolveMaaFWFlavor } from '@/composables/useMaaFWFlavor'
+import type { Script, User } from '@/types/script'
 
 const normalizeSearchValue = (value: unknown) =>
   String(value ?? '')
@@ -10,29 +9,14 @@ const includesKeyword = (values: unknown[], keyword: string) =>
   values.some(value => normalizeSearchValue(value).includes(keyword))
 
 const matchesUser = (user: User, keyword: string) =>
-  includesKeyword([user.name, user.id, user.Info.Name, user.Info.Id], keyword)
-
-// MFW 家族卡片上的类型标签显示的是项目名（Info.ProjectLabel），没有时是类型标签（MFW / M9A …）：
-// 看得见的名字都要能搜到
-const scriptDisplayValues = (script: Script): unknown[] =>
-  isMaaFWFamily(script.type)
-    ? [
-        (script.config as MaaFWScriptConfig | undefined)?.Info?.ProjectLabel,
-        resolveMaaFWFlavor(script.type).typeTagLabel,
-      ]
-    : []
+  includesKeyword([user.name, user.id, user.Info.Name], keyword)
 
 export const filterScriptsByKeyword = (scripts: Script[], rawKeyword: string): Script[] => {
   const keyword = normalizeSearchValue(rawKeyword)
   if (!keyword) return scripts
 
   return scripts.flatMap(script => {
-    if (
-      includesKeyword(
-        [script.name, script.id, script.type, ...scriptDisplayValues(script)],
-        keyword
-      )
-    ) {
+    if (includesKeyword([script.name, script.id, script.type], keyword)) {
       return [script]
     }
 

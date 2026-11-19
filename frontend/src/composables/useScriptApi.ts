@@ -4,21 +4,14 @@ import { message } from 'ant-design-vue'
 import {
   type ScriptUpdateIn,
   type ScriptGetOut,
-  type HSRStageOptionsData,
-  type MaaEndOptionsOut,
-  type MaaFWInterfacePreviewOut,
-  type MaaFWAgentEnvPrepareOut,
-  ScriptCreateIn,
+  type ScriptCreateIn,
   type ScriptReorderIn,
-  HsrService,
-  MaaFwService,
   Service,
 } from '@/api'
 import type { ScriptDetail, ScriptType, User } from '@/types/script'
 import { useAudioPlayer } from '@/composables/useAudioPlayer'
 import { getTaskRuntimeStates } from '@/composables/useTaskRuntimeState'
 import { isScriptConfigLocked } from '@/utils/scriptConfigLock'
-import { maafwScriptTypeByConfigType, maafwUserConfigTypes } from '@/composables/useMaaFWFlavor'
 import { mapScriptUsers } from './scriptUserMapping'
 
 const logger = window.hostAPI.getLogger('脚本API')
@@ -26,39 +19,13 @@ const logger = window.hostAPI.getLogger('脚本API')
 // 首页卫星与活动区共用在途的列表请求，完成后释放，后续读取仍取最新数据。
 let scriptListRequest: Promise<ScriptGetOut> | null = null
 
-type HSRStageEngine = 'M7A' | 'SRA'
 type ScriptWithUsers = ScriptDetail & { users: User[] }
-const SCRIPT_CREATE_TYPE_BY_SCRIPT_TYPE: Record<ScriptType, ScriptCreateIn.type> = {
-  MAA: ScriptCreateIn.type.MAA,
-  SRC: ScriptCreateIn.type.SRC,
-  MaaEnd: ScriptCreateIn.type.MAA_END,
-  M9A: ScriptCreateIn.type.M9A,
-  MaaFW: ScriptCreateIn.type.MAA_FW,
-  Okww: ScriptCreateIn.type.OKWW,
-  OkNte: ScriptCreateIn.type.OK_NTE,
-  HSR: ScriptCreateIn.type.HSR,
-  BetterGI: ScriptCreateIn.type.BETTER_GI,
-  ZzzOd: ScriptCreateIn.type.ZZZ_OD,
-  BAAH: ScriptCreateIn.type.BAAH,
-  Whimbox: ScriptCreateIn.type.WHIMBOX,
-  MSS: ScriptCreateIn.type.MSS,
-  General: ScriptCreateIn.type.GENERAL,
+// 本版本只保留通用脚本
+const SCRIPT_CREATE_TYPE_BY_SCRIPT_TYPE: Record<ScriptType, ScriptCreateIn['type']> = {
+  General: 'General',
 }
 
-const SCRIPT_TYPE_BY_CONFIG_TYPE: Record<string, ScriptType> = {
-  MaaConfig: 'MAA',
-  SrcConfig: 'SRC',
-  OkwwConfig: 'Okww',
-  OkNteConfig: 'OkNte',
-  MaaEndConfig: 'MaaEnd',
-  HSRConfig: 'HSR',
-  BetterGIConfig: 'BetterGI',
-  ZzzOdConfig: 'ZzzOd',
-  BAAHConfig: 'BAAH',
-  WhimboxConfig: 'Whimbox',
-  // MaaFW 与各特调（M9A / MSS ……）的配置类名由特调注册表提供
-  ...maafwScriptTypeByConfigType(),
-}
+const SCRIPT_TYPE_BY_CONFIG_TYPE: Record<string, ScriptType> = {}
 
 const resolveScriptType = (configType: string): ScriptType => {
   return SCRIPT_TYPE_BY_CONFIG_TYPE[configType] ?? 'General'
@@ -184,7 +151,7 @@ export function useScriptApi() {
 
             if (userResponse.code === 200) {
               // 将用户数据转换为User格式
-              const users = mapScriptUsers(userResponse, maafwUserConfigTypes())
+              const users = mapScriptUsers(userResponse)
 
               return {
                 ...script,
@@ -260,74 +227,6 @@ export function useScriptApi() {
       return null
     } finally {
       loading.value = false
-    }
-  }
-
-  const getHsrStageOptions = async (
-    scriptId: string,
-    engine: HSRStageEngine
-  ): Promise<HSRStageOptionsData | null> => {
-    try {
-      const payload = await HsrService.getHsrStageOptionsApiApiScriptsHsrStageOptionsGet(
-        scriptId,
-        engine
-      )
-      if (payload?.code !== 200) {
-        throw new Error(payload?.message || '接口返回异常')
-      }
-      return payload.data ?? null
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : '获取 HSR 体力副本选项失败'
-      error.value = errorMsg
-      logger.error(`获取 HSR 体力副本选项失败: ${errorMsg}`)
-      return null
-    }
-  }
-
-  // 预览 MaaFW 项目 interface：返回后端原始响应，让编辑页把 code=400 的 message 原样呈现
-  const previewMaaFWInterface = async (
-    path: string,
-    scriptId?: string
-  ): Promise<MaaFWInterfacePreviewOut | null> => {
-    try {
-      // 带 scriptId 时后端按脚本解析有效根（内嵌副本优先），path 只是兜底。
-      return await MaaFwService.previewMaafwInterfaceApiScriptsMaafwPreviewPost({ path, scriptId })
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : String(err)
-      logger.error(`预览 MaaFW interface 失败: ${errorMsg}`)
-      return null
-    }
-  }
-
-  const prepareMaaFWAgentEnv = async (
-    path: string,
-    scriptId?: string,
-    force = false
-  ): Promise<MaaFWAgentEnvPrepareOut | null> => {
-    try {
-      return await MaaFwService.prepareMaafwAgentEnvApiScriptsMaafwAgentEnvPreparePost({
-        path,
-        scriptId,
-        force,
-      })
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : String(err)
-      logger.error(`准备 MaaFW 运行环境失败: ${errorMsg}`)
-      return null
-    }
-  }
-
-  const getMaaEndOptions = async (scriptId: string): Promise<MaaEndOptionsOut | null> => {
-    try {
-      const response = await Service.getMaaendOptionsApiScriptsMaaendOptionsPost({ scriptId })
-      if (response?.code !== 200) throw new Error(response?.message || '接口返回异常')
-      return response
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : '获取 MaaEnd 动态选项失败'
-      error.value = errorMsg
-      logger.error(`获取 MaaEnd 动态选项失败: ${errorMsg}`)
-      message.error(t('misc.maaendIncompleteUninstallIt'))
-      return null
     }
   }
 
@@ -440,14 +339,6 @@ export function useScriptApi() {
     }
   }
 
-  const importScriptConfigFile = (scriptId: string, userId: string | null) =>
-    Service.importScriptConfigFileApiScriptsConfigImportPost({ scriptId, userId }).then(
-      response => {
-        if (response.code === 200) scriptListRequest = null
-        return response
-      }
-    )
-
   return {
     loading,
     error,
@@ -455,13 +346,8 @@ export function useScriptApi() {
     getScripts,
     getScriptsWithUsers,
     getScript,
-    getHsrStageOptions,
-    getMaaEndOptions,
-    previewMaaFWInterface,
-    prepareMaaFWAgentEnv,
     deleteScript,
     updateScript,
     reorderScript,
-    importScriptConfigFile,
   }
 }

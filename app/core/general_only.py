@@ -88,6 +88,9 @@ def retain_general_scripts(config_dir: Path) -> None:
     if not script_path.exists():
         return
     original = script_path.read_bytes()
+    # 全新安装首次启动只建出空文件，第二次启动时不能把它当 JSON 解析
+    if not original.strip():
+        return
     scripts = json.loads(original.decode("utf-8-sig"))
     instances = scripts.get("instances", [])
     converted = []

@@ -190,34 +190,6 @@ async def get_git_version() -> VersionOut:
 
 
 @router.post(
-    "/combox/stage",
-    tags=["Get"],
-    summary="获取关卡号下拉框信息",
-    response_model=ComboBoxOut,
-    status_code=200,
-)
-async def get_stage_combox(
-    stage: GetStageIn = Body(..., description="关卡号类型"),
-) -> ComboBoxOut:
-
-    try:
-        raw_data = await Config.get_stage_info(stage.type)
-        data = (
-            [ComboBoxItem(**item) for item in raw_data if isinstance(item, dict)]
-            if raw_data
-            else []
-        )
-    except Exception as e:
-        logger.opt(exception=True).warning(
-            f"get_stage_combox失败: {type(e).__name__}: {e}"
-        )
-        return ComboBoxOut(
-            code=500, status="error", message=f"{type(e).__name__}: {str(e)}", data=[]
-        )
-    return ComboBoxOut(data=data)
-
-
-@router.post(
     "/combox/script",
     tags=["Get"],
     summary="获取脚本下拉框信息",
@@ -254,28 +226,6 @@ async def get_task_combox() -> ComboBoxOut:
     except Exception as e:
         logger.opt(exception=True).warning(
             f"get_task_combox失败: {type(e).__name__}: {e}"
-        )
-        return ComboBoxOut(
-            code=500, status="error", message=f"{type(e).__name__}: {str(e)}", data=[]
-        )
-    return ComboBoxOut(data=data)
-
-
-@router.post(
-    "/combox/plan",
-    tags=["Get"],
-    summary="获取可选计划下拉框信息",
-    response_model=ComboBoxOut,
-    status_code=200,
-)
-async def get_plan_combox(plan: PlanComboxIn = Body(...)) -> ComboBoxOut:
-
-    try:
-        raw_data = await Config.get_plan_combox(plan.consumer)
-        data = [ComboBoxItem(**item) for item in raw_data] if raw_data else []
-    except Exception as e:
-        logger.opt(exception=True).warning(
-            f"get_plan_combox失败: {type(e).__name__}: {e}"
         )
         return ComboBoxOut(
             code=500, status="error", message=f"{type(e).__name__}: {str(e)}", data=[]
@@ -399,19 +349,7 @@ async def get_overview(
     refresh: bool = False,
 ) -> InfoOut:
     try:
-        if refresh:
-            await Config.get_stage(refresh=True)
-        stage_by_server = {
-            server: await Config.get_stage_info("Info", server=server)
-            for server in (
-                "Official",
-                "Bilibili",
-                "YoStarEN",
-                "YoStarJP",
-                "YoStarKR",
-                "txwy",
-            )
-        }
+        # 关卡信息属于已移除的 MAA 专项，总览只保留代理情况
         proxy = await Config.get_proxy_overview()
     except Exception as e:
         logger.opt(exception=True).warning(f"get_overview失败: {type(e).__name__}: {e}")
@@ -426,8 +364,7 @@ async def get_overview(
         )
     return InfoOut(
         data={
-            "Stage": stage_by_server["Official"],
-            "StageByServer": stage_by_server,
+            "Stage": [],
             "Proxy": proxy,
         }
     )

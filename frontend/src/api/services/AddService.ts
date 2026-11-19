@@ -7,8 +7,6 @@ import type { Emulator2InstanceCreateOut } from '../models/Emulator2InstanceCrea
 import type { Emulator2PathAddIn } from '../models/Emulator2PathAddIn';
 import type { Emulator2PathAddOut } from '../models/Emulator2PathAddOut';
 import type { EmulatorCreateOut } from '../models/EmulatorCreateOut';
-import type { PlanCreateIn } from '../models/PlanCreateIn';
-import type { PlanCreateOut } from '../models/PlanCreateOut';
 import type { QueueCreateOut } from '../models/QueueCreateOut';
 import type { QueueItemCreateOut } from '../models/QueueItemCreateOut';
 import type { QueueSetInBase } from '../models/QueueSetInBase';
@@ -73,25 +71,6 @@ export class AddService {
         return __request(OpenAPI, {
             method: 'POST',
             url: '/api/scripts/webhook/add',
-            body: requestBody,
-            mediaType: 'application/json',
-            errors: {
-                422: `Validation Error`,
-            },
-        });
-    }
-    /**
-     * 添加计划表
-     * @param requestBody
-     * @returns PlanCreateOut Successful Response
-     * @throws ApiError
-     */
-    public static addPlanApiPlanAddPost(
-        requestBody: PlanCreateIn,
-    ): CancelablePromise<PlanCreateOut> {
-        return __request(OpenAPI, {
-            method: 'POST',
-            url: '/api/plan/add',
             body: requestBody,
             mediaType: 'application/json',
             errors: {

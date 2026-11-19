@@ -29,7 +29,6 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
-  CalendarOutlined,
   ControlOutlined,
   DatabaseOutlined,
   FileTextOutlined,
@@ -48,31 +47,24 @@ const quickActions = computed(() => [
     icon: FileTextOutlined,
   },
   {
-    title: t('home.quick.plans'),
-    description: t('home.quick.plansDesc'),
-    path: '/plans',
-    index: '03',
-    icon: CalendarOutlined,
-  },
-  {
     title: t('home.quick.emulators'),
     description: t('home.quick.emulatorsDesc'),
     path: '/emulators',
-    index: '04',
+    index: '03',
     icon: DatabaseOutlined,
   },
   {
     title: t('home.quick.queue'),
     description: t('home.quick.queueDesc'),
     path: '/queue',
-    index: '05',
+    index: '04',
     icon: UnorderedListOutlined,
   },
   {
     title: t('home.quick.scheduler'),
     description: t('home.quick.schedulerDesc'),
     path: '/scheduler',
-    index: '06',
+    index: '05',
     icon: ControlOutlined,
   },
 ])
@@ -85,7 +77,7 @@ const quickActions = computed(() => [
 
 .quick-actions {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 /* 编号与顶部导航一致，形成 PV 档案索引 */

@@ -86,7 +86,6 @@ const commonRoutes = [
   { path: '/initialization', title: '初始化' },
   { path: '/home', title: '主页' },
   { path: '/scripts', title: '脚本管理' },
-  { path: '/plans', title: '计划管理' },
   { path: '/queue', title: '调度队列' },
   { path: '/settings', title: '设置' },
   { path: '/logs', title: '日志' },

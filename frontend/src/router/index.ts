@@ -79,12 +79,6 @@ const routes = [
     meta: { title: '编辑通用用户' },
   },
   {
-    path: '/plans',
-    name: 'Plans',
-    component: () => import('../views/plan/index.vue'),
-    meta: { title: '计划管理' },
-  },
-  {
     path: '/emulators',
     name: 'Emulators',
     component: () => import('../views/Emulator.vue'),

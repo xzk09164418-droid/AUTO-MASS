@@ -120,7 +120,6 @@
 import { useI18n } from 'vue-i18n'
 import {
   BugOutlined,
-  CalendarOutlined,
   CarryOutOutlined,
   ControlOutlined,
   DatabaseOutlined,
@@ -175,15 +174,14 @@ const isDevelopment = computed(() => import.meta.env.DEV)
 const ROUTE_INDEX_MAP: Record<string, string> = {
   '/home': '01',
   '/scripts': '02',
-  '/plans': '03',
-  '/emulators': '04',
-  '/queue': '05',
-  '/scheduler': '06',
-  '/local-controls': '07',
-  '/gamesign': '08',
-  '/history': '09',
-  '/theme-store': '10',
-  '/settings': '11',
+  '/emulators': '03',
+  '/queue': '04',
+  '/scheduler': '05',
+  '/local-controls': '06',
+  '/gamesign': '07',
+  '/history': '08',
+  '/theme-store': '09',
+  '/settings': '10',
 }
 
 const indexOf = (key: string) => ROUTE_INDEX_MAP[key] ?? '00'
@@ -196,23 +194,22 @@ const primaryNavItems = computed<ShellNavItem[]>(() => [
     index: '02',
     icon: icon('scripts', FileTextOutlined),
   },
-  { key: '/plans', label: t('comp.plans'), index: '03', icon: icon('plans', CalendarOutlined) },
   {
     key: '/emulators',
     label: t('comp.emulators'),
-    index: '04',
+    index: '03',
     icon: icon('emulators', DatabaseOutlined),
   },
   {
     key: '/queue',
     label: t('comp.queue'),
-    index: '05',
+    index: '04',
     icon: icon('queue', UnorderedListOutlined),
   },
   {
     key: '/scheduler',
     label: t('comp.scheduler'),
-    index: '06',
+    index: '05',
     icon: icon('scheduler', ControlOutlined),
   },
   ...(window.__AUTO_MAS_BROWSER_HOST__
@@ -220,7 +217,7 @@ const primaryNavItems = computed<ShellNavItem[]>(() => [
         {
           key: '/local-controls',
           label: t('localControls.title'),
-          index: '07',
+          index: '06',
           icon: icon('tools', ControlOutlined),
         },
       ]
@@ -260,13 +257,13 @@ const utilityNavItems = computed<ShellNavItem[]>(() => [
   {
     key: '/gamesign',
     label: t('comp.checkIns'),
-    index: '08',
+    index: '07',
     icon: icon('gameSign', CarryOutOutlined),
   },
   {
     key: '/history',
     label: t('comp.history'),
-    index: '09',
+    index: '08',
     icon: icon('history', HistoryOutlined),
   },
   ...(!window.__AUTO_MAS_BROWSER_HOST__
@@ -274,7 +271,7 @@ const utilityNavItems = computed<ShellNavItem[]>(() => [
         {
           key: '/theme-store',
           label: t('comp.themeStore'),
-          index: '10',
+          index: '09',
           icon: icon('themeStore', SkinOutlined),
         },
       ]
@@ -282,7 +279,7 @@ const utilityNavItems = computed<ShellNavItem[]>(() => [
   {
     key: '/settings',
     label: t('comp.settings'),
-    index: '11',
+    index: '10',
     icon: icon('settings', SettingOutlined),
   },
   ...devNavItems.value,

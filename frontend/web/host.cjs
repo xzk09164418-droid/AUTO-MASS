@@ -201,8 +201,6 @@ function createBrowserHost(root, backendPort, lifecycle = {}) {
         ? services.readLogIncrement(logPath, fromOffset)
         : services.readLogContent(logPath, lines)
     },
-    discoverOkwwPath: services.discoverOkwwPath,
-    discoverWutheringWavesPath: services.discoverWutheringWavesPath,
     listAppearances: () => services.listAppearances(userData),
     listOnlineAppearances: (query, category) => onlineService(category).list(query || {}),
     getOnlineAppearance: (key, category) => onlineService(category).detail(key),
@@ -250,7 +248,6 @@ function createBrowserHost(root, backendPort, lifecycle = {}) {
     listMascots: () => services.listMascots(userData),
     importMascot: (file, replace) => services.importMascotPackage(userData, file, replace),
     removeMascot: id => services.removeMascot(userData, id),
-    listMaaFWIssueReportScripts: types => services.listMaaFWIssueReportScripts(root, types || []),
     exportLogs: () =>
       exportZip('AUTO-MAS-logs', output => {
         const AdmZip = require('adm-zip')
@@ -262,27 +259,6 @@ function createBrowserHost(root, backendPort, lifecycle = {}) {
         zip.writeZip(output)
         return { success: true }
       }),
-  }
-  for (const [method, creator] of Object.entries({
-    exportMaaIssueReport: 'createMaaIssueReport',
-    exportMaaEndIssueReport: 'createMaaEndIssueReport',
-    exportMaaFWIssueReport: 'createMaaFWIssueReport',
-    exportM9AIssueReport: 'createM9AIssueReport',
-    exportMSSIssueReport: 'createMSSIssueReport',
-    exportOkwwIssueReport: 'createOkwwIssueReport',
-    exportOkNteIssueReport: 'createOkNteIssueReport',
-    exportBetterGIIssueReport: 'createBetterGIIssueReport',
-    exportZzzOdIssueReport: 'createZzzOdIssueReport',
-    exportWhimboxIssueReport: 'createWhimboxIssueReport',
-  })) {
-    api[method] = scriptId =>
-      exportZip(method.replace('export', ''), output =>
-        services[creator](
-          root,
-          output,
-          method === 'exportMaaEndIssueReport' ? `http://127.0.0.1:${backendPort}` : scriptId
-        )
-      )
   }
   return async function handle(req, res) {
     if (req.url !== '/__host/invoke') return false

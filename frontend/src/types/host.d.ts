@@ -19,19 +19,6 @@ import type {
 } from '@/types/appearance'
 
 // Node 宿主 API 类型定义
-export interface PathDiscoveryCandidate {
-  path: string
-  channel?: 'China' | 'Global'
-}
-
-export interface PathDiscoveryResult {
-  success: boolean
-  candidates?: PathDiscoveryCandidate[]
-  path?: string
-  channel?: 'China' | 'Global'
-  error?: string
-}
-
 export interface RelatedProcess {
   pid: number
   name: string
@@ -232,8 +219,6 @@ export interface HostAPI extends DesktopMascotHostAPI, DesktopMascotTaskHostAPI 
   selectFolder: () => Promise<string | null>
   selectFile: (filters?: unknown[]) => Promise<string[]>
   openUrl: (url: string) => Promise<{ success: boolean; error?: string }>
-  discoverOkwwPath: () => Promise<PathDiscoveryResult>
-  discoverWutheringWavesPath: () => Promise<PathDiscoveryResult>
 
   // 窗口控制
   windowMinimize: () => Promise<void>
@@ -317,78 +302,6 @@ export interface HostAPI extends DesktopMascotHostAPI, DesktopMascotTaskHostAPI 
     zipPath?: string
     skippedPaths?: string[]
     errorCode?: 'window-unavailable' | 'directory-missing' | 'no-files'
-    error?: string
-  }>
-  exportMaaIssueReport: (dialogLabels?: { title: string; zipFilterName: string }) => Promise<{
-    success: boolean
-    message?: string
-    zipPath?: string
-    error?: string
-    errorCode?: 'no-installation' | 'no-files' | 'export-failed'
-    collectedCount?: number
-    incompleteCount?: number
-  }>
-  exportMaaEndIssueReport: () => Promise<{
-    success: boolean
-    message?: string
-    zipPath?: string
-    error?: string
-  }>
-  exportOkwwIssueReport: () => Promise<{
-    success: boolean
-    message?: string
-    zipPath?: string
-    error?: string
-  }>
-  exportOkNteIssueReport: () => Promise<{
-    success: boolean
-    message?: string
-    zipPath?: string
-    error?: string
-  }>
-  exportZzzOdIssueReport: () => Promise<{
-    success: boolean
-    message?: string
-    zipPath?: string
-    error?: string
-  }>
-  exportWhimboxIssueReport: () => Promise<{
-    success: boolean
-    message?: string
-    zipPath?: string
-    error?: string
-  }>
-  exportBetterGIIssueReport: () => Promise<{
-    success: boolean
-    message?: string
-    zipPath?: string
-    error?: string
-  }>
-  /** configTypes：要列出的脚本配置类名（MaaFW 特调注册表的 scriptConfigType） */
-  listMaaFWIssueReportScripts: (configTypes: string[]) => Promise<
-    Array<{
-      uid: string
-      type: string
-      name: string
-      projectLabel: string
-    }>
-  >
-  exportMaaFWIssueReport: (scriptId: string) => Promise<{
-    success: boolean
-    message?: string
-    zipPath?: string
-    error?: string
-  }>
-  exportM9AIssueReport: () => Promise<{
-    success: boolean
-    message?: string
-    zipPath?: string
-    error?: string
-  }>
-  exportMSSIssueReport: () => Promise<{
-    success: boolean
-    message?: string
-    zipPath?: string
     error?: string
   }>
   exportDataBackup: () => Promise<{

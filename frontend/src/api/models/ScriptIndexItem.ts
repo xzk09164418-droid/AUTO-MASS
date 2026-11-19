@@ -10,31 +10,10 @@ export type ScriptIndexItem = {
     /**
      * 配置类型
      */
-    type: ScriptIndexItem.type;
+    type: string;
     /**
      * 对应的游戏活动标识，无游戏归属时为空
      */
     activityGame?: (string | null);
 };
-export namespace ScriptIndexItem {
-    /**
-     * 配置类型
-     */
-    export enum type {
-        MAA_CONFIG = 'MaaConfig',
-        GENERAL_CONFIG = 'GeneralConfig',
-        OKWW_CONFIG = 'OkwwConfig',
-        OK_NTE_CONFIG = 'OkNteConfig',
-        SRC_CONFIG = 'SrcConfig',
-        MAA_END_CONFIG = 'MaaEndConfig',
-        M9ACONFIG = 'M9AConfig',
-        MAA_FWCONFIG = 'MaaFWConfig',
-        HSRCONFIG = 'HSRConfig',
-        BETTER_GICONFIG = 'BetterGIConfig',
-        ZZZ_OD_CONFIG = 'ZzzOdConfig',
-        BAAHCONFIG = 'BAAHConfig',
-        WHIMBOX_CONFIG = 'WhimboxConfig',
-        MSSCONFIG = 'MSSConfig',
-    }
-}
 
