@@ -9,9 +9,10 @@ import "Tracks.js" as T
 //   41–82   接入输入
 //   82–182  标志绘制 → 左移 → 品牌三行 → 收至左上角
 //   190–285 身份确认
-//   285–375 授权圆环
-//   375–425 黑白闪切与欢迎
-//   420–452 缩小、失焦、偏青 → 白场交给部门索引
+//   285–375 授权圆环（后端未就绪时停在 362 帧等待，圆环缓慢转动）
+//   381–425 欢迎
+//   420–452 原背景色由中心铺满 → 交给部门索引
+// 时钟由 FrameAnimation 驱动，每帧随垂直同步推进；底部进度条与后端启动阶段同步。
 Item {
     id: boot
 
@@ -22,28 +23,49 @@ Item {
     readonly property real fps: 25
     readonly property int endFrame: 452
 
-    readonly property bool inverted: T.within(frame, [[375, 377], [379, 381]])
-    readonly property color field: inverted ? Theme.bootInk : Theme.bootField
-    readonly property color ink: inverted ? Theme.bootField : Theme.bootInk
+    readonly property color field: Theme.bootField
+    readonly property color ink: Theme.bootInk
+
+    // 后端启动同步：未就绪时动画停在授权段等待
+    property bool backendReady: true
+    property real backendProgress: 1
+    property string backendStage: ""
+    readonly property int holdFrame: 362
+    property real idle: 0
+    property bool done: false
 
     function skip() {
-        clock.stop()
+        done = true
         frame = endFrame
         finished()
     }
 
     function replay() {
         frame = 0
-        clock.restart()
+        idle = 0
+        done = false
     }
 
-    NumberAnimation on frame {
+    FrameAnimation {
         id: clock
-        running: boot.running
-        from: 0
-        to: boot.endFrame
-        duration: boot.endFrame * 1000 / boot.fps
-        onFinished: boot.finished()
+        running: boot.running && !boot.done
+        onTriggered: {
+            const step = Math.min(frameTime, 0.1) * boot.fps
+            if (!boot.backendReady && boot.frame >= boot.holdFrame - 0.001) {
+                boot.frame = boot.holdFrame
+                boot.idle += frameTime
+                return
+            }
+            let next = boot.frame + step
+            if (!boot.backendReady) next = Math.min(next, boot.holdFrame)
+            if (next >= boot.endFrame) {
+                boot.frame = boot.endFrame
+                boot.done = true
+                boot.finished()
+                return
+            }
+            boot.frame = next
+        }
     }
 
     component BootText: Text {
@@ -57,15 +79,11 @@ Item {
     Item {
         id: content
         anchors.fill: parent
-        scale: 1 - 0.14 * T.easeInOut(T.ramp(boot.frame, 420, 445))
-        opacity: 1 - T.ramp(boot.frame, 428, 450)
         layer.enabled: boot.frame > 420
         layer.effect: MultiEffect {
             blurEnabled: true
-            blurMax: 32
-            blur: T.ramp(boot.frame, 420, 445)
-            colorization: 0.35 * T.ramp(boot.frame, 420, 440)
-            colorizationColor: "#5fb3c4"
+            blurMax: 24
+            blur: 0.6 * T.ramp(boot.frame, 420, 446)
         }
 
         Rectangle {
@@ -189,7 +207,6 @@ Item {
                     y: -height / 2
                     radius: 220
                     stroke: 8
-                    sweep: 280
                     color: boot.field
                     scale: 2.4 - 1.4 * T.easeOut(T.ramp(boot.frame, 288, 320))
                     rotation: -200 * T.easeOut(T.ramp(boot.frame, 288, 320))
@@ -201,11 +218,11 @@ Item {
                     stroke: 5
                     sweep: 80
                     color: boot.ink
-                    rotation: -420 * T.easeOut(T.ramp(boot.frame, 295, 375))
+                    rotation: -420 * T.easeOut(T.ramp(boot.frame, 295, 375)) - boot.idle * 40
                 }
                 // 橙色节点沿外环绕行
                 Item {
-                    rotation: 540 * T.easeOut(T.ramp(boot.frame, 297, 375))
+                    rotation: 540 * T.easeOut(T.ramp(boot.frame, 297, 375)) + boot.idle * 60
                     Rectangle {
                         width: 26
                         height: 26
@@ -233,7 +250,7 @@ Item {
                 x: 960
                 y: 540
                 visible: boot.frame >= 345
-                rotation: 300 * T.ramp(boot.frame, 345, 395)
+                rotation: 300 * T.ramp(boot.frame, 345, 395) + boot.idle * 90
                 Repeater {
                     model: 6
                     Rectangle {
@@ -271,8 +288,9 @@ Item {
                 y: 840
                 font.pixelSize: 18
                 font.letterSpacing: 7
-                text: "AUTHORIZATION GRANTED"
                 visible: boot.frame >= 357
+                opacity: boot.backendReady ? 1 : 0.35
+                text: boot.backendReady ? "AUTHORIZATION GRANTED" : "AUTHORIZING ..."
             }
         }
 
@@ -318,6 +336,66 @@ Item {
         }
     }
 
+    // ── 收尾：原背景色由中心铺满（不缩放） ─────────────────────────────────
+    Rectangle {
+        readonly property real p: T.easeInOut(T.ramp(boot.frame, 420, 446))
+        width: 2300 * p
+        height: width
+        radius: width / 2
+        x: (parent.width - width) / 2
+        y: (parent.height - height) / 2
+        color: Theme.bg
+        visible: p > 0
+    }
+
+    // ── 启动进度：与后端启动阶段同步 ─────────────────────────────────────
+    Item {
+        id: progressStrip
+        x: (parent.width - 520) / 2
+        y: 968
+        width: 520
+        height: 40
+        opacity: T.ramp(boot.frame, 41, 52) * (1 - T.ramp(boot.frame, 412, 424))
+        visible: opacity > 0
+
+        Text {
+            text: "BOOT // " + (boot.backendStage || "STANDBY")
+            color: boot.ink
+            opacity: 0.7
+            font.family: Theme.font
+            font.pixelSize: 13
+            font.weight: Font.DemiBold
+            font.letterSpacing: 2.6
+        }
+        Text {
+            anchors.right: parent.right
+            text: Math.round(boot.shownProgress * 100) + "%"
+            color: boot.ink
+            opacity: 0.7
+            font.family: Theme.font
+            font.pixelSize: 13
+            font.weight: Font.DemiBold
+            font.letterSpacing: 1.5
+        }
+        Rectangle {
+            y: 26
+            width: parent.width
+            height: 2
+            color: Qt.rgba(boot.ink.r, boot.ink.g, boot.ink.b, 0.15)
+            Rectangle {
+                width: parent.width * boot.shownProgress
+                height: parent.height
+                color: Theme.accent
+            }
+        }
+    }
+
+    // 进度条平滑追赶后端的实际进度
+    property real shownProgress: 0
+    Behavior on shownProgress { NumberAnimation { duration: 320; easing.type: Easing.OutCubic } }
+    onBackendProgressChanged: shownProgress = backendProgress
+    Component.onCompleted: shownProgress = backendProgress
+
     // ── 黑场标志 ─────────────────────────────────────────────────────────
     Rectangle {
         anchors.fill: parent
@@ -345,6 +423,7 @@ Item {
         anchors.bottom: parent.bottom
         anchors.margins: 48
         text: "SKIP ▸"
+        opacity: 1 - T.ramp(boot.frame, 418, 428)
         color: Theme.muted
         font.family: Theme.font
         font.pixelSize: 14

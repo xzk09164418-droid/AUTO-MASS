@@ -16,8 +16,9 @@ Window {
 
     width: 1600
     height: 900
-    minimumWidth: 1024
-    minimumHeight: 600
+    // 1080p 屏 200% 缩放时逻辑分辨率只有 960×540，最小尺寸不能超过它
+    minimumWidth: 960
+    minimumHeight: 540
     visible: true
     title: "AUTO-MAS"
     color: Theme.bg
@@ -66,6 +67,11 @@ Window {
             anchors.fill: parent
             visible: !root.booted
             running: !root.skipBoot
+            // 后端未就绪时停在授权段；出错也放行，交给 BackendPanel 呈现
+            backendReady: !root.backendEnabled || !root.backend
+                || root.backend.status === "ready" || root.backend.status === "error"
+            backendProgress: root.backendEnabled && root.backend ? root.backend.progress : 1
+            backendStage: root.backendEnabled && root.backend ? root.backend.stage : "OFFLINE PREVIEW"
             onFinished: root.finishBoot()
         }
     }

@@ -94,20 +94,39 @@ FocusScope {
     }
 
     // 帧驱动跟随垂直同步；窗口不活跃、二级界面打开或未入场时停帧
+    // 空闲停帧：鼠标静止 2.5 秒后漂浮幅度收为 0、视差追平，帧回调随之停下（不再持续渲染）
+    property real floatAmp: 0
+    property real stillFor: 0
+    readonly property bool settled: floatAmp < 0.001 && stillFor > 2.5
+        && Math.abs(tx - mx) < 0.001 && Math.abs(ty - my) < 0.001
+
     FrameAnimation {
+        id: frameLoop
         running: hub.active && !hub.paused && hub.visible
-            && Qt.application.state === Qt.ApplicationActive
+            && Qt.application.state === Qt.ApplicationActive && !hub.settled
         onTriggered: {
-            hub.mx += (hub.tx - hub.mx) * Math.min(1, frameTime * 5)
-            hub.my += (hub.ty - hub.my) * Math.min(1, frameTime * 5)
-            hub.clock += frameTime
+            const dt = Math.min(frameTime, 0.1)
+            hub.mx += (hub.tx - hub.mx) * Math.min(1, dt * 5)
+            hub.my += (hub.ty - hub.my) * Math.min(1, dt * 5)
+            hub.stillFor += dt
+            const goal = hub.stillFor > 2.5 ? 0 : 1
+            hub.floatAmp += (goal - hub.floatAmp) * Math.min(1, dt * 2.5)
+            if (Math.abs(goal - hub.floatAmp) < 0.001) hub.floatAmp = goal
+            if (Math.abs(hub.tx - hub.mx) < 0.001) hub.mx = hub.tx
+            if (Math.abs(hub.ty - hub.my) < 0.001) hub.my = hub.ty
+            hub.clock += dt
         }
     }
 
     HoverHandler {
         onPointChanged: {
-            hub.tx = (point.position.x / hub.width - 0.5) * 2
-            hub.ty = (point.position.y / hub.height - 0.5) * 2
+            // 方块随视差移动时 Qt 会重发悬停事件；只有鼠标真的移动才算唤醒
+            const nx = (point.position.x / hub.width - 0.5) * 2
+            const ny = (point.position.y / hub.height - 0.5) * 2
+            if (Math.abs(nx - hub.tx) < 1e-4 && Math.abs(ny - hub.ty) < 1e-4) return
+            hub.tx = nx
+            hub.ty = ny
+            hub.stillFor = 0
         }
     }
 
@@ -206,8 +225,8 @@ FocusScope {
             readonly property real dp: modelData.depth
             width: modelData.w
             height: modelData.h
-            x: modelData.x - width / 2 - hub.mx * dp + Math.sin(hub.clock / 2.6 + index) * dp * 0.15
-            y: modelData.y - height / 2 - hub.my * dp + Math.cos(hub.clock / 3.1 + index * 1.7) * dp * 0.15
+            x: modelData.x - width / 2 - hub.mx * dp + Math.sin(hub.clock / 2.6 + index) * dp * 0.15 * hub.floatAmp
+            y: modelData.y - height / 2 - hub.my * dp + Math.cos(hub.clock / 3.1 + index * 1.7) * dp * 0.15 * hub.floatAmp
             opacity: Math.max(0, Math.min(1, (hub.intro - 0.5) / 0.3)) * (1 - modelData.blur * 0.5)
 
             Rectangle { anchors.fill: parent; color: modelData.kind === "stripe" ? Theme.block : Theme.paper }
@@ -236,8 +255,8 @@ FocusScope {
             readonly property real dp: d.depth
             d: modelData
             required property var modelData
-            px: -hub.mx * dp + Math.sin(hub.clock / 2.6 + index) * dp * 0.15
-            py: -hub.my * dp + Math.cos(hub.clock / 3.1 + index * 1.7) * dp * 0.15
+            px: -hub.mx * dp + Math.sin(hub.clock / 2.6 + index) * dp * 0.15 * hub.floatAmp
+            py: -hub.my * dp + Math.cos(hub.clock / 3.1 + index * 1.7) * dp * 0.15 * hub.floatAmp
             intro: hub.tileIntro(index)
             current: hub.current === index
             dimmed: true

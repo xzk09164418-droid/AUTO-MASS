@@ -14,7 +14,7 @@ import sys
 from pathlib import Path
 
 from PySide6.QtCore import QTimer, QUrl
-from PySide6.QtGui import QGuiApplication, QIcon
+from PySide6.QtGui import QGuiApplication, QIcon, QSurfaceFormat
 from PySide6.QtQml import QQmlApplicationEngine
 
 QT_DIR = Path(__file__).resolve().parent
@@ -31,11 +31,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--theme", choices=["system", "light", "dark"], default="system")
     parser.add_argument("--capture", type=Path, help="截图保存路径")
     parser.add_argument("--after", type=int, default=3000, help="截图延时（毫秒）")
+    parser.add_argument("--size", help="窗口逻辑尺寸，如 1920x1080（分辨率适配测试用）")
     return parser.parse_args()
 
 
 def main() -> int:
     args = parse_args()
+    # 显式要求垂直同步：交换链按显示器刷新节拍呈现，避免圆环等大幅运动时撕裂
+    fmt = QSurfaceFormat.defaultFormat()
+    fmt.setSwapInterval(1)
+    QSurfaceFormat.setDefaultFormat(fmt)
     app = QGuiApplication(sys.argv)
     app.setApplicationName("AUTO-MAS")
     app.setOrganizationName("AUTO-MAS")
@@ -60,6 +65,9 @@ def main() -> int:
     engine.load(QUrl.fromLocalFile(str(QT_DIR / "qml" / "Main.qml")))
     if not engine.rootObjects():
         return 1
+    if args.size:
+        w, h = (int(v) for v in args.size.lower().split("x"))
+        engine.rootObjects()[0].resize(w, h)
 
     if not args.no_backend:
         backend.start()

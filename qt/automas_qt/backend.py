@@ -18,6 +18,7 @@ from PySide6.QtCore import (
     Property,
     QObject,
     QProcess,
+    QProcessEnvironment,
     QTimer,
     QUrl,
     Signal,
@@ -31,6 +32,15 @@ POLL_INTERVAL_MS = 500
 START_TIMEOUT_MS = 120_000
 MAX_LOG_LINES = 200
 LOG_LEVEL_PATTERN = re.compile(r"\|\s*(DEBUG|INFO|SUCCESS|WARNING|ERROR|CRITICAL)\s*\|")
+
+# 启动阶段与进度（0–1）。后端日志里的固定标记推进进度，健康检查的 backgroundStatus 收尾。
+# 后台初始化共 7 步（main.py initialize_background_services），每完成一步推进一格。
+BACKGROUND_STEPS = 7
+STEP_DONE_PATTERN = re.compile(r"后台初始化步骤结束: ([^，,]+)")
+STAGE_MARKERS = (
+    ("AUTO-MAS 后端应用程序", 0.15, "加载配置"),
+    ("Application startup complete", 0.40, "核心服务就绪"),
+)
 
 
 def instance_id(root: Path = ROOT_DIR) -> str:
@@ -76,6 +86,9 @@ class BackendSupervisor(QObject):
         self._status = "probing"
         self._message = ""
         self._background = ""
+        self._progress = 0.0
+        self._stage = ""
+        self._steps_done = 0
         self._logs: deque[dict[str, str]] = deque(maxlen=MAX_LOG_LINES)
         self._port = backend_port()
         self._expected_id = instance_id()
@@ -100,6 +113,14 @@ class BackendSupervisor(QObject):
     def backgroundStatus(self) -> str:
         return self._background
 
+    @Property(float, notify=statusChanged)
+    def progress(self) -> float:
+        return self._progress
+
+    @Property(str, notify=statusChanged)
+    def stage(self) -> str:
+        return self._stage
+
     @Property(int, constant=True)
     def port(self) -> int:
         return self._port
@@ -112,6 +133,9 @@ class BackendSupervisor(QObject):
     @Slot()
     def start(self) -> None:
         self._set_status("probing", "")
+        self._steps_done = 0
+        self._progress = 0.0
+        self._set_progress(0.03, self.tr("连接后端"))
         self._elapsed = 0
         self._probe(first=True)
 
@@ -138,10 +162,28 @@ class BackendSupervisor(QObject):
             self._status, self._message = status, message
             self.statusChanged.emit()
 
+    def _set_progress(self, value: float, stage: str) -> None:
+        value = max(self._progress if value < 1 else 0, value)
+        if (value, stage) != (self._progress, self._stage):
+            self._progress, self._stage = min(1.0, value), stage
+            self.statusChanged.emit()
+
+    def _track_stage(self, line: str) -> None:
+        for marker, value, stage in STAGE_MARKERS:
+            if marker in line:
+                self._set_progress(value, self.tr(stage))
+                return
+        done = STEP_DONE_PATTERN.search(line)
+        if done:
+            self._steps_done += 1
+            value = 0.40 + 0.55 * min(self._steps_done, BACKGROUND_STEPS) / BACKGROUND_STEPS
+            self._set_progress(value, self.tr("初始化：{0}").format(done.group(1).strip()))
+
     def _append_log(self, line: str) -> None:
         line = line.rstrip()
         if not line:
             return
+        self._track_stage(line)
         match = LOG_LEVEL_PATTERN.search(line)
         self._logs.append({"level": match.group(1) if match else "", "text": line})
         self.logsChanged.emit()
@@ -178,8 +220,17 @@ class BackendSupervisor(QObject):
                 self._poll.stop()
                 self._set_status("error", str(data["backgroundError"]))
                 return
-            self._poll.stop()
-            self._set_status("ready", "")
+            if background in ("", "ready", "failed"):
+                # 后台初始化走完（或旧后端不报告）才算就绪，启动动画以此收尾
+                self._poll.stop()
+                self._set_progress(1.0, self.tr("就绪"))
+                self._set_status("ready", "")
+                return
+            # 核心接口已通、后台仍在初始化：继续轮询，进度由日志推进
+            self._set_progress(0.40, self._stage or self.tr("核心服务就绪"))
+            if not self._poll.isActive():
+                self._set_status("starting", "")
+                self._poll.start()
             return
 
         if first:
@@ -193,6 +244,7 @@ class BackendSupervisor(QObject):
 
     def _spawn(self) -> None:
         self._set_status("starting", "")
+        self._set_progress(0.08, self.tr("启动后端进程"))
         if self._process and self._process.state() != QProcess.ProcessState.NotRunning:
             # 上一次拉起的进程还活着（例如只是启动慢导致超时），继续等它
             self._poll.start()
@@ -201,6 +253,11 @@ class BackendSupervisor(QObject):
         process = QProcess(self)
         process.setWorkingDirectory(str(ROOT_DIR))
         process.setProcessChannelMode(QProcess.ProcessChannelMode.MergedChannels)
+        env = QProcessEnvironment.systemEnvironment()
+        # 管道输出默认走系统代码页；统一成 UTF-8 并关闭缓冲，阶段标记才能及时、正确地匹配
+        env.insert("PYTHONIOENCODING", "utf-8")
+        env.insert("PYTHONUNBUFFERED", "1")
+        process.setProcessEnvironment(env)
         process.readyReadStandardOutput.connect(self._read_process)
         process.finished.connect(self._on_process_finished)
         process.errorOccurred.connect(self._on_process_error)

@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>AUTO-MAS 档案终端演示</title>
 <link rel="stylesheet" href="../../frontend/public/fonts/misans/misans.css" />
+<script type="importmap">{ "imports": { "three": "/frontend/node_modules/three/build/three.module.js" } }</script>
 <style>
 :root {
   --bg: #e6e3df;
@@ -146,7 +147,7 @@ svg { display: block; }
 .s-clone.focus { --s: 1; }
 
 /* 方块下方的部门说明 */
-.s-caption { position: absolute; left: 80px; top: 432px; width: 320px; opacity: 0; transform: translateX(-16px); transition: opacity .3s, transform .4s cubic-bezier(.2,.8,.2,1); }
+.s-caption { position: absolute; left: 24px; top: 424px; width: 300px; z-index: 3; padding: 12px 16px 14px; background: rgba(240,238,234,.86); backdrop-filter: blur(4px); opacity: 0; transform: translateX(-16px); transition: opacity .3s, transform .4s cubic-bezier(.2,.8,.2,1); }
 #sect.reel-in .s-caption { opacity: 1; transform: none; transition-delay: .1s; }
 .s-caption .k { font-size: 12px; font-weight: 700; letter-spacing: .24em; color: var(--muted); }
 .s-caption .z { margin-top: 8px; font-size: 30px; font-weight: 700; letter-spacing: .16em; }
@@ -176,8 +177,32 @@ svg { display: block; }
 .s-caption .hint2 { margin-top: 10px; font-size: 11px; letter-spacing: .2em; color: var(--muted); } .r-hint { position: absolute; left: 80px; top: 560px; font-size: 11px; letter-spacing: .24em; color: var(--muted); opacity: 0; transition: opacity .3s .6s; }
 #sect.reel-in .r-hint { opacity: 1; }
 
+/* 左下 3D 录像带串 */
+#chain { position: absolute; left: 0; top: 0; width: 760px; height: 1024px; z-index: 1; }
+#r-current { display: none; position: absolute; z-index: 2; transform: translateY(-50%); white-space: nowrap; pointer-events: none; font-size: 26px; font-weight: 700; letter-spacing: .1em; transition: opacity .2s; }
+#r-current b { display: block; font-size: 13px; letter-spacing: .24em; color: var(--accent); }
+#r-current::before { content: ''; position: absolute; left: -46px; top: 50%; width: 36px; height: 2px; background: var(--accent); }
+/* 右侧 3D 玻璃卡片：略向内转，入场时从更大的转角转入，鼠标移动有轻微视差 */
+#sect { perspective: 2000px; perspective-origin: 35% 45%; }
+#s-card { position: absolute; left: 700px; right: 60px; top: 84px; bottom: 20px; transform-origin: 0% 50%;
+  transform: rotateY(calc(-34deg + var(--ty, 0deg))) translateX(60px); opacity: 0;
+  transition: transform .8s cubic-bezier(.2,.8,.2,1), opacity .4s ease;
+  background: linear-gradient(135deg, rgba(255,255,255,.62), rgba(246,244,241,.38) 60%, rgba(255,255,255,.5));
+  border: 1px solid rgba(20,20,18,.14); box-shadow: 0 40px 80px -50px rgba(20,20,18,.45), inset 0 0 0 1px rgba(255,255,255,.55);
+  backdrop-filter: blur(6px); }
+#s-card.in { transform: rotateY(calc(-7deg + var(--ty, 0deg))) rotateX(var(--tx, 1.5deg)); opacity: 1; }
+#s-card .card-top { position: absolute; left: 28px; right: 28px; top: 16px; display: flex; align-items: center; gap: 12px; font-size: 11px; font-weight: 700; letter-spacing: .2em; color: var(--muted); }
+#s-card .card-top .pin { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--hair); }
+#s-card .card-top .grow { flex: 1; height: 1px; background: var(--hair); }
+#s-card .card-top .box { border: 1px solid var(--muted); padding: 3px 8px; }
+#s-card .card-top .box.solid { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+#s-card .cross-mark { position: absolute; right: 36px; bottom: 30px; width: 22px; height: 22px; }
+#s-card .cross-mark::before, #s-card .cross-mark::after { content: ''; position: absolute; background: var(--muted); }
+#s-card .cross-mark::before { left: 10px; top: 0; width: 2px; height: 22px; }
+#s-card .cross-mark::after { top: 10px; left: 0; width: 22px; height: 2px; }
+
 /* 右侧档案面板 */
-#s-panel { position: absolute; left: 720px; right: 72px; top: 92px; bottom: 28px; display: flex; flex-direction: column; }
+#s-panel { position: absolute; left: 40px; right: 40px; top: 58px; bottom: 26px; display: flex; flex-direction: column; }
 #s-panel .sp-head, #s-panel .blk, #s-panel .sp-actions { opacity: 0; transform: translateY(14px); transition: opacity .3s ease, transform .45s cubic-bezier(.2,.8,.2,1); }
 #s-panel.show .sp-head, #s-panel.show .blk, #s-panel.show .sp-actions { opacity: 1; transform: none; }
 .sp-meta { display: flex; gap: 18px; font-size: 12px; font-weight: 700; letter-spacing: .24em; color: var(--muted); }
@@ -233,7 +258,7 @@ svg { display: block; }
 #sect.reel-in #s-back { opacity: 1; }
 #s-back:hover { background: var(--ink); color: #fff; }
 /* 切换条目：PV 式黑条横扫 */
-#s-wipe { position: absolute; left: 720px; right: 72px; top: 150px; height: 60px; background: var(--ink); transform: scaleX(0); transform-origin: left; pointer-events: none; z-index: 2; }
+#s-wipe { position: absolute; left: 40px; right: 40px; top: 112px; height: 60px; background: var(--ink); transform: scaleX(0); transform-origin: left; pointer-events: none; z-index: 2; }
 #s-wipe.go { animation: wipe .42s cubic-bezier(.7,0,.2,1); }
 @keyframes wipe { 0% { transform: scaleX(0); transform-origin: left; } 49% { transform: scaleX(1); transform-origin: left; } 51% { transform: scaleX(1); transform-origin: right; } 100% { transform: scaleX(0); transform-origin: right; } }
 
@@ -307,27 +332,15 @@ svg { display: block; }
   </section>
 
   <section id="sect" aria-label="二级界面">
-    <svg id="reel" viewBox="0 0 1000 1000" aria-hidden="true">
-      <circle class="ring" cx="500" cy="500" r="440" stroke-width="1.5" />
-      <circle class="ring" cx="500" cy="500" r="372" stroke-width="2" />
-      <g id="reel-ticks" class="ticks"></g>
-      <g class="spool"><g id="reel-spool">
-        <circle cx="500" cy="500" r="330" fill="var(--paper)" stroke="var(--ink)" stroke-width="2" />
-        <circle cx="500" cy="500" r="312" fill="none" stroke="var(--hair)" stroke-width="1" stroke-dasharray="3 7" />
-        <path d="M791.5 551.4A296 296 0 0 1 448.6 791.5L475.7 637.9A140 140 0 0 0 637.9 524.3Z" fill="#262725"/><path d="M309.7 726.7A296 296 0 0 1 273.3 309.7L392.8 410.0A140 140 0 0 0 410.0 607.2Z" fill="#262725"/><path d="M398.8 221.9A296 296 0 0 1 778.1 398.8L631.6 452.1A140 140 0 0 0 452.1 368.4Z" fill="#262725"/>
-        <g clip-path="url(#tape-clip)"><circle cx="500" cy="500" r="170" fill="none" stroke="#3b3c39" stroke-width="1"/><circle cx="500" cy="500" r="200" fill="none" stroke="#3b3c39" stroke-width="1"/><circle cx="500" cy="500" r="230" fill="none" stroke="#3b3c39" stroke-width="1"/><circle cx="500" cy="500" r="260" fill="none" stroke="#3b3c39" stroke-width="1"/><circle cx="500" cy="500" r="285" fill="none" stroke="#3b3c39" stroke-width="1"/></g>
-        <circle cx="500" cy="500" r="120" fill="var(--paper)" stroke="var(--ink)" stroke-width="2" />
-        <rect x="493" y="382" width="14" height="22" fill="var(--ink)" transform="rotate(0 500 500)"/><rect x="493" y="382" width="14" height="22" fill="var(--ink)" transform="rotate(60 500 500)"/><rect x="493" y="382" width="14" height="22" fill="var(--ink)" transform="rotate(120 500 500)"/><rect x="493" y="382" width="14" height="22" fill="var(--ink)" transform="rotate(180 500 500)"/><rect x="493" y="382" width="14" height="22" fill="var(--ink)" transform="rotate(240 500 500)"/><rect x="493" y="382" width="14" height="22" fill="var(--ink)" transform="rotate(300 500 500)"/>
-        <circle cx="500" cy="500" r="44" fill="none" stroke="var(--accent)" stroke-width="6" />
-        <text x="500" y="590" text-anchor="middle" font-size="14" font-weight="700" letter-spacing="4" fill="var(--muted)">AUTO-MAS // REEL</text>
-      </g></g>
-      <defs><clipPath id="tape-clip"><path d="M791.5 551.4A296 296 0 0 1 448.6 791.5L475.7 637.9A140 140 0 0 0 637.9 524.3Z"/><path d="M309.7 726.7A296 296 0 0 1 273.3 309.7L392.8 410.0A140 140 0 0 0 410.0 607.2Z"/><path d="M398.8 221.9A296 296 0 0 1 778.1 398.8L631.6 452.1A140 140 0 0 0 452.1 368.4Z"/></clipPath></defs>
-    </svg>
-    <div id="r-pointer" class="r-pointer"></div>
-    <div id="reel-labels"></div>
+    <canvas id="chain" width="760" height="1024" aria-hidden="true"></canvas>
+    <div id="r-current" aria-live="polite"></div>
     <div class="s-caption"><div class="k" id="s-cap-k"></div><div class="z" id="s-cap-z"></div><div class="c" id="s-cap-c"></div><div class="bar"></div><div class="hint2">滚轮 / ↑↓ 切换条目 · ESC 返回</div></div>
-    <div id="s-wipe"></div>
-    <div id="s-panel"></div>
+    <div id="s-card">
+      <div class="card-top"><span class="pin"></span><span>SECTION PROFILE</span><span class="grow"></span><span class="box">THE ARCHIVE CONTENTS</span><span class="box solid">AUTO-MAS</span></div>
+      <div id="s-wipe"></div>
+      <div id="s-panel"></div>
+      <i class="cross-mark"></i>
+    </div>
     <button id="s-back" type="button">← RETURN TO INDEX</button>
   </section>
 
@@ -622,54 +635,26 @@ function renderBlock(b) {
 
 const sect = document.getElementById('sect')
 const panel = document.getElementById('s-panel')
-const reelEl = document.getElementById('reel')
-const reelSpool = document.getElementById('reel-spool')
-const labelsEl = document.getElementById('reel-labels')
-const pointer = document.getElementById('r-pointer')
 const wipe = document.getElementById('s-wipe')
-const REEL = { cx: 170, cy: 980, r: 420, step: 13, focus: -42 }
 const state = { open: -1, items: [], pos: 0, target: 0, shown: -1, clone: null, raf: 0, timers: [] }
 const later = (ms, fn) => state.timers.push(setTimeout(fn, ms))
 
 // 刻度环一次画好；轮盘中心在左下 (170, 980)
-;(function buildTicks() {
-  const g = document.getElementById('reel-ticks')
-  let html = ''
-  for (let a = 0; a < 360; a += 3) {
-    const major = a % 15 === 0
-    const r1 = major ? 352 : 358, r2 = 366
-    const t = (a * Math.PI) / 180
-    html += `<line class="${major ? 'major' : ''}" x1="${500 + r1 * Math.cos(t)}" y1="${500 + r1 * Math.sin(t)}" x2="${500 + r2 * Math.cos(t)}" y2="${500 + r2 * Math.sin(t)}"/>`
-  }
-  g.innerHTML = html
-  const p = (REEL.focus * Math.PI) / 180
-  Object.assign(pointer.style, { left: REEL.cx + 372 * Math.cos(p) + 'px', top: REEL.cy + 372 * Math.sin(p) + 'px', width: '40px', transform: `rotate(${REEL.focus}deg)` })
-})()
-
-function layoutLabels() {
-  const nodes = labelsEl.children
-  for (let i = 0; i < nodes.length; i++) {
-    const a = REEL.focus + (i - state.pos) * REEL.step
-    const t = (a * Math.PI) / 180
-    const el = nodes[i]
-    const dist = Math.abs(i - state.pos)
-    el.style.left = REEL.cx + REEL.r * Math.cos(t) + 'px'
-    el.style.top = REEL.cy + REEL.r * Math.sin(t) + 'px'
-    el.style.opacity = a < -112 || a > 18 ? 0 : Math.max(0, 1 - dist * 0.22)
-    el.classList.toggle('on', i === state.target)
-  }
-  // 卷盘随选择转动，像磁带走带
-  reelSpool.setAttribute('transform', `rotate(${-state.pos * 38} 500 500)`)
+const currentEl = document.getElementById('r-current')
+const sCard = document.getElementById('s-card')
+function showCurrent() {
+  const d = DEPTS[state.open]
+  const item = state.items[state.target]
+  if (d && item) currentEl.innerHTML = `<b>${d.n}-${String(state.target + 1).padStart(2, '0')} // ${item.en}</b>${item.name}`
 }
-
-function tick() {
-  state.pos += (state.target - state.pos) * 0.16
-  if (Math.abs(state.target - state.pos) < 0.001) state.pos = state.target
-  layoutLabels()
-  if (state.open >= 0 && state.pos !== state.target) state.raf = requestAnimationFrame(tick)
-  else state.raf = 0
-}
-const kick = () => { if (!state.raf) state.raf = requestAnimationFrame(tick) }
+const kick = () => { window.chain?.setTarget(state.target); showCurrent() }
+// 卡片随鼠标轻微倾斜
+sect.addEventListener('mousemove', e => {
+  const r = sect.getBoundingClientRect()
+  const nx = (e.clientX - r.left) / r.width - 0.5, ny = (e.clientY - r.top) / r.height - 0.5
+  sCard.style.setProperty('--ty', (nx * 3).toFixed(2) + 'deg')
+  sCard.style.setProperty('--tx', (1.5 - ny * 2.5).toFixed(2) + 'deg')
+})
 
 function renderPanel(withWipe) {
   const d = DEPTS[state.open]
@@ -711,7 +696,7 @@ function openSection(i) {
   if (state.open >= 0 || booting) return
   const d = DEPTS[i]
   const conf = SECTIONS[d.n]
-  state.open = i; state.items = conf.items; state.target = 0; state.pos = -3; state.shown = -1
+  state.open = i; state.items = conf.items; state.target = 0; state.shown = -1
   focusTile(i)
   hub.classList.add('sectioned')
   // ① 方块复制一份，从原位飞到左侧
@@ -731,9 +716,8 @@ function openSection(i) {
   document.getElementById('s-cap-z').textContent = d.zh
   document.getElementById('s-cap-c').textContent = `${conf.caption} 共 ${conf.items.length} 项。`
   // ② 轮盘绘出、条目从下方转入
-  labelsEl.innerHTML = conf.items.map((it, k) => `<button type="button" class="r-label" data-k="${k}"><b>${d.n}-${String(k + 1).padStart(2, '0')}</b>${it.name}</button>`).join('')
-  layoutLabels()
-  later(420, () => { sect.classList.add('on', 'reel-in'); kick() })
+  later(380, () => { sect.classList.add('on', 'reel-in'); window.chain?.open(conf.items, d); showCurrent() })
+  later(560, () => sCard.classList.add('in'))
   // ③ 右侧档案
   later(760, () => renderPanel(false))
   later(800, () => document.getElementById('s-back').focus({ preventScroll: true }))
@@ -744,23 +728,20 @@ function closeSection() {
   const i = state.open
   state.timers.forEach(clearTimeout); state.timers = []
   panel.classList.remove('show')
+  sCard.classList.remove('in')
   sect.classList.remove('reel-in')
-  state.target = -3; kick()
+  window.chain?.close()
   setTimeout(() => { if (state.clone) state.clone.style.transform = 'none' }, 220)
   setTimeout(() => {
     state.clone?.remove(); state.clone = null
     hub.classList.remove('sectioned')
     sect.classList.remove('on')
-    panel.innerHTML = ''; labelsEl.innerHTML = ''
+    panel.innerHTML = ''; currentEl.innerHTML = ''
     state.open = -1
     tiles[i].el.focus({ preventScroll: true })
   }, 950)
 }
 
-labelsEl.addEventListener('click', e => {
-  const b = e.target.closest('.r-label')
-  if (b) select(+b.dataset.k)
-})
 sect.addEventListener('wheel', e => {
   if (state.open < 0) return
   e.preventDefault()
@@ -850,6 +831,237 @@ skip.addEventListener('click', finishBoot)
 boot.addEventListener('click', finishBoot)
 document.getElementById('replay').addEventListener('click', () => { closeSection(); runBoot() })
 runBoot()
+</script>
+<script type="module">
+// 左下角 3D 录像带串：条目即卡带，沿斜向曲线排布；选中的卡带抽出并转向镜头。
+// 只在动画进行时渲染（静止即停帧），时间步长随 requestAnimationFrame 与刷新率同步。
+import * as THREE from 'three'
+import { RoundedBoxGeometry } from '/frontend/node_modules/three/examples/jsm/geometries/RoundedBoxGeometry.js'
+
+const W = 760
+const H = 1024
+const PAD = 6 // 条目前后补的空白卡带
+const canvas = document.getElementById('chain')
+const current = document.getElementById('r-current')
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, powerPreference: 'low-power' })
+renderer.setClearColor(0x000000, 0)
+renderer.outputColorSpace = THREE.SRGBColorSpace
+
+const scene = new THREE.Scene()
+const camera = new THREE.PerspectiveCamera(26, W / H, 0.1, 100)
+camera.position.set(3.6, 0.4, 17)
+camera.lookAt(2.4, -1.9, 0)
+scene.add(new THREE.AmbientLight(0xffffff, 1.9))
+const key = new THREE.DirectionalLight(0xffffff, 1.4)
+key.position.set(-5, 7, 9)
+scene.add(key)
+
+const BODY = new RoundedBoxGeometry(2.6, 1.7, 0.26, 3, 0.07)
+const FACE = new THREE.PlaneGeometry(2.46, 1.56)
+const EDGE = new THREE.EdgesGeometry(new THREE.BoxGeometry(2.6, 1.7, 0.26))
+
+function faceTexture(index, name) {
+  const c = document.createElement('canvas')
+  c.width = 512
+  c.height = 324
+  const g = c.getContext('2d')
+  g.clearRect(0, 0, 512, 324)
+  // 磨砂内窗与刻线
+  g.fillStyle = 'rgba(255,255,255,0.35)'
+  g.fillRect(14, 14, 484, 296)
+  g.strokeStyle = 'rgba(40,40,36,0.28)'
+  g.lineWidth = 2
+  g.strokeRect(14, 14, 484, 296)
+  g.fillStyle = 'rgba(40,40,36,0.5)'
+  for (const [x, y] of [[30, 30], [482, 30], [30, 294], [482, 294]]) {
+    g.beginPath(); g.arc(x, y, 5, 0, Math.PI * 2); g.fill()
+  }
+  // AUTO-MAS 标志（细圆环 + 琥珀核心 + 四向刻度 + 斜线）
+  const cx = 150, cy = 150, r = 64
+  g.strokeStyle = 'rgba(255,255,255,0.95)'
+  g.lineWidth = 12
+  g.beginPath(); g.arc(cx, cy, r, 0, Math.PI * 2); g.stroke()
+  g.lineWidth = 9
+  g.beginPath()
+  g.moveTo(cx, cy - r - 26); g.lineTo(cx, cy - r + 6)
+  g.moveTo(cx, cy + r - 6); g.lineTo(cx, cy + r + 26)
+  g.moveTo(cx - r - 26, cy); g.lineTo(cx - r + 6, cy)
+  g.moveTo(cx + r - 6, cy); g.lineTo(cx + r + 26, cy)
+  g.moveTo(cx - 46, cy + 46); g.lineTo(cx + 46, cy - 46)
+  g.stroke()
+  g.fillStyle = '#e8701f'
+  g.beginPath(); g.arc(cx, cy, 20, 0, Math.PI * 2); g.fill()
+  if (name) {
+    g.fillStyle = 'rgba(20,20,18,0.85)'
+    g.font = '700 30px "AUTO-MAS MiSans", "Microsoft YaHei", sans-serif'
+    g.fillText(index, 268, 128)
+    g.font = '700 38px "AUTO-MAS MiSans", "Microsoft YaHei", sans-serif'
+    const text = name.length > 7 ? name.slice(0, 7) + '…' : name
+    g.fillText(text, 268, 186)
+    g.fillStyle = 'rgba(20,20,18,0.45)'
+    g.fillRect(268, 206, 190, 3)
+  } else {
+    g.fillStyle = 'rgba(20,20,18,0.25)'
+    g.fillRect(268, 140, 170, 12)
+    g.fillRect(268, 170, 120, 8)
+  }
+  const tex = new THREE.CanvasTexture(c)
+  tex.colorSpace = THREE.SRGBColorSpace
+  tex.anisotropy = 4
+  return tex
+}
+
+const group = new THREE.Group()
+scene.add(group)
+let cassettes = []
+let cur = -8
+let target = 0
+let intro = 0
+let introTarget = 0
+let running = false
+let hovered = -1
+let onDone = null
+
+// 曲线：s 为相对选中位置的槽位，越大越靠右下、越靠近镜头
+function place(s) {
+  const f = Math.max(0, 1 - Math.abs(s))
+  const e = f * f * (3 - 2 * f)
+  return {
+    x: 2.0 + 0.5 * s + 1.15 * e,
+    y: -1.6 - 0.74 * s,
+    z: 0.32 * s + 0.9 * e,
+    rx: -0.42 + 0.22 * e,
+    ry: 0.82 - 0.55 * e,
+    rz: 0.16 - 0.1 * e,
+    scale: 1 + 0.12 * e,
+    focus: e,
+  }
+}
+
+function build(items, deptN) {
+  for (const c of cassettes) {
+    c.face.material.map.dispose()
+    c.face.material.dispose()
+    c.body.material.dispose()
+    c.edge.material.dispose()
+    group.remove(c.root)
+  }
+  cassettes = []
+  for (let k = -PAD; k < items.length + PAD; k++) {
+    const item = items[k]
+    const root = new THREE.Group()
+    const body = new THREE.Mesh(
+      BODY,
+      new THREE.MeshStandardMaterial({ color: 0xf3f1ec, roughness: 0.38, metalness: 0, transparent: true, opacity: 0.55, depthWrite: false })
+    )
+    const face = new THREE.Mesh(
+      FACE,
+      new THREE.MeshBasicMaterial({ map: faceTexture(item ? `${deptN}-${String(k + 1).padStart(2, '0')}` : '', item?.name || ''), transparent: true, depthWrite: false })
+    )
+    face.position.z = 0.135
+    const edge = new THREE.LineSegments(EDGE, new THREE.LineBasicMaterial({ color: 0x9e9a90, transparent: true, opacity: 0.55 }))
+    root.add(body, face, edge)
+    body.userData.k = item ? k : -1
+    group.add(root)
+    cassettes.push({ k, root, body, face, edge })
+  }
+}
+
+function layout() {
+  const shift = -9 * (1 - intro) // 入场：整串沿曲线从左上滑入
+  for (const c of cassettes) {
+    const s = c.k - cur - shift
+    const p = place(s)
+    c.root.position.set(p.x, p.y, p.z)
+    c.root.rotation.set(p.rx, p.ry, p.rz)
+    c.root.scale.setScalar(p.scale)
+    const fade = Math.max(0, Math.min(1, 1.6 - Math.abs(s) / 6)) * Math.min(1, intro * 1.4)
+    const real = c.body.userData.k >= 0
+    c.body.material.opacity = (0.32 + 0.4 * p.focus + (c.k === hovered ? 0.12 : 0)) * fade
+    c.face.material.opacity = (real ? 0.75 + 0.25 * p.focus : 0.5) * fade
+    c.edge.material.opacity = (0.35 + 0.5 * p.focus) * fade
+    c.root.renderOrder = Math.round(100 + s * 4)
+    c.root.visible = fade > 0.01
+  }
+  // 选中条目的标题跟随抽出卡带的屏幕位置
+  const p = place(0)
+  const v = new THREE.Vector3(p.x + 1.45, p.y + 0.2, p.z).project(camera)
+  current.style.left = ((v.x + 1) / 2) * W + 'px'
+  current.style.top = ((1 - v.y) / 2) * H + 'px'
+  current.style.opacity = Math.max(0, intro * 2 - 1)
+}
+
+function resize() {
+  const stageScale = Math.min(innerWidth / 1920, innerHeight / 1080)
+  renderer.setPixelRatio(Math.min(2, devicePixelRatio * stageScale))
+  renderer.setSize(W, H, false)
+  if (!running) { layout(); renderer.render(scene, camera) }
+}
+addEventListener('resize', resize)
+
+let last = 0
+function frame(t) {
+  const dt = last ? Math.min(0.05, (t - last) / 1000) : 1 / 60
+  last = t
+  const k = 1 - Math.pow(0.0008, dt) // 与帧率无关的临界阻尼
+  cur += (target - cur) * k
+  intro += (introTarget - intro) * (1 - Math.pow(0.004, dt))
+  if (Math.abs(target - cur) < 0.0005) cur = target
+  if (Math.abs(introTarget - intro) < 0.002) intro = introTarget
+  layout()
+  renderer.render(scene, camera)
+  if (cur !== target || intro !== introTarget) requestAnimationFrame(frame)
+  else {
+    running = false
+    last = 0
+    if (onDone) { const fn = onDone; onDone = null; fn() }
+  }
+}
+function wake() {
+  if (!running) { running = true; requestAnimationFrame(frame) }
+}
+
+const ray = new THREE.Raycaster()
+function pick(e) {
+  const r = canvas.getBoundingClientRect()
+  const ndc = new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1)
+  ray.setFromCamera(ndc, camera)
+  const hit = ray.intersectObjects(cassettes.map(c => c.body))[0]
+  return hit ? hit.object.userData.k : -1
+}
+canvas.addEventListener('pointermove', e => {
+  const k = pick(e)
+  canvas.style.cursor = k >= 0 ? 'pointer' : 'default'
+  if (k !== hovered) { hovered = k; wake(); if (!running) { layout(); renderer.render(scene, camera) } }
+})
+canvas.addEventListener('click', e => {
+  const k = pick(e)
+  if (k >= 0) window.select(k)
+})
+
+window.chain = {
+  open(items, d) {
+    build(items, d.n)
+    cur = 0
+    target = 0
+    intro = 0
+    introTarget = 1
+    canvas.style.visibility = 'visible'
+    resize()
+    wake()
+  },
+  setTarget(i) {
+    target = i
+    wake()
+  },
+  close() {
+    introTarget = 0
+    onDone = () => { canvas.style.visibility = 'hidden' }
+    wake()
+  },
+}
+canvas.style.visibility = 'hidden'
+resize()
 </script>
 </body>
 </html>
