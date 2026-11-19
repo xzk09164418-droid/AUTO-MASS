@@ -112,8 +112,8 @@ const visible = computed(
     window.__AUTO_MAS_BROWSER_HOST__ &&
     ((coreReady.value && (!complete.value || !isInitialized.value)) || !!error.value)
 )
-// 主界面尚未进入时出错，背后只有空白页：改为居中故障面板并遮住空白；已进入时仍停靠右上角不打断操作
-const blocking = computed(() => !!error.value && !isInitialized.value)
+// 主界面尚未进入时背后只有空白页：无论启动中还是出错都居中并遮住空白；已进入后停靠右上角不打断操作
+const blocking = computed(() => !isInitialized.value)
 
 const PROGRESS_TICKS = Array.from({ length: 24 }, (_, index) => index + 1)
 const progressPercent = computed(() => Math.max(0, Math.min(100, Math.round(progress.value))))
@@ -209,10 +209,10 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-/* 默认：停靠在顶栏下方右侧，不遮挡导航 */
+/* 主界面已进入：停靠在顶栏下方右侧，不遮挡导航 */
 .rhine-boot-layer {
   position: fixed;
-  top: 76px;
+  top: 92px;
   right: 24px;
   z-index: 9998;
   width: min(500px, calc(100vw - 32px));

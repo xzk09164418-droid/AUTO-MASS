@@ -99,6 +99,7 @@
           @click="navigate(item.key)"
         >
           <i aria-hidden="true"></i>
+          <span class="rhine-ledger-tick-index" aria-hidden="true">{{ item.index }}</span>
         </button>
       </div>
 
@@ -380,7 +381,7 @@ const navigate = (target: string) => {
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: stretch;
   gap: 28px;
-  height: 64px;
+  height: 80px;
   padding: 0 24px 0 28px;
   background: var(--app-rhine-chrome-bg);
   border-bottom: 1px solid var(--app-rhine-rule);
@@ -400,8 +401,8 @@ const navigate = (target: string) => {
 }
 
 .rhine-mark {
-  width: 34px;
-  height: 34px;
+  width: 42px;
+  height: 42px;
   flex-shrink: 0;
   display: block;
 }
@@ -417,8 +418,8 @@ const navigate = (target: string) => {
 }
 
 .rhine-brand-title {
-  font-size: 20px;
-  line-height: 22px;
+  font-size: 26px;
+  line-height: 28px;
   font-weight: 700;
   letter-spacing: 0.06em;
 }
@@ -428,8 +429,8 @@ const navigate = (target: string) => {
   align-items: baseline;
   justify-content: space-between;
   gap: 8px;
-  font-size: 11px;
-  line-height: 16px;
+  font-size: 13px;
+  line-height: 18px;
   letter-spacing: 0.3em;
   color: var(--ant-color-text-secondary);
 }
@@ -465,7 +466,7 @@ const navigate = (target: string) => {
   background: transparent;
   color: var(--ant-color-text-secondary);
   font: inherit;
-  font-size: 15px;
+  font-size: 16px;
   letter-spacing: 0.06em;
   cursor: pointer;
   transition: color 0.18s ease;
@@ -509,7 +510,7 @@ const navigate = (target: string) => {
   color: var(--app-rhine-muted-index);
   font-variant-numeric: tabular-nums;
   align-self: flex-start;
-  margin-top: 19px;
+  margin-top: 26px;
 }
 
 .rhine-dept-item.is-active .rhine-dept-index {
@@ -537,7 +538,7 @@ const navigate = (target: string) => {
   gap: 2px;
   padding-left: 16px;
   border-left: 1px solid var(--app-rhine-hairline);
-  margin: 14px 0;
+  margin: 20px 0;
 }
 
 .rhine-utility-item {
@@ -600,7 +601,7 @@ const navigate = (target: string) => {
 /* ── 底部刻度栏 ───────────────────────────────────────────────────────── */
 .rhine-ledger {
   flex-shrink: 0;
-  height: 32px;
+  height: 40px;
   display: grid;
   grid-template-columns: auto auto minmax(0, 1fr) auto;
   align-items: center;
@@ -651,12 +652,14 @@ const navigate = (target: string) => {
 }
 
 .rhine-ledger-tick {
-  width: 12px;
+  width: 24px;
   height: 100%;
   display: flex;
-  align-items: flex-end;
-  justify-content: center;
-  padding: 0 0 8px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+  padding: 0 0 4px;
   border: 0;
   background: transparent;
   cursor: pointer;
@@ -665,21 +668,38 @@ const navigate = (target: string) => {
 .rhine-ledger-tick i {
   display: block;
   width: 1px;
-  height: 6px;
-  background: var(--app-rhine-hairline);
+  height: 10px;
+  background: var(--ant-color-text-tertiary);
   transition:
     height 0.4s cubic-bezier(0.2, 0.9, 0.3, 1),
     background-color 0.2s ease;
 }
 
+.rhine-ledger-tick-index {
+  font-size: 9px;
+  line-height: 10px;
+  letter-spacing: 0.04em;
+  color: var(--app-rhine-muted-index);
+  transition: color 0.2s ease;
+}
+
+.rhine-ledger-tick:hover .rhine-ledger-tick-index {
+  color: var(--ant-color-text);
+}
+
+.rhine-ledger-tick.is-active .rhine-ledger-tick-index {
+  color: var(--app-rhine-accent);
+  font-weight: 600;
+}
+
 .rhine-ledger-tick:hover i {
-  height: 10px;
+  height: 14px;
   background: var(--ant-color-text-secondary);
 }
 
 .rhine-ledger-tick.is-active i {
   width: 2px;
-  height: 16px;
+  height: 20px;
   background: var(--app-rhine-accent);
 }
 

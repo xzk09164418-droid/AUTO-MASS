@@ -21,12 +21,13 @@ import '@/styles/appearanceCursor.css'
 import '@/styles/appearanceSurfaces.css'
 import '@/styles/appOverlays.css'
 
-const TITLE_BAR_HEIGHT = 32
+// 与 AppLayout 顶部档案抬头 .rhine-masthead 的高度保持一致
+const SHELL_MASTHEAD_HEIGHT = 80
 const MESSAGE_TOP_GAP = 8
 const rendererStartedAt = performance.now()
 
-// 静态 message 默认从窗口顶部 8px 开始，会覆盖无边框窗口的标题栏。
-message.config({ top: `${TITLE_BAR_HEIGHT + MESSAGE_TOP_GAP}px` })
+// 静态 message 默认从窗口顶部 8px 开始，会盖住顶部导航；改为从抬头下方弹出。
+message.config({ top: `${SHELL_MASTHEAD_HEIGHT + MESSAGE_TOP_GAP}px` })
 
 // 导入日志系统
 const logger = window.hostAPI.getLogger('前端主入口')
