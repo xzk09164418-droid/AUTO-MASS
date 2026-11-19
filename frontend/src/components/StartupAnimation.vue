@@ -11,6 +11,7 @@ const props = defineProps<{
   label?: string
 }>()
 const { isDark } = useTheme()
+const initialTheme = isDark.value ? 'dark' : 'light'
 const marker = 'auto-mas.startup-animation.version'
 const version = import.meta.env.VITE_APP_VERSION || 'development'
 let previous: string | null = null
@@ -106,8 +107,8 @@ onBeforeUnmount(() => {
     v-if="visible"
     ref="frame"
     class="startup-animation"
-    :class="{ 'startup-animation-pending': !frameReady }"
-    :src="`/startup/${mode}.html`"
+    :class="{ 'startup-animation-pending': !frameReady, 'is-dark': isDark }"
+    :src="`/startup/${mode}.html?theme=${initialTheme}`"
     title="AUTO-MAS"
     @load="frameLoaded"
   />
@@ -124,9 +125,10 @@ onBeforeUnmount(() => {
   background: transparent;
 }
 .startup-animation-pending {
-  background: #e8e5e1;
+  background: #e4e1db;
 }
+.startup-animation-pending.is-dark,
 :global(html.dark) .startup-animation-pending {
-  background: #111619;
+  background: #0f1417;
 }
 </style>

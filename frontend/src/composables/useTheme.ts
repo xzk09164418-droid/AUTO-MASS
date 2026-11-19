@@ -112,6 +112,26 @@ const RHINE_SURFACE_TOKENS = {
   },
 } as const
 
+const THEME_RESOLVED_STORAGE_KEY = 'auto-mas.theme.resolved'
+let themeHydrated = false
+
+const readCachedResolvedTheme = (): 'dark' | 'light' | null => {
+  try {
+    const value = localStorage.getItem(THEME_RESOLVED_STORAGE_KEY)
+    return value === 'dark' || value === 'light' ? value : null
+  } catch {
+    return null
+  }
+}
+
+const writeCachedResolvedTheme = (dark: boolean) => {
+  try {
+    localStorage.setItem(THEME_RESOLVED_STORAGE_KEY, dark ? 'dark' : 'light')
+  } catch {
+    // 浏览器禁用或受限存储时跳过，仅影响下次首屏预填充
+  }
+}
+
 // 检测系统主题
 const getSystemTheme = () => {
   return window.matchMedia('(prefers-color-scheme: dark)').matches
@@ -123,6 +143,10 @@ const updateTheme = () => {
 
   if (activeAppearance.value) {
     shouldBeDark = activeAppearance.value.mode === 'dark'
+  } else if (!themeHydrated && themeMode.value === 'system') {
+    // 配置尚未完成异步加载时沿用上次已解析的明暗结果，防止深色模式下首屏先闪成浅色再跳回深色
+    const cached = readCachedResolvedTheme()
+    shouldBeDark = cached !== null ? cached === 'dark' : getSystemTheme()
   } else if (themeMode.value === 'system') {
     shouldBeDark = getSystemTheme()
   } else {
@@ -136,6 +160,10 @@ const updateTheme = () => {
     document.documentElement.classList.add('dark')
   } else {
     document.documentElement.classList.remove('dark')
+  }
+
+  if (themeHydrated) {
+    writeCachedResolvedTheme(shouldBeDark)
   }
 
   // 更新CSS变量
@@ -212,6 +240,8 @@ const updateCSSVariables = () => {
   // ===== 莱茵生命（Rhine Lab）语义变量 =====
   // 独立于 AntD token bridge 注入，保证首帧即呈现暖灰档案纸（浅色）或深轨道控制室（深色）质感。
   const dark = isDark.value
+  root.style.setProperty('--app-rhine-canvas-bg', dark ? '#0f1417' : '#e4e1db')
+  root.style.setProperty('--app-rhine-canvas-text', dark ? '#e2e5de' : '#111411')
   root.style.setProperty('--app-rhine-sider-bg', dark ? '#0d1215' : '#dfdcd4')
   root.style.setProperty('--app-rhine-sider-border', dark ? '#344248' : '#1c1f1b')
   root.style.setProperty('--app-rhine-rule', dark ? '#d4d8cf' : '#1c1f1b')
@@ -678,6 +708,7 @@ export function useTheme() {
         themeColor: 'blue',
         appearanceId: null,
       }
+      themeHydrated = true
       themeMode.value = defaults.themeMode
       themeColor.value = defaults.themeColor
       appearanceId.value = null
@@ -697,6 +728,7 @@ export function useTheme() {
     queueThemeChange(async () => {
       const revision = ++themeRevision
       const savedConfigRevision = configRevision
+      themeHydrated = true
       themeMode.value = mode
       activeAppearance.value = null
       appearanceId.value = null
@@ -804,6 +836,7 @@ export function useTheme() {
     queueThemeChange(async () => {
       const revision = ++themeRevision
       const savedConfigRevision = configRevision
+      themeHydrated = true
       if (!id) {
         activeAppearance.value = null
         appearanceId.value = null
@@ -907,6 +940,7 @@ export function useTheme() {
     themeConfigListenerInitialized = true
     window.hostAPI.onThemeConfigChanged?.(rawConfig => {
       if (rawConfig === null || typeof rawConfig !== 'object') return
+      themeHydrated = true
       themeRevision += 1
       configRevision += 1
       const config = rawConfig as Partial<FrontendConfig>
@@ -945,6 +979,7 @@ export function useTheme() {
     initAppearanceChangedListener()
     initThemeConfigListener()
     const config = preloadedConfig ?? (await getConfig())
+    themeHydrated = true
     if (
       config.themeMode === 'system' ||
       config.themeMode === 'light' ||
@@ -957,6 +992,10 @@ export function useTheme() {
     }
     appearanceId.value = typeof config.appearanceId === 'string' ? config.appearanceId : null
     commitPersistedThemeSnapshot()
+    if (!appearanceId.value) {
+      activeAppearance.value = null
+      updateTheme()
+    }
     await loadAppearances()
   }
 
