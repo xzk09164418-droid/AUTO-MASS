@@ -1,0 +1,2 @@
+# AUTO-MAS Qt 客户端依赖（安装到项目 .venv，与后端共用解释器）
+PySide6-Essentials==6.9.3

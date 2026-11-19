@@ -1,0 +1,9 @@
+singleton Theme 1.0 Theme.qml
+Mark 1.0 Mark.qml
+Ring 1.0 Ring.qml
+BootSequence 1.0 BootSequence.qml
+DepartmentHub 1.0 DepartmentHub.qml
+DeptTile 1.0 DeptTile.qml
+Ledger 1.0 Ledger.qml
+SectionHost 1.0 SectionHost.qml
+BackendPanel 1.0 BackendPanel.qml
