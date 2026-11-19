@@ -1,0 +1,494 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>AUTO-MAS 档案终端演示</title>
+<link rel="stylesheet" href="../../frontend/public/fonts/misans/misans.css" />
+<style>
+:root {
+  --bg: #e6e3df;
+  --ink: #0b0c0b;
+  --paper: #f6f4f1;
+  --muted: #77756d;
+  --hair: #aaa59a;
+  --grid: rgba(120, 116, 106, 0.16);
+  --accent: #e8701f;
+  --amber: #9b7247;
+  --font: 'AUTO-MAS MiSans', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--bg); overflow: hidden; font-family: var(--font); color: var(--ink); }
+/* 1920×1080 参考舞台，按窗口等比缩放 */
+#viewport { position: fixed; inset: 0; }
+#stage { position: absolute; left: 50%; top: 50%; width: 1920px; height: 1080px; transform-origin: center; overflow: hidden; background: var(--bg); }
+svg { display: block; }
+
+/* ─────────── 启动动画 ─────────── */
+#boot { position: absolute; inset: 0; z-index: 50; background: #fff; transition: transform .8s cubic-bezier(.5,0,.2,1), filter .8s ease, opacity .6s ease; }
+#boot.leave { transform: scale(.86); filter: blur(10px) hue-rotate(160deg) saturate(.6); opacity: 0; }
+#boot.flash { filter: invert(1); }
+#b-black { position: absolute; inset: 0; background: #000; display: grid; place-items: center; transition: opacity .25s; }
+#b-black svg { width: 120px; opacity: 0; animation: fade-in .9s .1s ease forwards; }
+#b-black.off { opacity: 0; pointer-events: none; }
+#b-type { position: absolute; left: 0; right: 0; top: 520px; text-align: center; font-size: 22px; font-weight: 700; letter-spacing: .32em; white-space: pre; }
+#b-type .caret { display: inline-block; width: 12px; height: 22px; margin-left: 4px; background: var(--ink); vertical-align: -3px; animation: blink .5s steps(1) infinite; }
+#b-ident { position: absolute; left: 0; right: 0; top: 470px; display: flex; flex-direction: column; align-items: center; gap: 22px; font-size: 22px; font-weight: 700; letter-spacing: .3em; }
+#b-ident .spin { display: inline-block; width: 18px; height: 18px; margin-right: 12px; border: 3px solid var(--ink); border-right-color: transparent; border-radius: 50%; vertical-align: -2px; animation: spin .6s linear infinite; }
+
+#b-logo { position: absolute; left: 860px; top: 440px; width: 200px; height: 200px; transition: transform .9s cubic-bezier(.2,.8,.1,1); }
+#b-logo.shift { transform: translateX(-250px); }
+#b-logo .draw { fill: none; stroke: var(--ink); stroke-width: 7; stroke-dasharray: 700; stroke-dashoffset: 700; }
+#b-logo.play .draw { animation: draw 1.3s cubic-bezier(.6,0,.2,1) forwards; }
+#b-logo .tick { stroke: var(--ink); stroke-width: 7; opacity: 0; }
+#b-logo.play .tick { animation: fade-in .2s 1.05s forwards; }
+#b-logo .core { fill: var(--accent); transform-origin: 100px 100px; transform: scale(0); }
+#b-logo.play .core { animation: pop .35s 1.2s cubic-bezier(.3,1.6,.5,1) forwards; }
+
+#b-brand { position: absolute; left: 870px; top: 470px; width: 300px; transition: left .9s cubic-bezier(.6,0,.2,1), top .9s cubic-bezier(.6,0,.2,1), transform .9s cubic-bezier(.6,0,.2,1); transform-origin: left top; }
+#b-brand.corner { left: 59px; top: 64px; transform: scale(.9); }
+.brand-line { opacity: 0; transform: translateX(120px); transition: transform .7s cubic-bezier(.1,.9,.2,1), opacity .2s; white-space: nowrap; }
+.brand-line.in { opacity: 1; transform: none; }
+.brand-1 { font-size: 46px; line-height: 50px; font-weight: 700; letter-spacing: 2.5px; }
+.brand-2 { font-size: 15px; line-height: 22px; font-weight: 600; letter-spacing: 1.6px; }
+.brand-3 { font-size: 35px; line-height: 40px; font-weight: 700; letter-spacing: 6px; }
+
+#b-auth { position: absolute; inset: 0; opacity: 0; }
+#b-auth.play { opacity: 1; }
+#b-auth .ring-outer { fill: none; stroke: var(--ink); stroke-width: 30; transform-origin: 960px 540px; transform: scale(3); }
+#b-auth.play .ring-outer { animation: converge 1.1s cubic-bezier(.1,.8,.2,1) forwards; }
+#b-auth .ring-white { fill: none; stroke: #fff; stroke-width: 8; stroke-dasharray: 1100 400; transform-origin: 960px 540px; transform: scale(2.4) rotate(0); }
+#b-auth.play .ring-white { animation: converge-rot 1.3s .1s cubic-bezier(.1,.8,.2,1) forwards; }
+#b-auth .arc-inner { fill: none; stroke: var(--ink); stroke-width: 5; stroke-dasharray: 340 900; transform-origin: 960px 540px; }
+#b-auth.play .arc-inner { animation: rot-rev 3.2s .4s cubic-bezier(.2,.7,.2,1) forwards; }
+#b-auth .node { fill: var(--accent); transform-origin: 960px 540px; }
+#b-auth.play .node { animation: rot 3.2s .5s cubic-bezier(.3,.6,.2,1) forwards; }
+#b-auth .jump { transform-origin: 960px 540px; }
+#b-auth.play .jump { animation: jumps .5s 1.4s steps(1) forwards; }
+#b-auth .center { fill: var(--ink); transform-origin: 960px 540px; }
+#b-auth.play .center { animation: center-flick .8s 2.2s steps(1) forwards; }
+#b-auth .orbit { transform-origin: 960px 540px; opacity: 0; }
+#b-auth.play .orbit { animation: orbit 2s 2.4s linear forwards; }
+#b-auth .side { fill: none; stroke: var(--ink); stroke-width: 6; stroke-dasharray: 0 400; }
+#b-auth.play .side-l { animation: side-l 1.8s 1.6s cubic-bezier(.2,.8,.2,1) forwards; transform-origin: 600px 540px; }
+#b-auth.play .side-r { animation: side-r 1.8s 1.6s cubic-bezier(.2,.8,.2,1) forwards; transform-origin: 1320px 540px; }
+#b-auth .granted { font-size: 18px; font-weight: 700; letter-spacing: .4em; fill: var(--ink); opacity: 0; }
+#b-auth.play .granted { animation: fade-in .1s 2.9s steps(1) forwards; }
+
+#b-welcome { position: absolute; left: 0; right: 0; top: 380px; display: none; flex-direction: column; align-items: center; gap: 14px; }
+#b-welcome.play { display: flex; }
+#b-welcome .w1 { font-size: 64px; font-weight: 700; letter-spacing: .14em; }
+#b-welcome .w2 { position: relative; font-size: 96px; line-height: 1.15; font-weight: 700; letter-spacing: .12em; padding: 0 40px; color: #fff; isolation: isolate; }
+#b-welcome .w2::before { content: ''; position: absolute; inset: 0; z-index: -1; background: var(--ink); transform: scaleX(0); transform-origin: left; animation: sweep .9s .15s cubic-bezier(.05,.9,.2,1) forwards; }
+#b-welcome .w3 { font-size: 42px; font-weight: 700; letter-spacing: .3em; opacity: 0; animation: flash3 .9s .7s steps(1) forwards; }
+
+#skip { position: absolute; right: 48px; bottom: 40px; z-index: 60; font: 600 14px var(--font); letter-spacing: .3em; color: var(--muted); background: none; border: 1px solid var(--hair); padding: 10px 18px; cursor: pointer; }
+#skip:hover { color: var(--ink); border-color: var(--ink); }
+
+/* ─────────── 部门索引（一级界面） ─────────── */
+#hub { position: absolute; inset: 0; background:
+  linear-gradient(var(--grid) 1px, transparent 1px) 0 0 / 96px 96px,
+  linear-gradient(90deg, var(--grid) 1px, transparent 1px) 0 0 / 96px 96px,
+  radial-gradient(ellipse at 50% 50%, #f1efec 0%, var(--bg) 70%); }
+.hub-diag { position: absolute; inset: 0; pointer-events: none; }
+.hub-diag line { stroke: #3a3a36; stroke-width: 1.4; stroke-dasharray: 900; stroke-dashoffset: 900; }
+#hub.in .hub-diag line { transition: stroke-dashoffset 1.2s cubic-bezier(.6,0,.2,1); stroke-dashoffset: 0; }
+.cross { position: absolute; width: 60px; height: 60px; pointer-events: none; opacity: .5; }
+.cross::before, .cross::after { content: ''; position: absolute; background: #fff; }
+.cross::before { left: 29px; top: 0; width: 2px; height: 60px; }
+.cross::after { top: 29px; left: 0; height: 2px; width: 60px; }
+
+.ghost-brand { position: absolute; left: 59px; top: 64px; filter: blur(2.5px); opacity: .35; pointer-events: none; }
+.ghost-ring { position: absolute; right: -150px; top: -260px; width: 560px; height: 560px; border: 70px solid rgba(255,255,255,.75); border-radius: 50%; filter: blur(1.5px); pointer-events: none; }
+.ghost-letters { position: absolute; right: 80px; top: 170px; font-size: 30px; font-weight: 700; letter-spacing: 1.6em; color: rgba(255,255,255,.85); pointer-events: none; }
+
+.tile { position: absolute; transform: translate(-50%, -50%) translate(calc(var(--px, 0) * 1px), calc(var(--py, 0) * 1px)) scale(var(--s, 1)); transition: transform .35s cubic-bezier(.2,.8,.2,1), opacity .5s, filter .3s, box-shadow .3s; cursor: pointer; border: none; padding: 0; font: inherit; color: inherit; background: none; opacity: 0; }
+#hub.in .tile { opacity: 1; }
+.tile:focus-visible { outline: 2px solid var(--accent); outline-offset: 8px; }
+.tile.card { background: var(--paper); box-shadow: 0 0 0 1px rgba(0,0,0,.04), 0 18px 40px -24px rgba(0,0,0,.25); }
+.tile.ink { background: var(--ink); color: #fff; }
+.tile.ink.textured { background: radial-gradient(circle at 30% 70%, #2a2c2b 0, transparent 45%), linear-gradient(160deg, #0b0c0b 0%, #1c1e1d 55%, #0b0c0b 100%); }
+.tile.bare { background: transparent; }
+.tile:hover, .tile.focus { --s: 1.05; z-index: 5; }
+#hub.has-focus .tile:not(.focus):not(.deco) { filter: saturate(.6) opacity(.75); }
+.tile.deco { cursor: default; pointer-events: none; }
+.tile-inner { position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+.code { position: relative; font-weight: 700; line-height: .86; letter-spacing: -.02em; }
+.code .mk { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: .5em; height: .5em; }
+.sub { margin-top: 6px; font-size: 11px; font-weight: 600; letter-spacing: .06em; white-space: nowrap; }
+.zh { margin-top: 8px; font-size: 14px; font-weight: 600; letter-spacing: .3em; opacity: .7; }
+.idx { position: absolute; left: 10px; top: 8px; font-size: 12px; font-weight: 600; letter-spacing: .1em; opacity: .55; }
+.accent-block { position: absolute; width: 38px; height: 38px; background: var(--accent); }
+.accent-block::after { content: ''; position: absolute; left: 12px; top: 12px; width: 14px; height: 26px; background: #fff; }
+
+#searching { position: absolute; z-index: 20; display: flex; align-items: center; gap: 0; transform: translate(-50%, -100%); transition: left .35s cubic-bezier(.2,.8,.2,1), top .35s cubic-bezier(.2,.8,.2,1), opacity .3s; pointer-events: none; opacity: 0; }
+#hub.in #searching { opacity: 1; }
+#searching i { width: 14px; height: 10px; background: var(--ink); }
+#searching span { border: 1.5px solid var(--ink); background: var(--paper); padding: 3px 14px; font-size: 13px; font-weight: 700; letter-spacing: .08em; white-space: nowrap; }
+
+.ledger { position: absolute; left: 0; right: 0; bottom: 0; height: 56px; display: flex; align-items: center; gap: 28px; padding: 0 48px; font-size: 12px; font-weight: 600; letter-spacing: .2em; color: var(--muted); }
+.ledger .sq { width: 26px; height: 26px; background: #8b8a85; }
+.ruler { display: flex; align-items: flex-end; gap: 22px; height: 26px; }
+.ruler button { position: relative; width: 22px; height: 26px; border: none; background: none; cursor: pointer; padding: 0; }
+.ruler button i { position: absolute; left: 10px; bottom: 0; width: 2px; height: 10px; background: var(--hair); transition: height .2s, background .2s; }
+.ruler button b { position: absolute; left: 0; right: 0; top: -6px; font-size: 9px; color: var(--muted); font-weight: 600; letter-spacing: 0; }
+.ruler button.on i { height: 22px; background: var(--accent); }
+.ledger .grow { flex: 1; }
+
+/* 二级界面占位：从方块展开 */
+#detail { position: absolute; z-index: 30; background: var(--ink); color: #fff; display: none; overflow: hidden; transition: left .55s cubic-bezier(.7,0,.2,1), top .55s cubic-bezier(.7,0,.2,1), width .55s cubic-bezier(.7,0,.2,1), height .55s cubic-bezier(.7,0,.2,1), background .4s; }
+#detail.open { background: var(--paper); color: var(--ink); }
+#detail .d-body { position: absolute; inset: 0; padding: 72px 96px; opacity: 0; transition: opacity .25s; }
+#detail.open .d-body { opacity: 1; transition-delay: .45s; }
+.d-head { display: flex; align-items: baseline; gap: 28px; border-bottom: 2px solid var(--ink); padding-bottom: 18px; }
+.d-head .n { font-size: 64px; font-weight: 300; color: var(--muted); }
+.d-head .c { font-size: 88px; font-weight: 700; letter-spacing: -.02em; }
+.d-head .t { font-size: 32px; font-weight: 700; letter-spacing: .2em; }
+.d-note { margin-top: 48px; font-size: 22px; color: var(--muted); letter-spacing: .1em; }
+.d-grid { margin-top: 40px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 0; border-top: 1px solid var(--hair); border-left: 1px solid var(--hair); }
+.d-grid div { height: 180px; border-right: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 18px; font-size: 13px; letter-spacing: .2em; color: var(--muted); }
+#back { position: absolute; right: 96px; top: 88px; font: 700 15px var(--font); letter-spacing: .3em; background: none; border: 1.5px solid var(--ink); padding: 12px 22px; cursor: pointer; }
+#back:hover { background: var(--ink); color: #fff; }
+
+.hint { position: absolute; right: 48px; bottom: 70px; font-size: 12px; letter-spacing: .2em; color: var(--muted); text-align: right; line-height: 1.8; }
+#replay { font: 600 12px var(--font); letter-spacing: .2em; background: none; border: 1px solid var(--hair); color: var(--muted); padding: 6px 12px; cursor: pointer; }
+
+@keyframes fade-in { to { opacity: 1; } }
+@keyframes blink { 50% { opacity: 0; } }
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes draw { to { stroke-dashoffset: 0; } }
+@keyframes pop { to { transform: scale(1); } }
+@keyframes converge { to { transform: scale(1); } }
+@keyframes converge-rot { to { transform: scale(1) rotate(-200deg); } }
+@keyframes rot { to { transform: rotate(540deg); } }
+@keyframes rot-rev { to { transform: rotate(-420deg); } }
+@keyframes jumps { 0% { transform: scale(1.08); } 25% { transform: scale(.94); } 50% { transform: scale(1.05); } 75% { transform: scale(.98); } 100% { transform: scale(1); } }
+@keyframes center-flick { 0% { transform: scale(1); } 15% { transform: scale(.4); } 30% { transform: scale(1.2); } 45% { transform: scale(.6); } 60%, 100% { transform: scale(.42); } }
+@keyframes orbit { 0% { opacity: 1; transform: rotate(0); } 100% { opacity: 1; transform: rotate(300deg); } }
+@keyframes side-l { to { stroke-dasharray: 360 400; transform: rotate(332deg); } }
+@keyframes side-r { to { stroke-dasharray: 360 400; transform: rotate(-339deg); } }
+@keyframes sweep { 0% { transform: scaleX(0); } 100% { transform: scaleX(1); } }
+@keyframes flash3 { 0% { opacity: 1; } 12% { opacity: 0; } 24% { opacity: 1; } 36% { opacity: 0; } 50%, 100% { opacity: 1; } }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 1ms !important; transition-duration: 1ms !important; }
+}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute">
+  <!-- AUTO-MAS 自有标志：细圆环 + 琥珀核心 + 四向刻度 + 斜线 -->
+  <symbol id="mark" viewBox="0 0 40 40">
+    <circle cx="20" cy="20" r="15" fill="none" stroke="currentColor" stroke-width="3" />
+    <circle cx="20" cy="20" r="5" fill="#e8701f" />
+    <path d="M20 0v6M20 34v6M0 20h6M34 20h6" stroke="currentColor" stroke-width="3" />
+    <path d="M9 31 31 9" stroke="currentColor" stroke-width="2" />
+  </symbol>
+</svg>
+
+<div id="viewport"><div id="stage">
+
+  <!-- ═══ 部门索引 ═══ -->
+  <section id="hub" aria-label="AUTO-MAS 一级界面">
+    <svg class="hub-diag" viewBox="0 0 1920 1080" aria-hidden="true">
+      <line x1="0" y1="0" x2="790" y2="370" /><line x1="1920" y1="0" x2="1130" y2="370" />
+      <line x1="0" y1="1080" x2="790" y2="710" /><line x1="1920" y1="1080" x2="1130" y2="710" />
+    </svg>
+    <div class="cross" style="left:470px;top:150px"></div>
+    <div class="cross" style="left:1760px;top:620px"></div>
+    <div class="cross" style="left:680px;top:900px"></div>
+    <div class="ghost-ring" aria-hidden="true"></div>
+    <div class="ghost-letters" aria-hidden="true">AUTO</div>
+    <div class="ghost-brand" aria-hidden="true">
+      <div class="brand-1">AUTO-MAS</div>
+      <div class="brand-2">SCRIPT CUSTODY INFORMATION</div>
+      <div class="brand-3">ANALYSIS OS</div>
+    </div>
+    <div id="tiles"></div>
+    <div id="searching" aria-hidden="true"><i></i><span>SEARCHING</span></div>
+
+    <footer class="ledger" aria-hidden="false">
+      <span class="sq"></span>
+      <span>SESSION ● AUTHORIZED</span>
+      <nav class="ruler" id="ruler" aria-label="一级界面刻度"></nav>
+      <span id="ledger-label">X-005 调度中心</span>
+      <span class="grow"></span>
+      <span id="clock"></span>
+      <span>POWERED BY AUTO-MAS</span>
+    </footer>
+    <div class="hint">数字键 1–0 选择 · ENTER 进入 · ESC 返回<br /><button id="replay" type="button">REPLAY BOOT</button></div>
+  </section>
+
+  <div id="detail" role="dialog" aria-modal="true">
+    <div class="d-body">
+      <div class="d-head"><span class="n" id="d-n"></span><span class="c" id="d-c"></span><span class="t" id="d-t"></span></div>
+      <button id="back" type="button">← RETURN TO INDEX</button>
+      <p class="d-note">二级界面将在下一轮设计。这里只演示从一级方块展开进入的过渡。</p>
+      <div class="d-grid"><div>MODULE A-01</div><div>MODULE A-02</div><div>MODULE A-03</div><div>MODULE A-04</div><div>MODULE A-05</div><div>MODULE A-06</div></div>
+    </div>
+  </div>
+
+  <!-- ═══ 启动动画（复刻 PV 0–27 秒的段落结构） ═══ -->
+  <section id="boot" aria-hidden="true">
+    <div id="b-type"></div>
+    <div id="b-ident"></div>
+    <svg id="b-logo" viewBox="0 0 200 200">
+      <circle class="draw" cx="100" cy="100" r="74" transform="rotate(-45 100 100)" />
+      <path class="tick" d="M100 0v30M100 170v30M0 100h30M170 100h30" />
+      <path class="draw" d="M48 152 152 48" style="stroke-width:5" />
+      <circle class="core" cx="100" cy="100" r="22" />
+    </svg>
+    <div id="b-brand">
+      <div class="brand-line brand-1">AUTO-MAS</div>
+      <div class="brand-line brand-2">SCRIPT CUSTODY INFORMATION</div>
+      <div class="brand-line brand-3">ANALYSIS OS</div>
+    </div>
+    <svg id="b-auth" viewBox="0 0 1920 1080">
+      <g class="jump">
+        <circle class="ring-outer" cx="960" cy="540" r="220" />
+        <circle class="ring-white" cx="960" cy="540" r="220" />
+        <circle class="arc-inner" cx="960" cy="540" r="160" />
+        <circle class="node" cx="960" cy="320" r="13" />
+      </g>
+      <circle class="center" cx="960" cy="540" r="26" />
+      <g class="orbit">
+        <circle cx="995" cy="540" r="5" /><circle cx="977" cy="570" r="5" /><circle cx="943" cy="570" r="5" />
+        <circle cx="925" cy="540" r="5" /><circle cx="943" cy="510" r="5" /><circle cx="977" cy="510" r="5" />
+      </g>
+      <circle class="side side-l" cx="600" cy="540" r="56" />
+      <circle class="side side-r" cx="1320" cy="540" r="56" />
+      <text class="granted" x="960" y="850" text-anchor="middle">AUTHORIZATION GRANTED</text>
+    </svg>
+    <div id="b-welcome">
+      <div class="w1">WELCOME TO</div>
+      <div class="w2">AUTO-MAS</div>
+      <div class="w3">INTERNAL DATABASE</div>
+    </div>
+    <div id="b-black"><svg viewBox="0 0 40 40" style="color:#fff"><use href="#mark" /></svg></div>
+  </section>
+  <button id="skip" type="button">SKIP ▸</button>
+</div></div>
+
+<script>
+// ── 一级界面：01–10，不含计划管理 ──
+// style: card 白卡 / ink 黑块 / bare 直接排版；depth 越大，鼠标视差越明显
+const DEPTS = [
+  { n: '01', code: 'OVRV', sub: 'OVERVIEW SECTION', zh: '主页', x: 300, y: 330, w: 230, h: 230, style: 'card', size: 66, depth: 10 },
+  { n: '02', code: 'CSTD', sub: 'SCRIPT CUSTODY SECTION', zh: '托管管理', x: 600, y: 300, w: 200, h: 200, style: 'card', size: 62, depth: 16 },
+  { n: '03', code: 'EMUL', sub: 'EMULATOR SECTION', zh: '模拟器管理', x: 560, y: 560, w: 260, h: 120, style: 'bare', size: 84, depth: 22, accent: true },
+  { n: '04', code: 'QUE', sub: 'QUEUE DISPATCH SECTION', zh: '调度队列', x: 270, y: 720, w: 220, h: 220, style: 'ink', size: 70, depth: 12, textured: true },
+  { n: '05', code: 'SCHD\nCTRL', sub: 'SCHEDULING CONTROL SECTION', zh: '调度中心', x: 960, y: 540, w: 340, h: 340, style: 'ink', size: 112, depth: 4, center: true, textured: true },
+  { n: '06', code: 'LOCL', sub: 'LOCAL CONTROL SECTION', zh: '本地控制', x: 1320, y: 300, w: 200, h: 200, style: 'card', size: 60, depth: 18 },
+  { n: '07', code: 'SIGN', sub: 'COMMUNITY SIGN SECTION', zh: '签到', x: 1640, y: 300, w: 270, h: 170, style: 'card', size: 70, depth: 10 },
+  { n: '08', code: 'HIST', sub: 'HISTORICAL RECORD SECTION', zh: '历史记录', x: 1430, y: 560, w: 280, h: 120, style: 'bare', size: 92, depth: 24 },
+  { n: '09', code: 'RSRC', sub: 'RESOURCE STORE SECTION', zh: '资源商店', x: 1330, y: 800, w: 190, h: 190, style: 'card', size: 54, depth: 14 },
+  { n: '10', code: 'SYS', sub: 'SYSTEM CONFIG SECTION', zh: '设置', x: 1650, y: 760, w: 200, h: 200, style: 'ink', size: 74, depth: 8, textured: true },
+]
+// 纯装饰方块（PV 里的空白卡与条纹卡）
+const DECOS = [
+  { x: 760, y: 820, w: 150, h: 150, html: '<div style="position:absolute;inset:0;background:#f6f4f1"></div><div style="position:absolute;left:45px;top:45px;width:60px;height:60px;background:#d5d2cd"></div>', depth: 20 },
+  { x: 1775, y: 545, w: 140, h: 140, html: '<div style="position:absolute;inset:0;background:#0b0c0b"></div><div style="position:absolute;left:0;right:0;top:34px;height:82px;background:#f6f4f1"></div>', depth: 28, blur: 1 },
+  { x: 120, y: 520, w: 90, h: 90, html: '<div style="position:absolute;inset:0;background:#f6f4f1;opacity:.7"></div>', depth: 6, blur: 2 },
+]
+
+const stage = document.getElementById('stage')
+const hub = document.getElementById('hub')
+const tilesEl = document.getElementById('tiles')
+const searching = document.getElementById('searching')
+const ruler = document.getElementById('ruler')
+const ledgerLabel = document.getElementById('ledger-label')
+const tiles = []
+
+function fit() {
+  const s = Math.min(innerWidth / 1920, innerHeight / 1080)
+  stage.style.transform = `translate(-50%, -50%) scale(${s})`
+}
+addEventListener('resize', fit); fit()
+
+function codeHtml(d) {
+  // 在字形中段叠一枚自有标志，对应 PV 部门标里嵌入的符号
+  const lines = d.code.split('\n').map((l, i) => {
+    const mk = i === d.code.split('\n').length - 1 ? '<svg class="mk"><use href="#mark" /></svg>' : ''
+    return `<div class="code" style="font-size:${d.size}px">${l}${mk}</div>`
+  }).join('')
+  return lines
+}
+
+DEPTS.forEach((d, i) => {
+  const b = document.createElement('button')
+  b.type = 'button'
+  b.className = `tile ${d.style}${d.textured ? ' textured' : ''}`
+  Object.assign(b.style, { left: d.x + 'px', top: d.y + 'px', width: d.w + 'px', height: d.h + 'px', transitionDelay: `${i * 45}ms` })
+  b.setAttribute('aria-label', `${d.n} ${d.zh}`)
+  b.innerHTML = `<div class="tile-inner">
+    ${d.style !== 'bare' ? `<span class="idx">${d.n}</span>` : ''}
+    ${d.accent ? '<span class="accent-block" style="right:-22px;top:-26px"></span>' : ''}
+    ${codeHtml(d)}
+    <div class="sub">${d.sub}</div>
+    <div class="zh">${d.zh}</div>
+  </div>`
+  b.addEventListener('mouseenter', () => focusTile(i))
+  b.addEventListener('focus', () => focusTile(i))
+  b.addEventListener('click', () => openDetail(i))
+  tilesEl.appendChild(b)
+  tiles.push({ el: b, d })
+
+  const r = document.createElement('button')
+  r.type = 'button'
+  r.setAttribute('aria-label', `${d.n} ${d.zh}`)
+  r.innerHTML = `<b>${d.n}</b><i></i>`
+  r.addEventListener('click', () => { focusTile(i); openDetail(i) })
+  r.addEventListener('mouseenter', () => focusTile(i))
+  ruler.appendChild(r)
+})
+DECOS.forEach(d => {
+  const el = document.createElement('div')
+  el.className = 'tile deco'
+  Object.assign(el.style, { left: d.x + 'px', top: d.y + 'px', width: d.w + 'px', height: d.h + 'px', filter: d.blur ? `blur(${d.blur}px)` : '' })
+  el.innerHTML = d.html
+  tilesEl.appendChild(el)
+  tiles.push({ el, d })
+})
+
+let current = 4
+function focusTile(i) {
+  current = i
+  tiles.forEach((t, j) => t.el.classList.toggle('focus', j === i))
+  hub.classList.add('has-focus')
+  const d = DEPTS[i]
+  searching.style.left = d.x + 'px'
+  searching.style.top = (d.y - d.h / 2 - 22) + 'px'
+  searching.querySelector('span').textContent = i === 4 && !hub.dataset.touched ? 'SEARCHING' : `ACCESS // ${d.zh}`
+  hub.dataset.touched = '1'
+  ;[...ruler.children].forEach((r, j) => r.classList.toggle('on', j === i))
+  ledgerLabel.textContent = `X-0${d.n} ${d.zh}`
+}
+tilesEl.addEventListener('mouseleave', () => { hub.classList.remove('has-focus'); tiles.forEach(t => t.el.classList.remove('focus')) })
+
+// 鼠标视差：按景深平移，造出前后层次；空闲时缓慢漂浮
+let mx = 0, my = 0, tx = 0, ty = 0, raf = 0
+hub.addEventListener('mousemove', e => {
+  const r = stage.getBoundingClientRect()
+  tx = ((e.clientX - r.left) / r.width - .5) * 2
+  ty = ((e.clientY - r.top) / r.height - .5) * 2
+})
+function loop(t) {
+  mx += (tx - mx) * .08; my += (ty - my) * .08
+  tiles.forEach((tl, k) => {
+    const dp = tl.d.depth || 10
+    const fx = Math.sin(t / 2600 + k) * dp * .15, fy = Math.cos(t / 3100 + k * 1.7) * dp * .15
+    tl.el.style.setProperty('--px', (-mx * dp + fx).toFixed(2))
+    tl.el.style.setProperty('--py', (-my * dp + fy).toFixed(2))
+  })
+  raf = requestAnimationFrame(loop)
+}
+document.addEventListener('visibilitychange', () => { cancelAnimationFrame(raf); if (!document.hidden) raf = requestAnimationFrame(loop) })
+raf = requestAnimationFrame(loop)
+
+// 二级界面：方块原地展开成整屏
+const detail = document.getElementById('detail')
+let openIdx = -1
+function openDetail(i) {
+  const d = DEPTS[i]; openIdx = i
+  document.getElementById('d-n').textContent = d.n
+  document.getElementById('d-c').textContent = d.code.replace('\n', ' ')
+  document.getElementById('d-t').textContent = d.zh
+  Object.assign(detail.style, { display: 'block', left: d.x - d.w / 2 + 'px', top: d.y - d.h / 2 + 'px', width: d.w + 'px', height: d.h + 'px' })
+  detail.offsetWidth
+  Object.assign(detail.style, { left: '0px', top: '0px', width: '1920px', height: '1080px' })
+  detail.classList.add('open')
+  document.getElementById('back').focus({ preventScroll: true })
+}
+function closeDetail() {
+  if (openIdx < 0) return
+  const d = DEPTS[openIdx]
+  detail.classList.remove('open')
+  Object.assign(detail.style, { left: d.x - d.w / 2 + 'px', top: d.y - d.h / 2 + 'px', width: d.w + 'px', height: d.h + 'px' })
+  setTimeout(() => { detail.style.display = 'none' }, 560)
+  tiles[openIdx].el.focus({ preventScroll: true })
+  openIdx = -1
+}
+document.getElementById('back').addEventListener('click', closeDetail)
+
+addEventListener('keydown', e => {
+  if (booting) { if (e.key === 'Escape' || e.key === ' ') finishBoot(); return }
+  if (e.key === 'Escape') return closeDetail()
+  if (openIdx >= 0) return
+  if (/^[0-9]$/.test(e.key)) { const i = e.key === '0' ? 9 : +e.key - 1; tiles[i].el.focus() }
+  if (e.key === 'Enter' && document.activeElement?.classList.contains('tile')) { /* 按钮自身会触发 click */ }
+})
+
+const clock = document.getElementById('clock')
+setInterval(() => { clock.textContent = new Date().toLocaleTimeString('zh-CN', { hour12: false }) }, 1000)
+
+// ── 启动动画时间轴（ms）。段落：黑场标志 → 接入输入 → 标志绘制与品牌 → 身份 → 授权圆环 → 欢迎 → 白场入索引 ──
+const boot = document.getElementById('boot')
+const skip = document.getElementById('skip')
+const $ = id => document.getElementById(id)
+let timers = [], booting = false
+const at = (ms, fn) => timers.push(setTimeout(fn, ms))
+function typeLine(el, text, start, per = 42, keepCaret = false) {
+  for (let k = 0; k <= text.length; k++) at(start + k * per, () => {
+    el.innerHTML = text.slice(0, k) + (k < text.length || keepCaret ? '<span class="caret"></span>' : '')
+  })
+  return start + text.length * per
+}
+function resetBoot() {
+  timers.forEach(clearTimeout); timers = []
+  boot.className = ''; boot.style.display = ''
+  $('b-black').className = ''
+  $('b-type').innerHTML = ''; $('b-ident').innerHTML = ''
+  $('b-logo').setAttribute('class', ''); $('b-logo').style.opacity = 1
+  $('b-brand').className = ''; $('b-brand').style.opacity = 1
+  document.querySelectorAll('.brand-line').forEach(l => l.classList.remove('in'))
+  $('b-auth').setAttribute('class', '')
+  $('b-welcome').className = ''
+  hub.classList.remove('in')
+  skip.style.display = ''
+}
+function runBoot() {
+  resetBoot(); booting = true
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return finishBoot()
+  at(1300, () => $('b-black').classList.add('off'))
+  const t1 = typeLine($('b-type'), 'ACCESSING  AUTO-MAS  TERMINAL', 1650)
+  at(t1 + 450, () => { $('b-type').innerHTML = ''; $('b-logo').setAttribute('class', 'play') })
+  at(t1 + 1900, () => $('b-logo').setAttribute('class', 'play shift'))
+  document.querySelectorAll('.brand-line').forEach((l, k) => at(t1 + 2150 + k * 80, () => l.classList.add('in')))
+  at(t1 + 3300, () => { $('b-logo').style.opacity = 0; $('b-brand').classList.add('corner') })
+  // 身份段
+  const ident = $('b-ident')
+  const lines = ['ID CONFIRMED : OPERATOR', 'REQUEST RECEIVED', 'START PROCESSING...']
+  let t = t1 + 3800
+  lines.forEach((txt, k) => {
+    const div = document.createElement('div')
+    at(t, () => { if (k === 2) div.innerHTML = ''; ident.appendChild(div) })
+    t = typeLine(div, txt, t, 38) + 380
+    if (k === 2) at(t - 300, () => { div.innerHTML = '<span class="spin"></span>' + txt })
+  })
+  // 授权段
+  at(t + 700, () => { ident.innerHTML = ''; $('b-auth').setAttribute('class', 'play') })
+  const tw = t + 700 + 3600
+  // 欢迎段：黑白闪切 → 名称黑底扫过 → INTERNAL DATABASE 闪现
+  at(tw, () => { $('b-auth').setAttribute('class', ''); boot.classList.add('flash') })
+  at(tw + 80, () => boot.classList.remove('flash'))
+  at(tw + 160, () => boot.classList.add('flash'))
+  at(tw + 240, () => { boot.classList.remove('flash'); $('b-welcome').classList.add('play') })
+  at(tw + 1900, () => { $('b-brand').style.opacity = 0; boot.classList.add('leave') })
+  at(tw + 2300, () => hub.classList.add('in'))
+  at(tw + 2700, () => finishBoot())
+}
+function finishBoot() {
+  timers.forEach(clearTimeout); timers = []
+  booting = false
+  boot.style.display = 'none'; skip.style.display = 'none'
+  hub.classList.add('in')
+  focusTile(4)
+  tiles[4].el.focus({ preventScroll: true })
+}
+skip.addEventListener('click', finishBoot)
+boot.addEventListener('click', finishBoot)
+document.getElementById('replay').addEventListener('click', () => { closeDetail(); runBoot() })
+runBoot()
+</script>
+</body>
+</html>
