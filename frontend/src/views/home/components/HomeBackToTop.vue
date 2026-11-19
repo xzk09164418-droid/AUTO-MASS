@@ -48,28 +48,29 @@ onBeforeUnmount(() => {
 <style scoped>
 .back-to-top {
   position: fixed;
-  bottom: 24px;
+  /* 底部刻度栏高 40px，按钮停在其上方 */
+  bottom: 56px;
   right: 24px;
   z-index: 100;
-  width: 50px;
-  height: 50px;
+  width: 44px;
+  height: 44px;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 0;
   border: none;
-  border-radius: 50%;
-  background: var(--ant-color-primary);
-  color: #fff;
+  border-radius: 0;
+  background: var(--app-rhine-solid-bg);
+  color: var(--app-rhine-solid-text);
   cursor: pointer;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  box-shadow: inset 0 -3px 0 var(--app-rhine-accent);
   transition:
     background 0.2s,
     transform 0.2s;
 }
 
 .back-to-top:hover {
-  background: var(--ant-color-primary-hover);
+  background: var(--app-rhine-accent);
   transform: translateY(-2px);
 }
 

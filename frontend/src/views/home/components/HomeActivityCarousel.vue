@@ -24,6 +24,9 @@
             :aria-current="index === activeIndex ? 'true' : undefined"
             @click="select(index)"
           >
+            <span class="switcher-index" aria-hidden="true">{{
+              String(index + 1).padStart(2, '0')
+            }}</span>
             {{ item.title }}
           </button>
         </div>
@@ -262,8 +265,7 @@ onBeforeUnmount(() => {
 .banner-viewport {
   position: relative;
   overflow: hidden;
-  border-radius: 2px;
-  border: 1px solid var(--ant-color-border);
+  border: 1px solid var(--app-rhine-hairline);
 }
 
 .banner-arrow {
@@ -303,40 +305,57 @@ onBeforeUnmount(() => {
   background: rgba(8, 10, 14, 0.68);
 }
 
+/* PV 档案分类条：编号 + 名称，选中项以底部粗线标记 */
 .banner-switcher {
   display: flex;
-  gap: 4px;
+  gap: 0;
   overflow-x: auto;
-  padding: 5px;
-  border: 1px solid var(--ant-color-border);
-  border-radius: 2px;
-  background: var(--ant-color-bg-container);
+  border-bottom: 1px solid var(--app-rhine-hairline);
   scrollbar-width: thin;
 }
 
 .switcher-chip {
   flex: 0 0 auto;
-  padding: 8px 16px;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 10px 16px;
   color: var(--ant-color-text-secondary);
-  font-size: 13px;
-  background: var(--app-rhine-surface-subtle);
-  border: 1px solid transparent;
-  border-radius: 2px;
+  font: inherit;
+  font-size: 14px;
+  letter-spacing: 0.04em;
+  background: transparent;
+  border: 0;
   cursor: pointer;
   transition:
     color 0.2s ease,
-    border-color 0.2s ease;
+    box-shadow 0.2s ease;
+}
+
+.switcher-index {
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--app-rhine-muted-index);
+  font-variant-numeric: tabular-nums;
 }
 
 .switcher-chip:hover {
   color: var(--ant-color-text);
 }
 
+.switcher-chip:focus-visible {
+  outline: 1px solid var(--app-rhine-accent);
+  outline-offset: -4px;
+}
+
 .switcher-chip.is-active {
   font-weight: 600;
   color: var(--ant-color-text);
-  background: var(--ant-color-fill-secondary);
-  box-shadow: inset 0 -2px var(--activity-accent);
+  box-shadow: inset 0 -3px var(--activity-accent, var(--app-rhine-accent));
+}
+
+.switcher-chip.is-active .switcher-index {
+  color: var(--activity-accent, var(--app-rhine-accent));
 }
 
 .activity-detail {

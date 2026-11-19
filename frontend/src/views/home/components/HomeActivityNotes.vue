@@ -164,7 +164,7 @@ onMounted(() => {
   gap: 12px;
   padding: 8px 12px;
   background: var(--ant-color-bg-container);
-  border-radius: 12px;
+  border-radius: 0;
   border: 1px solid var(--ant-color-border-secondary);
 }
 

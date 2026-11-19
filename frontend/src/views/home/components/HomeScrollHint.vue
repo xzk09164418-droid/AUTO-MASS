@@ -69,19 +69,20 @@ onBeforeUnmount(() => {
 <style scoped>
 .scroll-hint {
   position: fixed;
-  bottom: 0;
-  left: calc(50% + 80px);
+  /* 外壳已无侧栏：水平居中，停在 40px 高的底部刻度栏之上 */
+  bottom: 40px;
+  left: 50%;
   transform: translateX(-50%);
   z-index: 100;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 4px;
-  padding: 16px 24px 20px;
+  padding: 16px 32px 12px;
   border: none;
   cursor: pointer;
-  background: linear-gradient(transparent, rgba(0, 0, 0, 0.2) 100%);
-  border-radius: 12px 12px 0 0;
+  background: linear-gradient(transparent, var(--ant-color-bg-layout) 70%);
+  border-radius: 0;
   transition: opacity 0.3s;
 }
 
@@ -90,20 +91,19 @@ onBeforeUnmount(() => {
 }
 
 .scroll-hint:focus-visible {
-  outline: 2px solid var(--ant-color-primary);
+  outline: 1px solid var(--app-rhine-accent);
   outline-offset: -2px;
 }
 
 .scroll-hint-text {
-  color: var(--ant-color-primary);
-  text-shadow: 0px 0px 10px white;
-  font-size: 14px;
-  letter-spacing: 0.05em;
+  color: var(--ant-color-text-secondary);
+  font-size: 12px;
+  letter-spacing: 0.12em;
   white-space: nowrap;
 }
 
 .scroll-hint-arrow {
-  color: var(--ant-color-primary);
+  color: var(--app-rhine-accent);
   font-size: 16px;
   animation: bounce 1.5s ease-in-out infinite;
 }

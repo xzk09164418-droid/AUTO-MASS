@@ -1,9 +1,20 @@
 <template>
   <div class="home-page">
-    <div class="home-header">
-      <div class="home-title-block">
-        <div class="rhine-page-kicker">OVERVIEW // OPERATIONAL DASHBOARD</div>
-        <a-typography-title :level="2" class="home-title">{{ greeting }}</a-typography-title>
+    <!-- PV 档案抬头：编号 + 问候大标题 + 日期刻度行 -->
+    <header class="home-hero">
+      <div class="home-hero-main">
+        <div class="home-hero-meta" aria-hidden="true">
+          <span class="home-hero-index">X-001</span>
+          <span class="home-hero-kicker">OVERVIEW // OPERATIONAL DASHBOARD</span>
+        </div>
+        <h1 class="home-hero-title">{{ greeting }}</h1>
+        <div class="home-hero-date" aria-hidden="true">
+          <span>{{ heroDate.date }}</span>
+          <i></i>
+          <span>{{ heroDate.weekday }}</span>
+          <i></i>
+          <span>WEEK {{ heroDate.week }}</span>
+        </div>
       </div>
 
       <div class="header-actions">
@@ -30,7 +41,7 @@
           {{ t('home.viewNotice') }}
         </a-button>
       </div>
-    </div>
+    </header>
 
     <NoticeModal
       v-model:visible="noticeVisible"
@@ -57,6 +68,15 @@
     <div v-if="layoutReady" class="home-content">
       <template v-for="moduleKey in homeTopLevelOrder" :key="moduleKey">
         <section v-if="isHomeModuleVisible(moduleKey)" class="home-module">
+          <!-- 模块按用户排序后的可见次序编号，标题沿用布局设置里的模块名 -->
+          <div class="home-module-head">
+            <span class="home-module-index" aria-hidden="true">{{ moduleSerial(moduleKey) }}</span>
+            <span class="home-module-code" aria-hidden="true">{{
+              MODULE_CODES[moduleKey] ?? 'ARCHIVE'
+            }}</span>
+            <h2 class="home-module-title">{{ moduleTitle(moduleKey) }}</h2>
+            <span class="home-module-rule" aria-hidden="true"></span>
+          </div>
           <HomeCommandCard
             v-if="moduleKey === 'command'"
             :selected-task-ids="selectedHomeTaskIds"
@@ -200,6 +220,38 @@ for (const [moduleKey, source] of activities.sources) {
   )
 }
 
+// 顶层模块的 PV 档案代号，仅作装饰
+const MODULE_CODES: Record<string, string> = {
+  command: 'COMMAND TERMINAL',
+  quick: 'DEPARTMENT INDEX',
+  proxy: 'OPERATION RECORD',
+  activities: 'FIELD INTELLIGENCE',
+}
+
+const visibleTopLevelKeys = computed(() =>
+  homeTopLevelOrder.value.filter(key => isHomeModuleVisible(key))
+)
+
+const moduleSerial = (key: string) =>
+  `A-${String(visibleTopLevelKeys.value.indexOf(key as never) + 1).padStart(2, '0')}`
+
+const moduleTitle = (key: string) =>
+  homeModules.value.find(module => module.key === key)?.title ?? key
+
+const WEEKDAYS = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY']
+
+// 抬头日期行：首页打开期间跨日较少，进入页面时取一次即可
+const heroDate = (() => {
+  const now = new Date()
+  const start = new Date(now.getFullYear(), 0, 1)
+  const week = Math.ceil(((now.getTime() - start.getTime()) / 86400000 + start.getDay() + 1) / 7)
+  return {
+    date: `${now.getFullYear()}.${String(now.getMonth() + 1).padStart(2, '0')}.${String(now.getDate()).padStart(2, '0')}`,
+    weekday: WEEKDAYS[now.getDay()],
+    week: String(week).padStart(2, '0'),
+  }
+})()
+
 const greeting = computed(() => {
   const hour = new Date().getHours()
   if (hour >= 5 && hour < 11) {
@@ -254,9 +306,10 @@ onMounted(async () => {
   margin: 0 auto;
 }
 
-.home-header {
-  margin-bottom: 24px;
-  padding-bottom: 16px;
+/* ── 档案抬头 ─────────────────────────────────────────────────────────── */
+.home-hero {
+  margin-bottom: 28px;
+  padding-bottom: 18px;
   border-bottom: 2px solid var(--app-rhine-rule);
   display: flex;
   justify-content: space-between;
@@ -264,16 +317,56 @@ onMounted(async () => {
   gap: 24px;
 }
 
-.home-title-block {
+.home-hero-main {
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
-.home-title {
-  margin: 0 !important;
-  color: var(--ant-color-text);
-  font-size: 26px;
+.home-hero-meta {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-size: 12px;
+  letter-spacing: 0.16em;
+  user-select: none;
+}
+
+.home-hero-index {
+  color: var(--app-rhine-accent);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+}
+
+.home-hero-kicker {
+  color: var(--app-rhine-muted-index);
+}
+
+.home-hero-title {
+  margin: 0;
+  font-size: 34px;
+  line-height: 1.2;
   font-weight: 700;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.04em;
+  color: var(--ant-color-text);
+}
+
+.home-hero-date {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  color: var(--ant-color-text-tertiary);
+  font-variant-numeric: tabular-nums;
+  user-select: none;
+}
+
+.home-hero-date i {
+  width: 18px;
+  height: 1px;
+  background: var(--app-rhine-hairline);
 }
 
 .header-actions {
@@ -292,27 +385,76 @@ onMounted(async () => {
   min-width: 120px;
 }
 
+/* ── 模块档案分节 ─────────────────────────────────────────────────────── */
 .home-content {
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 32px;
 }
 
 .home-module {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
+}
+
+.home-module-head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  min-width: 0;
+}
+
+.home-module-index {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--app-rhine-accent);
+  font-variant-numeric: tabular-nums;
+  user-select: none;
+}
+
+.home-module-code {
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  color: var(--app-rhine-muted-index);
+  white-space: nowrap;
+  user-select: none;
+}
+
+.home-module-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--ant-color-text);
+  white-space: nowrap;
+}
+
+.home-module-rule {
+  flex: 1;
+  height: 1px;
+  align-self: center;
+  background: var(--app-rhine-hairline);
 }
 
 @media (max-width: 800px) {
-  .home-header {
+  .home-hero {
     flex-direction: column;
     gap: 16px;
     align-items: stretch;
   }
 
+  .home-hero-title {
+    font-size: 26px;
+  }
+
   .header-actions {
     justify-content: flex-start;
+  }
+
+  .home-module-code {
+    display: none;
   }
 }
 </style>

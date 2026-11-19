@@ -168,7 +168,7 @@ const onKeydown = (event: KeyboardEvent) => {
   min-width: 0;
   min-height: 150px;
   overflow: hidden;
-  border-radius: 10px;
+  border-radius: 0;
   background: var(--ant-color-fill-quaternary);
   color: #fff;
 }
@@ -322,7 +322,7 @@ const onKeydown = (event: KeyboardEvent) => {
   min-height: 0;
   padding: 12px;
   border: 1px solid var(--ant-color-border-secondary);
-  border-radius: 8px;
+  border-radius: 0;
   color: var(--ant-color-text);
   background: var(--ant-color-fill-quaternary);
 }
@@ -332,7 +332,7 @@ const onKeydown = (event: KeyboardEvent) => {
   flex: 0 0 auto;
   width: 88px;
   height: 88px;
-  border-radius: 4px;
+  border-radius: 0;
   background: var(--ant-color-bg-container);
   transform: none;
 }

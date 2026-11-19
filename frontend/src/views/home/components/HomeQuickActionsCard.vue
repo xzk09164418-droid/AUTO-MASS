@@ -1,5 +1,6 @@
 <template>
-  <a-card class="shortcut-card" :title="t('home.quick.title')">
+  <!-- 模块标题由首页档案分节统一给出，这里不再重复卡片标题 -->
+  <a-card class="shortcut-card">
     <section class="quick-actions" :aria-label="t('home.quick.aria')">
       <button
         v-for="action in quickActions"
@@ -8,13 +9,17 @@
         class="quick-action"
         @click="navigateTo(action.path)"
       >
-        <span class="quick-action-icon">
-          <component :is="action.icon" />
+        <span class="quick-action-top" aria-hidden="true">
+          <span class="quick-action-index">{{ action.index }}</span>
+          <span class="quick-action-icon">
+            <component :is="action.icon" />
+          </span>
         </span>
         <span class="quick-action-text">
           <span class="quick-action-title">{{ action.title }}</span>
           <span class="quick-action-desc">{{ action.description }}</span>
         </span>
+        <span class="quick-action-go" aria-hidden="true">ACCESS →</span>
       </button>
     </section>
   </a-card>
@@ -39,73 +44,79 @@ const quickActions = computed(() => [
     title: t('home.quick.scripts'),
     description: t('home.quick.scriptsDesc'),
     path: '/scripts',
+    index: '02',
     icon: FileTextOutlined,
   },
   {
     title: t('home.quick.plans'),
     description: t('home.quick.plansDesc'),
     path: '/plans',
+    index: '03',
     icon: CalendarOutlined,
   },
   {
     title: t('home.quick.emulators'),
     description: t('home.quick.emulatorsDesc'),
     path: '/emulators',
+    index: '04',
     icon: DatabaseOutlined,
   },
   {
     title: t('home.quick.queue'),
     description: t('home.quick.queueDesc'),
     path: '/queue',
+    index: '05',
     icon: UnorderedListOutlined,
   },
   {
     title: t('home.quick.scheduler'),
     description: t('home.quick.schedulerDesc'),
     path: '/scheduler',
+    index: '06',
     icon: ControlOutlined,
   },
 ])
 </script>
 
 <style scoped>
-.shortcut-card {
-  border-radius: 2px;
-  box-shadow: var(--app-rhine-card-shadow);
-}
-
 .shortcut-card :deep(.ant-card-body) {
   padding: 0;
-}
-
-.shortcut-card :deep(.ant-card-head-title) {
-  font-size: 16px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
 }
 
 .quick-actions {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 0;
 }
 
+/* 编号与顶部导航一致，形成 PV 档案索引 */
 .quick-action {
-  min-height: 102px;
-  padding: 18px;
+  position: relative;
+  min-height: 150px;
+  padding: 18px 20px 16px;
   display: flex;
-  align-items: center;
-  gap: 14px;
+  flex-direction: column;
+  gap: 12px;
   text-align: left;
   color: var(--ant-color-text);
   background: transparent;
   border: none;
-  border-right: 1px solid var(--ant-color-border-secondary);
+  border-right: 1px solid var(--app-rhine-hairline);
   cursor: pointer;
-  transition:
-    background-color 0.16s ease,
-    color 0.16s ease,
-    box-shadow 0.16s ease;
+  font: inherit;
+  transition: background-color 0.18s ease;
+}
+
+.quick-action::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  background: var(--app-rhine-accent);
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform 0.2s cubic-bezier(0.2, 0.9, 0.3, 1);
 }
 
 .quick-action:last-child {
@@ -114,53 +125,53 @@ const quickActions = computed(() => [
 
 .quick-action:hover {
   background: var(--app-rhine-hover-bg);
-  color: var(--app-rhine-accent);
-  box-shadow: inset 0 -2px 0 var(--app-rhine-accent);
 }
 
-.quick-action:hover .quick-action-icon {
-  color: var(--app-rhine-accent);
-  border-color: var(--app-rhine-accent-border);
-  background: var(--app-rhine-accent-soft);
-  transform: translateY(-1px);
+.quick-action:hover::after {
+  transform: scaleX(1);
 }
 
 .quick-action:focus-visible {
-  outline: 2px solid var(--app-rhine-accent);
-  outline-offset: -2px;
+  outline: 1px solid var(--app-rhine-accent);
+  outline-offset: -4px;
+}
+
+.quick-action-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.quick-action-index {
+  font-size: 34px;
+  line-height: 1;
+  font-weight: 300;
+  letter-spacing: 0.02em;
+  color: var(--ant-color-text-tertiary);
+  font-variant-numeric: tabular-nums;
+  transition: color 0.18s ease;
+}
+
+.quick-action:hover .quick-action-index {
+  color: var(--app-rhine-accent);
 }
 
 .quick-action-icon {
-  width: 40px;
-  height: 40px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 40px;
-  color: var(--ant-color-text);
-  background: var(--app-rhine-surface-subtle);
-  border: 1px solid var(--ant-color-border);
-  border-bottom-color: var(--app-rhine-card-border-bottom);
-  border-radius: 2px;
-  box-shadow: var(--app-rhine-subcard-shadow);
   font-size: 18px;
-  transition:
-    color 0.16s ease,
-    border-color 0.16s ease,
-    background-color 0.16s ease,
-    transform 0.16s ease;
+  color: var(--ant-color-text-secondary);
 }
 
 .quick-action-text {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 4px;
 }
 
 .quick-action-title {
   font-size: 16px;
   font-weight: 600;
+  letter-spacing: 0.04em;
   color: var(--ant-color-text);
 }
 
@@ -168,6 +179,18 @@ const quickActions = computed(() => [
   font-size: 13px;
   color: var(--ant-color-text-tertiary);
   white-space: normal;
+}
+
+.quick-action-go {
+  margin-top: auto;
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  color: var(--app-rhine-muted-index);
+  transition: color 0.18s ease;
+}
+
+.quick-action:hover .quick-action-go {
+  color: var(--app-rhine-accent);
 }
 
 @media (max-width: 1240px) {
@@ -180,7 +203,7 @@ const quickActions = computed(() => [
   }
 
   .quick-action:nth-child(n + 4) {
-    border-top: 1px solid var(--ant-color-border-secondary);
+    border-top: 1px solid var(--app-rhine-hairline);
   }
 }
 
@@ -194,11 +217,11 @@ const quickActions = computed(() => [
   }
 
   .quick-action:nth-child(3n) {
-    border-right: 1px solid var(--ant-color-border-secondary);
+    border-right: 1px solid var(--app-rhine-hairline);
   }
 
   .quick-action:nth-child(n + 3) {
-    border-top: 1px solid var(--ant-color-border-secondary);
+    border-top: 1px solid var(--app-rhine-hairline);
   }
 }
 
@@ -208,9 +231,9 @@ const quickActions = computed(() => [
   }
 
   .quick-action {
-    min-height: 82px;
+    min-height: 0;
     border-right: none;
-    border-top: 1px solid var(--ant-color-border-secondary);
+    border-top: 1px solid var(--app-rhine-hairline);
   }
 
   .quick-action:nth-child(3n) {
@@ -219,6 +242,12 @@ const quickActions = computed(() => [
 
   .quick-action:first-child {
     border-top: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .quick-action::after {
+    transition: none;
   }
 }
 </style>

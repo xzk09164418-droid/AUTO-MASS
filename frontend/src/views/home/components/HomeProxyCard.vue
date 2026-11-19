@@ -1,21 +1,22 @@
 <template>
   <section class="overview-grid" :aria-label="t('home.proxy.aria')">
-    <a-card
-      class="proxy-card"
-      :title="t('home.proxy.title')"
-      :loading="loading && expanded"
-      :body-style="expanded ? undefined : { display: 'none' }"
-    >
-      <template #extra>
-        <a-button type="text" :aria-expanded="expanded" @click="expanded = !expanded">
+    <!-- 模块标题由首页档案分节给出；卡片顶部只保留记录条与展开按钮 -->
+    <a-card class="proxy-card">
+      <div class="proxy-bar">
+        <span class="proxy-bar-meta" aria-hidden="true">
+          RECORD // ACCOUNTS
+          <strong>{{ String(Object.keys(proxyData).length).padStart(2, '0') }}</strong>
+        </span>
+        <a-button type="text" size="small" :aria-expanded="expanded" @click="expanded = !expanded">
           <template #icon>
             <UpOutlined v-if="expanded" />
             <DownOutlined v-else />
           </template>
           {{ t(expanded ? 'home.proxy.collapse' : 'home.proxy.expand') }}
         </a-button>
-      </template>
-      <div v-if="expanded && Object.keys(proxyData).length > 0" class="proxy-list">
+      </div>
+      <a-skeleton v-if="expanded && loading" active class="proxy-skeleton" />
+      <div v-else-if="expanded && Object.keys(proxyData).length > 0" class="proxy-list">
         <a-row :gutter="[16, 16]">
           <a-col v-for="(proxy, username) in proxyData" :key="username" :xs="24" :lg="12" :xl="8">
             <div class="proxy-item">
@@ -95,14 +96,48 @@ const formatProxyDisplay = (dateString: string) => {
 
 .proxy-card {
   width: 100%;
-  border-radius: 2px;
-  box-shadow: var(--app-rhine-card-shadow);
 }
 
-.proxy-card :deep(.ant-card-head-title) {
-  font-size: 16px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
+.proxy-card :deep(.ant-card-body) {
+  padding: 0;
+}
+
+.proxy-bar {
+  min-height: 44px;
+  padding: 0 12px 0 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.proxy-bar-meta {
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  color: var(--app-rhine-muted-index);
+  user-select: none;
+}
+
+.proxy-bar-meta strong {
+  margin-left: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--app-rhine-accent);
+  font-variant-numeric: tabular-nums;
+}
+
+.proxy-skeleton,
+.proxy-list,
+.empty-state {
+  border-top: 1px solid var(--app-rhine-hairline);
+}
+
+.proxy-skeleton {
+  padding: 20px;
+}
+
+.proxy-list {
+  padding: 20px;
 }
 
 .empty-state {
@@ -119,10 +154,8 @@ const formatProxyDisplay = (dateString: string) => {
 .proxy-list .proxy-item {
   min-height: 164px;
   padding: 16px;
-  background: var(--app-rhine-surface-subtle);
-  border: 1px solid var(--ant-color-border);
-  border-left: 3px solid var(--app-rhine-accent);
-  border-radius: 2px;
+  border: 1px solid var(--app-rhine-hairline);
+  border-left: 2px solid var(--app-rhine-accent);
 }
 
 .proxy-header {

@@ -172,7 +172,7 @@ const stripStyle = (snapshot: ActivitySnapshot): CSSProperties => ({
   overflow: hidden;
   width: 26px;
   height: 26px;
-  border-radius: 6px;
+  border-radius: 0;
   color: var(--note-accent);
   font-size: 16px;
 }
