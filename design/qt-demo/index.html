@@ -143,8 +143,10 @@ svg { display: block; }
 #hub .hub-diag, #hub .cross, #hub .hint, #hub .ghost-letters, #hub .ghost-brand { transition: opacity .4s ease .35s; }
 #sect { position: absolute; inset: 0 0 56px 0; z-index: 30; pointer-events: none; }
 #sect.on { pointer-events: auto; }
-.s-clone { position: absolute; z-index: 31; transform-origin: 0 0 !important; transition: transform .7s cubic-bezier(.75,0,.15,1), opacity .3s !important; pointer-events: none; }
-.s-clone.focus { --s: 1; }
+/* 方块 → 部门卡的过渡体：位置与尺寸同时插值，按随机方式运动 */
+.s-morph { position: absolute; z-index: 31; pointer-events: none; overflow: hidden; will-change: left, top, width, height; }
+.s-morph .tile { position: absolute !important; left: 50% !important; top: 50% !important; margin: 0 !important; transform-origin: 50% 50% !important; transition: none !important; }
+.s-morph.ghost { z-index: 30; }
 
 /* 参考 PV 1:19 的构图：左上品牌 + 竖线 + 黑色部门卡；左下大号录像带串；中央剪影；右侧铭牌与档案 */
 #sect { inset: 0; }
@@ -165,8 +167,12 @@ svg { display: block; }
 #s-sec { position: absolute; left: 248px; top: 300px; width: 410px; z-index: 3; }
 #s-sec .tab { display: inline-block; margin-left: 50px; padding: 6px 24px; background: #e3e1dc; font-size: 20px; letter-spacing: .06em; color: #333; transform: translateY(8px); opacity: 0; transition: transform .4s cubic-bezier(.2,.8,.2,1) .25s, opacity .3s .25s; }
 #sect.reel-in #s-sec .tab { transform: none; opacity: 1; }
-#s-sec .box { position: relative; height: 290px; background: radial-gradient(circle at 70% 30%, #2a2c2b 0, transparent 50%), linear-gradient(160deg, #0b0c0b 0%, #1b1d1c 55%, #0b0c0b 100%); color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; overflow: hidden; clip-path: inset(0 100% 0 0); transition: clip-path .55s cubic-bezier(.7,0,.2,1); }
-#sect.reel-in #s-sec .box { clip-path: inset(0 0 0 0); }
+#s-sec .box { position: relative; height: 290px; background: radial-gradient(circle at 70% 30%, #2a2c2b 0, transparent 50%), linear-gradient(160deg, #0b0c0b 0%, #1b1d1c 55%, #0b0c0b 100%); color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; overflow: hidden; visibility: hidden; }
+#sect.landed #s-sec .box { visibility: visible; }
+#s-sec .box > * { opacity: 0; transform: translateY(8px); }
+#sect.landed #s-sec .box > * { opacity: 1; transform: none; transition: opacity .3s ease, transform .45s cubic-bezier(.2,.8,.2,1); }
+#sect.landed #s-sec .box > :nth-child(3) { transition-delay: .06s; }
+#sect.landed #s-sec .box > :nth-child(4) { transition-delay: .12s; }
 #s-sec .box .dot { position: absolute; right: 18px; top: 16px; width: 14px; height: 14px; border-radius: 50%; background: #9a9893; }
 #s-sec .code { font-size: 120px; }
 #s-sec .sub { margin-top: 10px; font-size: 13px; letter-spacing: .1em; }
@@ -180,15 +186,15 @@ svg { display: block; }
 .s-limit span { font-size: 15px; font-weight: 700; letter-spacing: .04em; }
 
 /* 中央剪影：AUTO-MAS 标志以半调网点填充，切换条目时转动 */
-#s-hero { position: absolute; left: 600px; top: 0; width: 760px; height: 1080px; pointer-events: none; transform: translateY(40px); }
+#s-hero { position: absolute; left: 690px; top: -60px; width: 380px; height: 540px; pointer-events: none; transform: translateY(30px); }
 #sect.reel-in #s-hero { transform: none; transition: opacity .6s ease .15s, transform .9s cubic-bezier(.2,.8,.2,1) .15s; }
 #s-hero svg { position: absolute; inset: 0; width: 100%; height: 100%; }
 #s-hero .rot { transform-origin: 380px 600px; transform: rotate(var(--rot, 0deg)); transition: transform .9s cubic-bezier(.2,.8,.2,1); }
-.hero-num { position: absolute; right: -40px; top: 60px; font-size: 300px; font-weight: 700; line-height: 1; letter-spacing: -.04em; color: transparent; -webkit-text-stroke: 2px rgba(11,12,11,.16); transition: transform .5s cubic-bezier(.2,.8,.2,1), opacity .25s; }
+.hero-num { position: absolute; left: 250px; top: 330px; font-size: 150px; font-weight: 700; line-height: 1; letter-spacing: -.04em; color: transparent; -webkit-text-stroke: 2px rgba(11,12,11,.16); transition: transform .5s cubic-bezier(.2,.8,.2,1), opacity .25s; }
 .hero-num.swap { transform: translateY(-30px); opacity: 0; transition: none; }
 
 /* 右上条目分页：琥珀点，当前项为 •–o–• */
-#s-pager { position: absolute; left: 1300px; top: 112px; display: flex; align-items: center; gap: 4px; z-index: 5; }
+#s-pager { position: absolute; left: 1150px; top: 58px; display: flex; align-items: center; gap: 4px; z-index: 5; }
 #s-pager button { position: relative; width: 22px; height: 22px; border: none; background: none; padding: 0; cursor: pointer; }
 #s-pager button::before { content: ''; position: absolute; left: 8px; top: 8px; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); transition: transform .2s; }
 #s-pager button:hover::before { transform: scale(1.6); }
@@ -199,50 +205,82 @@ svg { display: block; }
 
 /* 右侧档案：半透明玻璃面板，略向内转 */
 #sect { perspective: 2200px; perspective-origin: 70% 40%; }
-#s-glass { position: absolute; left: 1300px; top: 150px; width: 580px; height: 492px; z-index: 5; transform-origin: 100% 50%;
+#s-glass { position: absolute; left: 1150px; top: 92px; width: 730px; height: 800px; z-index: 5; transform-origin: 100% 50%;
   transform: rotateY(calc(18deg + var(--ty, 0deg))) translateX(40px);
   background: linear-gradient(135deg, rgba(255,255,255,.72), rgba(246,244,241,.5) 60%, rgba(255,255,255,.62));
   border: 1px solid rgba(20,20,18,.14); box-shadow: 0 30px 60px -40px rgba(20,20,18,.45), inset 0 0 0 1px rgba(255,255,255,.55); backdrop-filter: blur(8px); }
-#sect.reel-in #s-glass { transform: rotateY(calc(4deg + var(--ty, 0deg))) rotateX(var(--tx, 0deg)); transition: opacity .4s ease .35s, transform .8s cubic-bezier(.2,.8,.2,1) .35s; }
+#sect.reel-in #s-glass { transform: rotateY(calc(2deg + var(--ty, 0deg))) rotateX(var(--tx, 0deg)); transition: opacity .4s ease .35s, transform .8s cubic-bezier(.2,.8,.2,1) .35s; }
 
 /* 右侧铭牌（对应 PV 的人物名牌） */
-#s-plate { position: absolute; left: 1300px; top: 676px; width: 580px; height: 150px; z-index: 5; transform: translateX(30px); }
+#s-plate { position: absolute; left: 1150px; top: 910px; width: 730px; height: 100px; z-index: 5; transform: translateX(30px); }
 #sect.reel-in #s-plate { transform: none; transition: opacity .35s .2s, transform .6s cubic-bezier(.2,.8,.2,1) .2s; }
-#s-plate .logo { position: absolute; left: 0; top: 0; width: 148px; height: 82px; background: var(--ink); color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; }
-#s-plate .logo svg { width: 46px; height: 46px; }
-#s-plate .logo span { font-size: 7px; font-weight: 700; letter-spacing: .3em; }
-#s-plate .txt { position: absolute; left: 164px; top: -4px; right: 0; }
-#s-plate .role { font-size: 17px; letter-spacing: .04em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-#s-plate .name { font-size: 46px; font-weight: 700; line-height: 1.12; letter-spacing: .02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-#s-plate .line { position: absolute; left: 148px; right: 0; top: 80px; height: 2px; background: var(--ink); transform-origin: left; transform: scaleX(0); }
+#s-plate .logo { position: absolute; left: 0; top: 0; width: 116px; height: 64px; background: var(--ink); color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; }
+#s-plate .logo svg { width: 34px; height: 34px; }
+#s-plate .logo span { font-size: 6px; font-weight: 700; letter-spacing: .3em; }
+#s-plate .txt { position: absolute; left: 132px; top: -4px; right: 0; }
+#s-plate .role { font-size: 14px; letter-spacing: .04em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#s-plate .name { font-size: 34px; font-weight: 700; line-height: 1.12; letter-spacing: .02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#s-plate .line { position: absolute; left: 116px; right: 0; top: 62px; height: 2px; background: var(--ink); transform-origin: left; transform: scaleX(0); }
 #sect.reel-in #s-plate .line { transform: scaleX(1); transition: transform .6s cubic-bezier(.7,0,.2,1) .35s; }
-#s-plate .detail { position: absolute; left: 164px; top: 94px; font-size: 13px; letter-spacing: .06em; }
+#s-plate .detail { position: absolute; left: 132px; top: 72px; font-size: 13px; letter-spacing: .06em; }
 #s-plate .detail b { font-weight: 700; }
 #s-plate .txt, #s-plate .detail { transition: opacity .2s, transform .35s cubic-bezier(.2,.8,.2,1); }
 #s-plate.swap .txt, #s-plate.swap .detail { opacity: 0; transform: translateY(10px); transition: none; }
 
 /* 底部字幕：部门说明（PV 的字幕位置） */
 #s-sub { position: absolute; left: 0; right: 0; top: 1026px; text-align: center; font-size: 19px; letter-spacing: .08em; color: #fff; text-shadow: 0 0 2px rgba(0,0,0,.9), 0 0 8px rgba(0,0,0,.6); z-index: 6; pointer-events: none; }
-.s-powered { position: absolute; right: 56px; top: 952px; font-size: 14px; letter-spacing: .04em; }
+.s-powered { position: absolute; right: 56px; top: 1044px; font-size: 14px; letter-spacing: .04em; }
 .s-powered b { font-weight: 700; }
-.s-hint { position: absolute; right: 56px; top: 990px; font-size: 11px; letter-spacing: .2em; color: var(--muted); }
+.s-hint { position: absolute; right: 250px; top: 1048px; font-size: 11px; letter-spacing: .2em; color: var(--muted); }
 
 /* 右侧档案面板 */
-#s-panel { position: absolute; left: 26px; right: 26px; top: 18px; bottom: 16px; display: flex; flex-direction: column; }
+#s-panel { position: absolute; left: 30px; right: 30px; top: 20px; bottom: 20px; display: flex; flex-direction: column; }
 #s-panel .sp-title, #s-panel .sp-rule { display: none; }
-#s-panel .sp-body { margin-top: 12px; grid-template-columns: 1fr; gap: 16px; }
-#s-panel .kv { grid-template-columns: 110px 1fr; }
-#s-panel .kv > div { padding: 7px 4px; font-size: 14px; }
-#s-panel .tbl { font-size: 13px; }
+#s-panel .sp-meta { justify-content: space-between; }
+#s-panel .sp-meta .api { font: 600 11px Consolas, monospace; letter-spacing: .04em; color: var(--muted); }
+#s-panel .sp-body { margin-top: 14px; grid-template-columns: 1fr; gap: 16px; overflow: hidden; padding-right: 0; }
+#s-panel .kv { grid-template-columns: 150px 1fr; }
+#s-panel .kv > div { padding: 6px 4px; font-size: 15px; min-height: 40px; display: flex; align-items: center; gap: 10px; }
+#s-panel .kv .k { font-size: 14px; letter-spacing: .06em; cursor: help; }
+#s-panel .tbl { font-size: 14px; }
 #s-panel .tbl td { padding: 7px 6px; }
 #s-panel .stats b { font-size: 30px; }
 #s-panel .stats div { padding: 8px 12px; }
-#s-panel .quote { font-size: 22px; }
-#s-panel .banner { height: 150px; }
-#s-panel .banner h3 { font-size: 30px; }
-#s-panel .log { height: 150px; }
-#s-panel .sp-actions { margin-top: 10px; padding-top: 12px; flex-wrap: wrap; gap: 8px; }
-#s-panel .btn { padding: 8px 16px; font-size: 13px; }
+#s-panel .banner { height: 170px; }
+#s-panel .banner h3 { font-size: 32px; }
+#s-panel .log { height: 170px; }
+#s-panel .log.tall { height: 470px; }
+#s-panel .sp-actions { margin-top: auto; padding-top: 14px; flex-wrap: wrap; gap: 10px; }
+#s-panel .btn { padding: 10px 20px; font-size: 14px; }
+/* 功能分页：同一条目内按功能拆分，避免单页显示不全 */
+.sp-tabs { display: flex; gap: 2px; margin-top: 14px; border-bottom: 2px solid var(--ink); }
+.sp-tabs button { position: relative; font: 600 15px var(--font); letter-spacing: .08em; color: var(--muted); background: none; border: none; padding: 8px 16px 9px; cursor: pointer; }
+.sp-tabs button b { font: 700 10px var(--font); letter-spacing: .1em; margin-right: 7px; color: var(--hair); }
+.sp-tabs button:hover { color: var(--ink); }
+.sp-tabs button.on { color: var(--paper); background: var(--ink); }
+.sp-tabs button.on b { color: var(--accent); }
+.sp-tabs button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+/* 表单控件：与后端配置项一一对应 */
+.inp { flex: 1; min-width: 0; font: 500 15px var(--font); color: var(--ink); background: transparent; border: none; border-bottom: 1.5px solid var(--hair); padding: 4px 2px; }
+.inp.mono { font: 14px Consolas, monospace; }
+.inp.num { flex: 0 0 76px; text-align: right; font-variant-numeric: tabular-nums; }
+.inp:hover { border-bottom-color: var(--ink); }
+.inp:focus { outline: none; border-bottom-color: var(--accent); }
+.unit { font-size: 13px; color: var(--muted); white-space: nowrap; }
+.mini { font: 700 12px var(--font); letter-spacing: .08em; padding: 5px 10px; border: 1.5px solid var(--ink); background: transparent; color: var(--ink); cursor: pointer; white-space: nowrap; }
+.mini:hover { border-color: var(--accent); color: var(--accent); }
+.seg { display: inline-flex; border: 1.5px solid var(--ink); flex-shrink: 0; }
+.seg button { font: 600 13px var(--font); letter-spacing: .04em; padding: 5px 12px; border: none; background: transparent; color: var(--ink); cursor: pointer; white-space: nowrap; }
+.seg button + button { border-left: 1.5px solid var(--ink); }
+.seg button.on { background: var(--ink); color: var(--paper); }
+.seg button:not(.on):hover { color: var(--accent); }
+.chips { display: inline-flex; gap: 4px; }
+.chips button { width: 30px; height: 28px; font: 600 13px var(--font); border: 1.5px solid var(--hair); background: transparent; color: var(--muted); cursor: pointer; }
+.chips button.on { border-color: var(--ink); background: var(--ink); color: var(--paper); }
+.mini:focus-visible, .seg button:focus-visible, .chips button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.tog.off-x { opacity: .4; }
+.note { font-size: 13px; line-height: 1.7; color: var(--muted); border-left: 3px solid var(--accent); padding: 4px 0 4px 12px; }
+#s-panel .tbl .tog, #s-panel .tbl .sel { font-size: 14px; }
 #s-panel .sp-head, #s-panel .blk, #s-panel .sp-actions { opacity: 0; transform: translateY(14px); transition: opacity .3s ease, transform .45s cubic-bezier(.2,.8,.2,1); }
 #s-panel.show .sp-head, #s-panel.show .blk, #s-panel.show .sp-actions { opacity: 1; transform: none; }
 #s-panel.leave .sp-head, #s-panel.leave .blk, #s-panel.leave .sp-actions { opacity: 0; transform: translateY(-10px); transition-duration: .14s; transition-delay: 0s !important; }
@@ -655,126 +693,189 @@ const table = (title, cols, rows, wide = true) => ({ t: 'table', title, cols, ro
 const stats = (title, rows) => ({ t: 'stats', title, rows })
 const quote = (text, by) => ({ t: 'quote', text, by, wide: true })
 const list = (title, rows) => ({ t: 'list', title, rows })
-const log = (title, lines) => ({ t: 'log', title, lines, wide: true })
+const log = (title, lines, tall) => ({ t: 'log', title, lines, tall, wide: true })
 const banner = (o) => ({ t: 'banner', ...o, wide: true })
-const tog = on => `<span class="tog${on ? ' on' : ''}" role="switch" aria-checked="${on}" tabindex="0"><i></i>${on ? '开' : '关'}</span>`
+const note = text => ({ t: 'note', text, wide: true })
+const esc = v => String(v).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;')
+const tog = (on, attrs = '') => `<span class="tog${on ? ' on' : ''}" role="switch" aria-checked="${on}" tabindex="0"${attrs}><i></i>${on ? '开' : '关'}</span>`
+const sel = (opts, i = 0, attrs = '') => `<select class="sel"${attrs}>${opts.map((o, k) => `<option${k === i ? ' selected' : ''}>${o}</option>`).join('')}</select>`
+const inp = (v, cls = '') => `<input class="inp ${cls}" value="${esc(v)}" spellcheck="false">`
+const num = (v, unit = '') => `<input class="inp num" type="number" value="${v}">${unit ? `<span class="unit">${unit}</span>` : ''}`
+const path = v => `${inp(v, 'mono')}<button class="mini" type="button" data-pick>浏览</button>`
+const seg = (opts, i = 0) => `<span class="seg" role="radiogroup">${opts.map((o, k) => `<button type="button" role="radio" aria-checked="${k === i}"${k === i ? ' class="on"' : ''}>${o}</button>`).join('')}</span>`
+const DAYS = ['一', '二', '三', '四', '五', '六', '日']
+const chips = mask => `<span class="chips">${DAYS.map((d, k) => `<button type="button" aria-pressed="${mask[k] === '1'}"${mask[k] === '1' ? ' class="on"' : ''}>${d}</button>`).join('')}</span>`
+const mini = (...names) => names.map(n => `<button class="mini" type="button">${n}</button>`).join(' ')
 const tag = (text, kind) => `<span class="tag ${kind}">${text}</span>`
 const OK = tag('完成', 'ok'), RUN = tag('运行', 'run'), WAIT = tag('等待', 'idle'), ERR = tag('异常', 'err'), ON = tag('启用', 'ok'), OFF = tag('禁用', 'idle')
+const POWER = ['无动作', '退出 AUTO-MAS', '重启 AUTO-MAS', '睡眠', '休眠', '注销', '关机', '强制关机', '重启']
+
+// 通用脚本：按功能拆为 程序 / 判定 / 游戏 / 限制 / 账号 五页，字段与 GeneralConfig、GeneralUserConfig 对应
+function general(o) {
+  const api = 'POST /api/scripts/update'
+  return { name: o.name, en: o.en, tabs: [
+    { name: '程序', api, blocks: [
+      kv('SCRIPT', [['脚本名称', inp(o.name), 'Info.Name'], ['根目录', path(o.root), 'Info.RootPath'], ['启动程序', path(o.exe), 'Script.ScriptPath'], ['启动参数', inp(o.args || '', 'mono'), 'Script.Arguments'], ['配置路径', path(o.cfg), 'Script.ConfigPath'], ['路径类型', seg(['文件', '文件夹'], o.folder ? 1 : 0), 'Script.ConfigPathMode'], ['回写配置', seg(['从不', '成功时', '失败时', '总是'], 1), 'Script.UpdateConfigMode']]),
+      kv('PROCESS', [['追踪进程', tog(!!o.track), 'Script.IfTrackProcess'], ['进程名', inp(o.track || '', 'mono'), 'Script.TrackProcessName'], ['清理范围', seg(['跨会话强力', '仅本轮', '当前会话'], 0), 'Script.TaskKillMode']]),
+    ], actions: ['保存', '复制脚本', '删除脚本'] },
+    { name: '判定', api, blocks: [
+      kv('LOG FILE', [['日志路径', path(o.log), 'Script.LogPath'], ['路径日期格式', inp('%Y-%m-%d', 'mono'), 'Script.LogPathFormat'], ['时间戳位置', `${num(1)}<span class="unit">至</span>${num(19)}<span class="unit">列</span>`, 'Script.LogTimeStart / LogTimeEnd'], ['时间格式', inp('%Y-%m-%d %H:%M:%S', 'mono'), 'Script.LogTimeFormat']]),
+      kv('MATCH', [['成功判定', inp(o.ok) + seg(['关键字', '正则'], 0), 'Script.SuccessLog / SuccessLogMode'], ['失败判定', inp(o.err) + seg(['关键字', '正则'], 0), 'Script.ErrorLog / ErrorLogMode'], ['日志预处理', tog(false), 'Script.LogHookEnabled'], ['推送日志', tog(true), 'Script.PushLogEnabled']]),
+      note('关键字模式用「|」分隔多个子串，任一命中即判定；正则模式按整行匹配。预处理先于判定执行。'),
+    ], actions: ['保存', '测试匹配'] },
+    { name: '游戏', api, blocks: [
+      kv('GAME', [['随脚本启动游戏', tog(!!o.game), 'Game.Enabled'], ['启动方式', seg(['模拟器', '客户端', 'URL 协议'], o.gameType || 1), 'Game.Type'], ['游戏路径', path(o.game || ''), 'Game.Path'], ['进程名', inp(o.gameProc || '', 'mono'), 'Game.ProcessName'], ['启动参数', inp('', 'mono'), 'Game.Arguments'], ['启动后等待', num(30, '秒'), 'Game.WaitTime'], ['结束后强制关闭', tog(true), 'Game.IfForceClose']]),
+      kv('EMULATOR', [['模拟器', sel(['未选择', 'MuMu 12', '雷电 9', 'Android AVD'], o.gameType === 0 ? 1 : 0), 'Game.EmulatorId'], ['实例', sel(['未选择', 'MuMu-0', 'MuMu-1', 'MuMu-2'], o.gameType === 0 ? 1 : 0), 'Game.EmulatorIndex']]),
+    ], actions: ['保存'] },
+    { name: '限制', api, blocks: [
+      kv('RUN LIMIT', [['单账号总时限', num(120, '分钟'), 'Run.HardTimeLimit'], ['单次运行时限', num(o.limit || 60, '分钟'), 'Run.RunTimeLimit'], ['单次重试次数', num(3, '次'), 'Run.RunTimesLimit'], ['每日代理上限', num(0, '次 · 0 为不限'), 'Run.ProxyTimesLimit']]),
+      stats('TODAY', [['已代理', '1'], ['已重试', '0'], ['剩余时限', '118m']]),
+      note('总时限包含等待游戏与全部重试；单次超时会先按清理清单结束进程，再按重启清单补跑。'),
+    ], actions: ['保存', '恢复默认'] },
+    { name: '账号', api: 'POST /api/scripts/user/update', blocks: [
+      table('USERS', ['名称', '启用', '剩余天数', '配置来源', '上次代理'], o.users.map(u => [u[0], tog(u[1]), u[2], sel(['独立', '共享', '原生'], u[3] || 0), u[4]])),
+      note('配置来源：独立 = 账号单独一份脚本配置；共享 = 与同脚本账号共用；原生 = 直接使用脚本自身配置。'),
+    ], actions: ['添加账号', '设置脚本', '删除所选'] },
+  ] }
+}
+
+// 模拟器：设备 / 配置 两页，对应 EmulatorConfig 与 /api/emulator/operate
+function emulator(o) {
+  const cfg = [['名称', inp(o.name), 'Info.Name'], ['类型', seg(['通用', 'MuMu', '雷电', '2.0'], o.type), 'Info.Type'], ['安装路径', path(o.path), 'Info.Path'], ['最大等待', num(300, '秒'), 'Info.MaxWaitTime'], ['老板键', inp('Alt+Q', 'mono'), 'Info.BossKey'], ['关闭时清理残留', tog(false), 'Info.ForceKillOnClose'], ['启动前关闭全部', tog(false), 'Info.ForceKillBeforeLaunch']]
+  if (o.type === 3) cfg.push(['稳定模式', tog(true), 'Info.StableMode'], ['配置守卫', tog(true), 'Info.ConfigGuard'])
+  return { name: o.name, en: o.en, tabs: [
+    { name: '设备', api: 'POST /api/emulator/operate', blocks: [
+      table('DEVICES', ['名称', '状态', 'ADB 地址', '操作'], o.devices.map(d => [d[0], d[1], `<span style="font:13px Consolas,monospace">${d[2]}</span>`, mini(d[1] === RUN ? '关闭' : '启动', '显示')])),
+      stats('SUMMARY', [['实例', String(o.devices.length)], ['运行中', String(o.devices.filter(d => d[1] === RUN).length)], ['被任务占用', o.devices.some(d => d[1] === RUN) ? '1' : '0']]),
+    ], actions: ['刷新设备', '全部关闭'] },
+    { name: '配置', api: 'POST /api/emulator/update', blocks: [kv('CONFIG', cfg)], actions: ['保存', '自动搜索', '删除'] },
+  ] }
+}
+
+// 调度队列：调度 / 定时 / 队列项 三页，对应 QueueConfig、TimeSet、QueueItem
+function queue(o) {
+  return { name: o.name, en: o.en, tabs: [
+    { name: '调度', api: 'POST /api/queue/update', blocks: [
+      kv('SCHEDULE', [['队列名称', inp(o.name), 'Info.Name'], ['定时启动', tog(o.cycle ? false : true, ' data-x="time"') , 'Info.TimeEnabled'], ['循环队列', tog(!!o.cycle, ' data-x="cycle"'), 'Info.CycleEnabled'], ['启动时运行', seg(['从不', '每次', '每日首次'], o.startup || 0), 'Info.StartUpMode'], ['完成后', sel(POWER, o.after || 0), 'Info.AfterAccomplish'], ['延时执行', num(0, '分钟'), 'Info.AfterAccomplishDelay']]),
+      kv('HOOKS', [['运行前脚本', tog(false), 'Info.IfScriptBeforeTask'], ['前脚本路径', path(''), 'Info.ScriptBeforeTask'], ['运行后脚本', tog(!!o.after_script), 'Info.IfScriptAfterTask'], ['后脚本路径', path(o.after_script || ''), 'Info.ScriptAfterTask']]),
+    ], actions: ['保存', '立即运行', '删除队列'] },
+    { name: '定时', api: 'POST /api/queue/time/update', blocks: [
+      table('TIME SET', ['启用', '周期', '时间'], o.times.map(t => [tog(t[0]), chips(t[1]), `<input class="inp num" type="time" value="${t[2]}" style="flex-basis:96px">`])),
+      note(o.cycle ? '循环队列与定时启动互斥：开启循环后，按「队列项」中各脚本自己的周期持续运行。' : '同一队列可设置多个定时；周期为空时该定时不会触发。'),
+    ], actions: ['添加定时', '删除所选'] },
+    { name: '队列项', api: 'POST /api/queue/item/update', blocks: [
+      table('ITEMS', ['脚本', '参与循环', '方式', '时间 / 间隔', '下次运行'], o.items.map(it => [sel(['BGI 每日', '鸣潮日常', '星铁清体力', '自定义脚本'], it[0]), tog(it[1]), seg(['定时', '间隔'], it[2]), it[2] ? `${num(it[3], '分钟')}` : `<input class="inp num" type="time" value="${it[3]}" style="flex-basis:96px">`, it[4]])),
+      note('「参与循环」「方式」「间隔」只在循环队列中生效；间隔可从上次开始或上次结束计时。'),
+    ], actions: ['添加脚本', '上移', '下移', '删除所选'] },
+  ] }
+}
 
 const SECTIONS = {
-  '01': { caption: '主页：快速启动队列，查看各账号的代理状态。', items: [
-    { name: '快速启动', en: 'QUICK START', blocks: [
-      kv('START TARGET', [['启动队列', '<select class="sel" data-k="queue"><option>日常托管</option><option>周常清理</option><option>仅签到</option></select>'], ['完成后', '<select class="sel"><option>无动作</option><option>退出 AUTO-MAS</option><option>睡眠</option><option>关机</option></select>'], ['上次运行', '今天 06:00 · 全部完成'], ['下次定时', '明天 06:00']]),
+  '01': { caption: '主页：快速启动队列或脚本，查看各账号的代理状态。', items: [
+    { name: '快速启动', en: 'QUICK START', api: 'POST /api/dispatch/start', blocks: [
+      kv('START', [['任务对象', sel(['日常托管 · 队列', '周常收尾 · 队列', '夜间循环 · 循环队列', 'BGI 每日 · 脚本'], 0, ' data-k="queue"'), 'taskId'], ['运行模式', seg(['自动代理', '设置脚本', '循环运行'], 0), 'mode'], ['完成后', sel(POWER), 'POST /api/dispatch/set/power'], ['上次运行', '今天 06:00 · 全部完成'], ['下次定时', '今天 18:00 · 日常托管']]),
       stats('TODAY', [['今日已代理', '<span data-k="done">6</span>'], ['待运行', '<span data-k="left">2</span>'], ['异常', '0']]),
       { t: 'run', title: 'RUN STATUS', wide: true },
     ], actions: ['开始执行', '停止'] },
-    { name: '代理状态', en: 'PROXY STATUS', blocks: [
+    { name: '代理状态', en: 'PROXY STATUS', api: 'GET /api/dispatch/runtime-snapshot', blocks: [
       stats('NOW', [['运行中队列', '1'], ['运行中账号', '1'], ['本轮剩余', '3']]),
-      table('ACCOUNTS', ['账号', '托管', '今日', '状态'], [['主号', 'BGI 每日', '1 / 1', OK], ['小号', 'BGI 每日', '0 / 1', RUN], ['鸣潮主号', '鸣潮日常', '1 / 1', OK], ['星铁', '星铁清体力', '1 / 2', ERR]]),
+      table('ACCOUNTS', ['账号', '托管', '上次代理', '今日', '状态'], [['主号', 'BGI 每日', '06:12', '1 / 2', OK], ['小号', 'BGI 每日', '昨天', '0 / 2', RUN], ['鸣潮主号', '鸣潮日常', '06:40', '1 / 1', OK], ['星铁', '星铁清体力', '06:52', '1 / 2', ERR], ['默认', '自定义脚本', '周日', '0 / 1', WAIT]]),
     ], actions: ['刷新', '查看历史记录'] },
   ] },
-  '02': { caption: '通用脚本托管：程序路径、日志判定与账号。', items: [
-    { name: 'BGI 每日', en: 'GENERAL · RDP', blocks: [
-      kv('SCRIPT', [['类型', '通用脚本'], ['程序', 'D:\\BetterGI\\BetterGI.exe'], ['成功判定', '日志 · “一条龙完成”'], ['运行环境', '本地远程桌面分身']]),
-      stats('RUN LIMIT', [['单次限时', '60m'], ['重试', '3'], ['今日上限', '2']]),
-      table('ACCOUNTS', ['账号', '状态', '剩余天数', '今日代理'], [['主号', ON, '永久', '1 / 2'], ['小号', ON, '30 天', '0 / 2']]),
-    ], actions: ['编辑托管', '添加账号', '复制', '删除'] },
-    { name: '鸣潮日常', en: 'GENERAL', blocks: [
-      kv('SCRIPT', [['类型', '通用脚本'], ['程序', 'D:\\ok-ww\\ok-ww.exe'], ['成功判定', '进程正常退出'], ['游戏', '启动器 · 鸣潮']]),
-      table('ACCOUNTS', ['账号', '状态', '剩余天数', '今日代理'], [['鸣潮主号', ON, '永久', '1 / 1']]),
-    ], actions: ['编辑托管', '添加账号', '复制', '删除'] },
-    { name: '星铁清体力', en: 'GENERAL', blocks: [
-      kv('SCRIPT', [['类型', '通用脚本'], ['程序', 'D:\\M7A\\March7th.exe'], ['成功判定', '日志 · “任务完成”'], ['失败判定', '日志 · “ERROR”']]),
-      table('ACCOUNTS', ['账号', '状态', '剩余天数', '今日代理'], [['星铁', ON, '12 天', '1 / 2'], ['星铁小号', OFF, '—', '0 / 2']]),
-    ], actions: ['编辑托管', '添加账号', '复制', '删除'] },
-    { name: '自定义脚本', en: 'GENERAL', blocks: [
-      kv('SCRIPT', [['类型', '通用脚本'], ['程序', 'C:\\Tools\\daily.bat'], ['成功判定', '进程正常退出'], ['配置模式', '文件']]),
-      table('ACCOUNTS', ['账号', '状态', '剩余天数', '今日代理'], [['默认', ON, '永久', '0 / 1']]),
-    ], actions: ['编辑托管', '添加账号', '复制', '删除'] },
+  '02': { caption: '通用脚本托管：程序、日志判定、游戏启动、运行限制与账号，按功能分页。', items: [
+    general({ name: 'BGI 每日', en: 'GENERAL · RDP', root: 'D:\\BetterGI', exe: 'D:\\BetterGI\\BetterGI.exe', args: '--startOneDragon', cfg: 'D:\\BetterGI\\User\\config.json', track: 'BetterGI.exe', log: 'D:\\BetterGI\\log\\better-genshin-impact%Y%m%d.log', ok: '一条龙完成', err: '任务异常|ERROR', game: 'D:\\Genshin Impact\\YuanShen.exe', gameProc: 'YuanShen.exe', users: [['主号', true, '永久', 0, '今天 06:12'], ['小号', true, '30 天', 0, '昨天 06:30'], ['测试号', false, '—', 1, '—']] }),
+    general({ name: '鸣潮日常', en: 'GENERAL', root: 'D:\\ok-ww', exe: 'D:\\ok-ww\\ok-ww.exe', args: '-t 1 -e', cfg: 'D:\\ok-ww\\configs', folder: true, log: 'D:\\ok-ww\\logs\\ok-script.log', ok: '任务完成', err: 'Exception', game: 'D:\\Wuthering Waves\\launcher.exe', gameProc: 'Client-Win64-Shipping.exe', users: [['鸣潮主号', true, '永久', 2, '今天 06:40']] }),
+    general({ name: '星铁清体力', en: 'GENERAL', root: 'D:\\M7A', exe: 'D:\\M7A\\March7th Assistant.exe', cfg: 'D:\\M7A\\config.yaml', track: 'March7th Assistant.exe', log: 'D:\\M7A\\logs\\%Y-%m-%d.log', ok: '任务完成', err: 'ERROR', game: 'D:\\Star Rail\\StarRail.exe', gameProc: 'StarRail.exe', limit: 45, users: [['星铁', true, '12 天', 0, '今天 06:52'], ['星铁小号', false, '—', 0, '—']] }),
+    general({ name: '自定义脚本', en: 'GENERAL', root: 'C:\\Tools', exe: 'C:\\Tools\\daily.bat', cfg: '', log: 'C:\\Tools\\daily.log', ok: 'done', err: 'fail', gameType: 2, users: [['默认', true, '永久', 0, '周日 22:10']] }),
   ] },
-  '03': { caption: '模拟器实例：启动、关闭、显示与设备检测。', items: [
-    { name: 'MuMu 12', en: 'EMULATOR', blocks: [
-      kv('INSTALL', [['类型', 'MuMu 模拟器 12'], ['路径', 'D:\\MuMuPlayer-12.0'], ['实例数', '3']]),
-      table('DEVICES', ['名称', '状态', 'ADB 地址'], [['MuMu-0', RUN, '127.0.0.1:16384'], ['MuMu-1', WAIT, '127.0.0.1:16416'], ['MuMu-2', WAIT, '127.0.0.1:16448']]),
-    ], actions: ['启动', '关闭', '显示 / 隐藏', '刷新设备'] },
-    { name: '雷电 9', en: 'EMULATOR', blocks: [
-      kv('INSTALL', [['类型', '雷电模拟器 9'], ['路径', 'D:\\leidian\\LDPlayer9'], ['实例数', '1']]),
-      table('DEVICES', ['名称', '状态', 'ADB 地址'], [['雷电-0', WAIT, 'emulator-5554']]),
-    ], actions: ['启动', '关闭', '显示 / 隐藏', '刷新设备'] },
-    { name: 'Android AVD', en: 'EMULATOR 2.0', blocks: [
-      kv('INSTALL', [['类型', 'Android Studio AVD'], ['SDK', 'C:\\Android\\Sdk'], ['实例数', '2']]),
-      table('DEVICES', ['名称', '状态', 'ADB 地址'], [['Pixel_7', WAIT, 'emulator-5556'], ['Tablet', WAIT, 'emulator-5558']]),
-    ], actions: ['启动', '关闭', '刷新设备'] },
+  '03': { caption: '模拟器：实例启动、关闭、显示与设备检测；配置与 2.0 稳定模式。', items: [
+    emulator({ name: 'MuMu 12', en: 'EMULATOR', type: 1, path: 'D:\\MuMuPlayer-12.0', devices: [['MuMu-0', RUN, '127.0.0.1:16384'], ['MuMu-1', WAIT, '127.0.0.1:16416'], ['MuMu-2', WAIT, '127.0.0.1:16448']] }),
+    emulator({ name: '雷电 9', en: 'EMULATOR', type: 2, path: 'D:\\leidian\\LDPlayer9', devices: [['雷电-0', WAIT, 'emulator-5554']] }),
+    emulator({ name: 'Android AVD', en: 'EMULATOR 2.0', type: 3, path: 'C:\\Android\\Sdk', devices: [['Pixel_7', WAIT, 'emulator-5556'], ['Tablet', WAIT, 'emulator-5558']] }),
   ] },
-  '04': { caption: '调度队列：定时、开机启动、循环与完成后动作。', items: [
-    { name: '日常托管', en: 'QUEUE', blocks: [
-      kv('SCHEDULE', [['定时启动', '06:00 / 18:00'], ['开机启动', '每日首次'], ['循环运行', tog(false)], ['完成后', '无动作']]),
-      kv('SCRIPT HOOKS', [['队列前脚本', tog(false)], ['队列后脚本', tog(true)], ['后脚本路径', 'C:\\Tools\\after.bat']]),
-      table('ITEMS', ['托管', '账号范围', '状态'], [['BGI 每日', '全部账号', ON], ['鸣潮日常', '全部账号', ON], ['星铁清体力', '星铁', ON]]),
-    ], actions: ['立即运行', '编辑队列', '添加托管'] },
-    { name: '周常收尾', en: 'QUEUE', blocks: [
-      kv('SCHEDULE', [['定时启动', '周日 22:00'], ['开机启动', '从不'], ['循环运行', tog(false)], ['完成后', '睡眠']]),
-      table('ITEMS', ['托管', '账号范围', '状态'], [['自定义脚本', '默认', ON]]),
-    ], actions: ['立即运行', '编辑队列', '添加托管'] },
-    { name: '夜间循环', en: 'QUEUE · CYCLE', blocks: [
-      kv('SCHEDULE', [['定时启动', '23:30'], ['开机启动', '从不'], ['循环运行', tog(true)], ['完成后', '关机']]),
-      table('ITEMS', ['托管', '账号范围', '状态'], [['BGI 每日', '小号', ON], ['星铁清体力', '星铁小号', OFF]]),
-    ], actions: ['立即运行', '编辑队列', '添加托管'] },
+  '04': { caption: '调度队列：定时与循环、启动时运行、完成后动作与队列项。', items: [
+    queue({ name: '日常托管', en: 'QUEUE', startup: 2, after_script: 'C:\\Tools\\after.bat', times: [[true, '1111111', '06:00'], [true, '1111111', '18:00']], items: [[0, true, 0, '06:00', '今天 18:00'], [1, true, 0, '06:30', '明天 06:30'], [2, true, 0, '06:45', '明天 06:45']] }),
+    queue({ name: '周常收尾', en: 'QUEUE', after: 3, times: [[true, '0000001', '22:00']], items: [[3, true, 0, '22:00', '周日 22:00']] }),
+    queue({ name: '夜间循环', en: 'QUEUE · CYCLE', cycle: true, after: 6, times: [[false, '0000000', '23:30']], items: [[0, true, 1, 480, '今天 23:30'], [2, false, 1, 240, '—']] }),
   ] },
-  '05': { caption: '调度中心：执行面板、任务总览与实时日志。', items: [
-    { name: '主执行面板', en: 'PANEL 01', blocks: [
-      kv('TASK', [['任务', '队列 · 日常托管'], ['模式', '自动代理'], ['状态', RUN + ' 已运行 02:13'], ['完成后', '无动作']]),
-      table('TASK TREE', ['托管', '账号', '状态'], [['BGI 每日', '主号', OK], ['BGI 每日', '小号', RUN], ['鸣潮日常', '鸣潮主号', WAIT]], false),
-      log('LOG', ['<span>06:00:02</span> 队列开始：日常托管', '<span>06:00:05</span> BGI 每日 · 主号：启动远程桌面分身', '<span class="s">06:12:40</span> <span class="s">主号 · 一条龙完成 → Success!</span>', '<span>06:12:44</span> BGI 每日 · 小号：启动中…']),
-    ], actions: ['停止任务', '从指定托管继续'] },
-    { name: '面板 02', en: 'PANEL 02', blocks: [
-      kv('TASK', [['任务', '未选择'], ['模式', '自动代理'], ['状态', WAIT]]),
-      log('LOG', ['<span>—</span> 选择队列或托管后开始执行']),
+  '05': { caption: '调度中心：执行面板、任务总览、托管切换与实时日志。', items: [
+    { name: '主执行面板', en: 'PANEL 01', tabs: [
+      { name: '总览', api: 'GET /api/dispatch/runtime-snapshot', blocks: [
+        kv('TASK', [['任务', '队列 · 日常托管'], ['模式', '自动代理'], ['状态', RUN + ' 已运行 02:13'], ['完成后', '无动作 · 可在主页修改']]),
+        table('TASK TREE', ['托管', '账号', '状态'], [['BGI 每日', '主号', OK], ['BGI 每日', '小号', RUN], ['鸣潮日常', '鸣潮主号', WAIT], ['星铁清体力', '星铁', WAIT]]),
+      ], actions: ['停止任务', '上一个托管', '下一个托管'] },
+      { name: '日志', api: 'WS /api/core/ws', blocks: [
+        log('LIVE LOG', ['<span>06:00:02</span> 队列开始：日常托管', '<span>06:00:03</span> 本地远程桌面分身：连接中', '<span>06:00:05</span> BGI 每日 · 主号：启动 BetterGI.exe --startOneDragon', '<span>06:00:41</span> 等待游戏窗口 YuanShen.exe', '<span>06:03:10</span> 日志：开始执行一条龙', '<span class="s">06:12:40</span> <span class="s">主号 · 一条龙完成 → Success!</span>', '<span>06:12:42</span> 清理进程：BetterGI.exe、YuanShen.exe', '<span>06:12:44</span> BGI 每日 · 小号：启动中…', '<span>06:13:20</span> 等待游戏窗口 YuanShen.exe'], true),
+      ], actions: ['停止任务', '清空日志'] },
+    ] },
+    { name: '面板 02', en: 'PANEL 02', api: 'POST /api/dispatch/start', blocks: [
+      kv('TASK', [['任务对象', sel(['未选择', '日常托管 · 队列', '周常收尾 · 队列', 'BGI 每日 · 脚本']), 'taskId'], ['运行模式', seg(['自动代理', '设置脚本', '循环运行'], 0), 'mode'], ['状态', WAIT + ' 空闲']]),
+      log('LOG', ['<span>—</span> 选择队列或脚本后开始执行']),
     ], actions: ['开始执行', '关闭面板'] },
   ] },
-  '06': { caption: '本机连接、远程桌面分身、显示守卫与全局热键。', items: [
-    { name: '连接端口', en: 'HOST', blocks: [kv('PORTS', [['页面端口', '36262'], ['后端端口', '36263'], ['实例标识', '372fa7a8…'], ['后端状态', OK + ' 已连接']])], actions: ['复制地址', '修改端口'] },
-    { name: '远程桌面分身', en: 'CHILD SESSION · RDP', blocks: [kv('SESSION', [['启用', tog(true)], ['分辨率', '1920 × 1080'], ['当前状态', WAIT + ' 空闲'], ['说明', '与 BetterGI 相同的 RDP 技术，任务在独立会话中运行']])], actions: ['打开分身', '重建会话'] },
-    { name: '显示输出守卫', en: 'DESKTOP GUARD', blocks: [kv('GUARD', [['启用', tog(true)], ['虚拟显示器', '已安装'], ['无显示器时', '自动挂载虚拟显示器']])], actions: ['检测显示器'] },
-    { name: '全局热键', en: 'HOTKEY', blocks: [table('BINDINGS', ['动作', '快捷键'], [['暂停 / 继续', 'Ctrl + Alt + P'], ['下一个托管', 'Ctrl + Alt + →'], ['停止任务', 'Ctrl + Alt + S']])], actions: ['修改热键'] },
+  '06': { caption: '本地控制：远程桌面分身、虚拟显示器、全局热键与连接端口。', items: [
+    { name: '远程桌面分身', en: 'CHILD SESSION · RDP', api: 'POST /api/setting/update', blocks: [
+      kv('CHILD SESSION', [['启用分身执行', tog(true), 'ChildSession.Enabled'], ['宿主端口', num(36165), 'ChildSession.HostPort'], ['分辨率', sel(['2560x1440', '1920x1080', '1600x900']), 'ChildSession.Resolution'], ['启动时隐藏预览', tog(false), 'ChildSession.StartHidden'], ['观看模式', tog(true), 'ChildSession.WatchMode']]),
+      kv('STATUS', [['会话', WAIT + ' 已登录 · 空闲'], ['占用', '无任务占用']]),
+      note('观看模式会屏蔽本机键鼠进入分身，避免误触打断任务。'),
+    ], actions: ['打开分身', '重新连接', '注销会话'] },
+    { name: '虚拟显示器', en: 'VIRTUAL DISPLAY', api: 'POST /api/setting/virtual-display/check', blocks: [
+      kv('DISPLAY', [['无人值守时挂载', tog(true), 'Display.IfEnableVirtualDisplay'], ['刷新率', seg(['1920×1080 @60', '1920×1080 @30'], 0), 'Display.VirtualDisplayMode'], ['驱动', 'Parsec 虚拟显示驱动 · 已安装'], ['当前状态', '未挂载 · 有真实显示输出']]),
+      note('所有真实显示输出断开后，挂一块 1920×1080 的虚拟屏，避免游戏窗口被压小。驱动需自行安装。'),
+    ], actions: ['检测', '立即卸下'] },
+    { name: '全局热键', en: 'HOTKEY', api: 'POST /api/dispatch/hotkey/reload', blocks: [
+      kv('BINDINGS', [['启用全局热键', tog(true), 'Hotkey.Enabled'], ['启动 / 停止', inp('Ctrl+Alt+S', 'mono') + mini('录制'), 'Hotkey.ToggleStartStop'], ['上一个托管', inp('Ctrl+Alt+Left', 'mono') + mini('录制'), 'Hotkey.PreviousTask'], ['下一个托管', inp('Ctrl+Alt+Right', 'mono') + mini('录制'), 'Hotkey.NextTask']]),
+    ], actions: ['保存并重新加载'] },
+    { name: '连接端口', en: 'HOST', api: 'GET /api/info/version', blocks: [kv('PORTS', [['页面端口', '36262'], ['后端端口', '36263'], ['实例标识', '372fa7a8…'], ['后端状态', OK + ' 已连接']])], actions: ['复制地址'] },
   ] },
-  '07': { caption: '游戏社区签到：账号组、签到结果与定时。', items: [
-    { name: '森空岛', en: 'SKLAND', blocks: [kv('SCHEDULE', [['定时签到', '08:00'], ['启动时签到', tog(true)]]), table('ACCOUNTS', ['账号', '结果', '时间'], [['博士 A', OK, '08:00:12'], ['博士 B', OK, '08:00:15']])], actions: ['立即签到', '管理账号'] },
-    { name: '米游社', en: 'MIYOUSHE', blocks: [kv('SCHEDULE', [['定时签到', '08:05'], ['启动时签到', tog(true)]]), table('ACCOUNTS', ['账号', '结果', '时间'], [['旅行者', OK, '08:05:03'], ['开拓者', ERR, '需要重新登录']])], actions: ['立即签到', '管理账号'] },
-    { name: '库街区', en: 'KURO', blocks: [kv('SCHEDULE', [['定时签到', '08:10'], ['启动时签到', tog(false)]]), table('ACCOUNTS', ['账号', '结果', '时间'], [['漂泊者', WAIT, '—']])], actions: ['立即签到', '管理账号'] },
+  '07': { caption: '游戏社区签到：签到设置、账号组与签到结果。', items: [
+    { name: '签到设置', en: 'SIGN', api: 'POST /api/tools/update', blocks: [
+      kv('SIGN', [['启用签到', tog(true), 'GameSign.Enabled'], ['启动时签到', tog(true), 'GameSign.RunOnStartup'], ['每日自动签到', tog(true), 'GameSign.AutoStart'], ['结果通知', tog(false), 'GameSign.NotifyEnabled'], ['活动查询', tog(true), 'GameSign.ActivityEnabled'], ['上次签到', '今天 08:00 · 全部成功']]),
+    ], actions: ['立即签到'] },
+    { name: '账号组', en: 'ACCOUNTS', api: 'POST /api/tools/sign/account/update', blocks: [
+      table('GROUPS', ['账号组', '启用', '米游社', '森空岛', '库街区', '塔吉多'], [['用户 1', tog(true), OK, OK, WAIT, WAIT], ['用户 2', tog(true), OK, WAIT, OK, WAIT], ['用户 3', tog(false), WAIT, WAIT, WAIT, WAIT]]),
+      note('各平台凭据通过扫码登录写入账号组，签到时按组依次执行。'),
+    ], actions: ['添加账号组', '扫码登录', '删除所选'] },
+    { name: '签到结果', en: 'RESULT', api: 'POST /api/tools/sign', blocks: [
+      table('TODAY', ['平台', '账号组', '结果', '时间'], [['米游社 · 原神', '用户 1', OK, '08:00:12'], ['米游社 · 星铁', '用户 1', OK, '08:00:15'], ['森空岛', '用户 1', OK, '08:00:18'], ['库街区', '用户 2', ERR, '需要重新登录'], ['米游社 · 原神', '用户 2', OK, '08:00:24']]),
+    ], actions: ['重新签到失败项'] },
   ] },
-  '08': { caption: '历史记录：按日查看每个账号的代理结果与日志。', items: [
-    { name: '11-20', en: 'TODAY', blocks: [stats('SUMMARY', [['代理次数', '6'], ['成功', '5'], ['异常', '1']]), table('RECORDS', ['时间', '账号', '托管', '结果'], [['06:12', '主号', 'BGI 每日', OK], ['06:30', '小号', 'BGI 每日', OK], ['06:52', '星铁', '星铁清体力', ERR]])], actions: ['查看日志', '导出'] },
-    { name: '11-19', en: 'HISTORY', blocks: [stats('SUMMARY', [['代理次数', '8'], ['成功', '8'], ['异常', '0']]), table('RECORDS', ['时间', '账号', '托管', '结果'], [['06:10', '主号', 'BGI 每日', OK], ['18:02', '鸣潮主号', '鸣潮日常', OK]])], actions: ['查看日志', '导出'] },
-    { name: '11-18', en: 'HISTORY', blocks: [stats('SUMMARY', [['代理次数', '7'], ['成功', '6'], ['异常', '1']]), table('RECORDS', ['时间', '账号', '托管', '结果'], [['06:15', '小号', 'BGI 每日', ERR]])], actions: ['查看日志', '导出'] },
-    { name: '11-17', en: 'HISTORY', blocks: [stats('SUMMARY', [['代理次数', '6'], ['成功', '6'], ['异常', '0']])], actions: ['查看日志', '导出'] },
+  '08': { caption: '历史记录：按日、周、月合并查看每个账号的代理结果与日志。', items: [
+    { name: '查询', en: 'SEARCH', api: 'POST /api/history/search', blocks: [
+      kv('FILTER', [['开始日期', '<input class="inp num" type="date" value="2026-11-14" style="flex-basis:160px">', 'start_date'], ['结束日期', '<input class="inp num" type="date" value="2026-11-20" style="flex-basis:160px">', 'end_date'], ['合并方式', seg(['按日', '按周', '按月'], 0), 'mode']]),
+      stats('RANGE', [['代理次数', '41'], ['成功', '38'], ['异常', '3']]),
+    ], actions: ['查询', '导出'] },
+    { name: '11-20', en: 'TODAY', api: 'POST /api/history/data', blocks: [stats('SUMMARY', [['代理次数', '6'], ['成功', '5'], ['异常', '1']]), table('RECORDS', ['时间', '账号', '托管', '结果'], [['06:12', '主号', 'BGI 每日', OK], ['06:30', '小号', 'BGI 每日', OK], ['06:40', '鸣潮主号', '鸣潮日常', OK], ['06:52', '星铁', '星铁清体力', ERR]])], actions: ['查看日志', '查看录像'] },
+    { name: '11-19', en: 'HISTORY', api: 'POST /api/history/data', blocks: [stats('SUMMARY', [['代理次数', '8'], ['成功', '8'], ['异常', '0']]), table('RECORDS', ['时间', '账号', '托管', '结果'], [['06:10', '主号', 'BGI 每日', OK], ['06:31', '小号', 'BGI 每日', OK], ['18:02', '鸣潮主号', '鸣潮日常', OK]])], actions: ['查看日志', '查看录像'] },
+    { name: '11-18', en: 'HISTORY', api: 'POST /api/history/data', blocks: [stats('SUMMARY', [['代理次数', '7'], ['成功', '6'], ['异常', '1']]), table('RECORDS', ['时间', '账号', '托管', '结果'], [['06:15', '小号', 'BGI 每日', ERR], ['06:40', '主号', 'BGI 每日', OK]])], actions: ['查看日志', '查看录像'] },
   ] },
   '09': { caption: '游戏活动：版本、活动时间、剩余时间与卡池。', items: [
-    { name: '终末地', en: 'ENDFIELD', blocks: [banner({ v: '1.6 版本', title: '丹青渡', left: '6 天 5 时', bg: 'linear-gradient(120deg,#203030,#5b6a4c 55%,#d6c28c)' }), kv('PERIOD', [['活动时间', '10/15 12:00 – 11/26 06:00']]), list('POOLS', [['特许', '烟火邀星河'], ['武器', '丹青长卷']])], actions: ['打开活动页'] },
-    { name: '崩坏：星穹铁道', en: 'STAR RAIL', blocks: [banner({ v: '3.7 版本', title: '向星而行', left: '12 天 3 时', bg: 'linear-gradient(120deg,#1a1d3a,#4a3f7a 55%,#d9a8c7)' }), kv('PERIOD', [['活动时间', '11/12 – 12/02']])], actions: ['打开活动页'] },
-    { name: '原神', en: 'GENSHIN', blocks: [banner({ v: '6.2 版本', title: '霜夜灵嗣', left: '20 天', bg: 'linear-gradient(120deg,#1d3346,#3f6f8a 55%,#e3d3a1)' }), kv('PERIOD', [['活动时间', '11/19 – 12/30']])], actions: ['打开活动页'] },
-    { name: '鸣潮', en: 'WUTHERING', blocks: [banner({ v: '2.8 版本', title: '回声之岸', left: '4 天 11 时', bg: 'linear-gradient(120deg,#16242a,#2f5d5e 55%,#b9d3c5)' }), kv('PERIOD', [['活动时间', '10/30 – 11/24']])], actions: ['打开活动页'] },
-    { name: '明日方舟', en: 'ARKNIGHTS', blocks: [banner({ v: 'SIDE STORY', title: '新活动', left: '9 天', bg: 'linear-gradient(120deg,#222,#555 55%,#bbb)' }), kv('PERIOD', [['活动时间', '11/14 – 11/28']])], actions: ['打开活动页'] },
+    { name: '终末地', en: 'ENDFIELD', api: 'POST /api/info/endfield/version-art', blocks: [banner({ v: '1.6 版本', title: '丹青渡', left: '6 天 5 时', bg: 'linear-gradient(120deg,#203030,#5b6a4c 55%,#d6c28c)' }), kv('PERIOD', [['活动时间', '10/15 12:00 – 11/26 06:00']]), list('POOLS', [['特许', '烟火邀星河'], ['武器', '丹青长卷']])], actions: ['打开活动页'] },
+    { name: '崩坏：星穹铁道', en: 'STAR RAIL', api: 'POST /api/info/stella/activity', blocks: [banner({ v: '3.7 版本', title: '向星而行', left: '12 天 3 时', bg: 'linear-gradient(120deg,#1a1d3a,#4a3f7a 55%,#d9a8c7)' }), kv('PERIOD', [['活动时间', '11/12 – 12/02']])], actions: ['打开活动页'] },
+    { name: '原神', en: 'GENSHIN', api: 'POST /api/tools/community/activity/query', blocks: [banner({ v: '6.2 版本', title: '霜夜灵嗣', left: '20 天', bg: 'linear-gradient(120deg,#1d3346,#3f6f8a 55%,#e3d3a1)' }), kv('PERIOD', [['活动时间', '11/19 – 12/30']])], actions: ['打开活动页'] },
+    { name: '鸣潮', en: 'WUTHERING', api: 'POST /api/tools/community/activity/query', blocks: [banner({ v: '2.8 版本', title: '回声之岸', left: '4 天 11 时', bg: 'linear-gradient(120deg,#16242a,#2f5d5e 55%,#b9d3c5)' }), kv('PERIOD', [['活动时间', '10/30 – 11/24']])], actions: ['打开活动页'] },
+    { name: '明日方舟', en: 'ARKNIGHTS', api: 'POST /api/info/arknights/activity', blocks: [banner({ v: 'SIDE STORY', title: '新活动', left: '9 天', bg: 'linear-gradient(120deg,#222,#555 55%,#bbb)' }), kv('PERIOD', [['活动时间', '11/14 – 11/28']])], actions: ['打开活动页'] },
   ] },
-  '10': { caption: '设置：常规、功能、通知、高级、更新与关于。', items: [
-    { name: '常规', en: 'GENERAL', blocks: [kv('APPEARANCE', [['主题', '跟随系统'], ['主题色', '金色'], ['语言', '简体中文'], ['开机自启', tog(true)]])], actions: ['恢复默认'] },
-    { name: '功能', en: 'FUNCTION', blocks: [kv('BEHAVIOR', [['允许睡眠', tog(false)], ['静默模式', tog(false)], ['历史保留', '永久'], ['启动时签到', tog(true)]])], actions: ['恢复默认'] },
-    { name: '通知', en: 'NOTIFY', blocks: [kv('CHANNELS', [['系统通知', tog(true)], ['邮件', tog(false)], ['Server 酱', tog(true)], ['Webhook', '2 个']])], actions: ['测试通知', '管理 Webhook'] },
-    { name: '高级', en: 'ADVANCED', blocks: [kv('RUNTIME', [['Runtime 启动方式', '自动'], ['日志导出', '打包 logs / debug'], ['数据备份', '导出配置']])], actions: ['导出日志', '导出备份'] },
-    { name: '更新', en: 'UPDATE', blocks: [kv('VERSION', [['当前版本', 'v5.7.0'], ['更新渠道', '稳定版'], ['自动检查', tog(true)]])], actions: ['检查更新'] },
-    { name: '其他', en: 'MISC', blocks: [kv('ATTRIBUTION', [['字体', 'MiSans（小米）· 许可见 NOTICE'], ['视觉参考', 'LBEILC / RhineLabUI（MIT）']])], actions: ['查看许可'] },
+  '10': { caption: '设置：启动与界面、功能、通知、更新、录像与关于。', items: [
+    { name: '启动与界面', en: 'START · UI', api: 'POST /api/setting/update', blocks: [kv('START', [['开机自启', tog(true), 'Start.IfSelfStart'], ['启动后最小化', tog(false), 'Start.IfMinimizeDirectly'], ['显示托盘图标', tog(true), 'UI.IfShowTray'], ['关闭到托盘', tog(true), 'UI.IfToTray'], ['隐藏关闭按钮', tog(false), 'UI.IfHideCloseButton'], ['主题', seg(['跟随系统', '浅色', '深色'], 0)], ['语言', sel(['简体中文', 'English'])]])], actions: ['保存', '恢复默认'] },
+    { name: '功能', en: 'FUNCTION', api: 'POST /api/setting/update', blocks: [kv('BEHAVIOR', [['历史记录保留', sel(['7 天', '15 天', '30 天', '60 天', '90 天', '180 天', '365 天', '永久'], 7), 'Function.HistoryRetentionTime'], ['运行时允许睡眠', tog(false), 'Function.IfAllowSleep'], ['静默模式', tog(false), 'Function.IfSilence'], ['屏蔽模拟器广告', tog(true), 'Function.IfBlockAd'], ['匿名遥测', tog(true), 'Function.IfEnableTelemetry'], ['语音提示', tog(false), 'Voice.Enabled'], ['语音风格', seg(['简洁', '热闹'], 0), 'Voice.Type']])], actions: ['保存'] },
+    { name: '通知', en: 'NOTIFY', api: 'POST /api/setting/update', blocks: [kv('CHANNELS', [['任务结果推送', seg(['不推送', '任何时刻', '仅失败时'], 2), 'Notify.SendTaskResultTime'], ['发送统计', tog(true), 'Notify.IfSendStatistic'], ['系统通知', tog(true), 'Notify.IfPushPlyer'], ['邮件', tog(false), 'Notify.IfSendMail'], ['Server 酱', tog(true), 'Notify.IfServerChan'], ['Koishi', tog(false), 'Notify.IfKoishiSupport'], ['OpenClaw QQ', tog(false), 'Notify.IfOpenClawQQ'], ['自定义 Webhook', '2 个 · 已启用 1 个', 'Notify.CustomWebhooks']])], actions: ['测试通知', '管理 Webhook'] },
+    { name: '更新', en: 'UPDATE', api: 'POST /api/setting/update', blocks: [kv('UPDATE', [['当前版本', 'v5.7.0'], ['自动更新', tog(true), 'Update.IfAutoUpdate'], ['更新源', sel(['GitHub', 'Mirror 酱', 'AutoSite', 'CNB']), 'Update.Source'], ['更新渠道', seg(['稳定版', '测试版'], 0), 'Update.Channel'], ['GitHub 加速', seg(['自动', '关闭'], 0), 'Update.GitHubMirror'], ['代理地址', inp('', 'mono'), 'Update.ProxyAddress']])], actions: ['检查更新', '暂停更新 7 天'] },
+    { name: '录像回放', en: 'REPLAY · OBS', api: 'POST /api/setting/obs/save', blocks: [kv('OBS', [['任务录像', tog(false), 'Replay.Enabled'], ['OBS 端口', num(4455), 'Replay.Port'], ['最多保留', num(20, '段'), 'Replay.MaxReplayCount']]), note('通过 OBS WebSocket 录制每个账号的任务过程，可在历史记录中回看。')], actions: ['检查连接', '保存'] },
+    { name: '高级与关于', en: 'ADVANCED', api: 'POST /api/setting/backup', blocks: [kv('ADVANCED', [['日志导出', '打包 logs / debug'], ['数据备份', '导出全部配置'], ['字体', 'MiSans（小米）· 许可见 NOTICE'], ['视觉参考', 'LBEILC / RhineLabUI（MIT）']])], actions: ['导出日志', '导出备份', '查看许可'] },
   ] },
 }
 
 function renderBlock(b) {
   const head = b.title ? `<div class="blk-h"><i></i>${b.title}</div>` : ''
   let body = ''
-  if (b.t === 'kv') body = `<div class="kv">${b.rows.map(([k, v]) => `<div class="k">${k}</div><div>${v}</div>`).join('')}</div>`
+  if (b.t === 'kv') body = `<div class="kv">${b.rows.map(([k, v, key]) => `<div class="k"${key ? ` title="${key}"` : ''}>${k}</div><div>${v}</div>`).join('')}</div>`
   else if (b.t === 'table') body = `<table class="tbl"><thead><tr><th>#</th>${b.cols.map(c => `<th>${c}</th>`).join('')}</tr></thead><tbody>${b.rows.map((r, i) => `<tr><td class="n">${String(i + 1).padStart(2, '0')}</td>${r.map(c => `<td>${c}</td>`).join('')}</tr>`).join('')}</tbody></table>`
   else if (b.t === 'stats') body = `<div class="stats">${b.rows.map(([k, v]) => `<div><b>${v}</b><span>${k}</span></div>`).join('')}</div>`
   else if (b.t === 'quote') body = `<div class="quote">“${b.text}”</div><div class="by">${b.by}</div>`
   else if (b.t === 'list') body = `<div class="lst">${b.rows.map(([a, c]) => `<div><em>${a}</em>${c}</div>`).join('')}</div>`
-  else if (b.t === 'log') body = `<pre class="log">${b.lines.join('\n')}</pre>`
+  else if (b.t === 'log') body = `<pre class="log${b.tall ? ' tall' : ''}">${b.lines.join('\n')}</pre>`
+  else if (b.t === 'note') body = `<div class="note">${b.text}</div>`
   else if (b.t === 'run') body = `<div class="run" data-state="idle"><div class="run-bar"><i></i></div><div class="run-line"><b>待命</b><span>选择队列后开始执行</span></div></div>`
   else if (b.t === 'banner') body = `<div class="banner" style="--bg-b:${b.bg}"><span class="v">● ${b.v}</span><h3>${b.title}</h3><div class="cd">活动剩余时间<b>${b.left}</b></div></div>`
   return `<div class="blk${b.wide ? ' wide' : ''}">${head}${body}</div>`
@@ -782,7 +883,7 @@ function renderBlock(b) {
 
 const sect = document.getElementById('sect')
 const panel = document.getElementById('s-panel')
-const state = { open: -1, items: [], pos: 0, target: 0, shown: -1, clone: null, raf: 0, timers: [] }
+const state = { open: -1, items: [], pos: 0, target: 0, tab: 0, shown: -1, morph: null, timers: [] }
 const later = (ms, fn) => state.timers.push(setTimeout(fn, ms))
 
 const currentEl = document.getElementById('r-current')
@@ -822,19 +923,21 @@ sect.addEventListener('mousemove', e => {
 function renderPanel(swap) {
   const d = DEPTS[state.open]
   const item = state.items[state.target]
+  const tabs = item.tabs || [{ name: item.name, api: item.api, blocks: item.blocks, actions: item.actions }]
+  state.tab = Math.min(state.tab, tabs.length - 1)
+  const page = tabs[state.tab]
   const paint = () => {
     clearInterval(runTimer)
     panel.classList.remove('show')
     panel.innerHTML = `
       <div class="sp-head">
-        <div class="sp-meta"><span class="a">X-0${d.n}</span><span>${d.code.replace('\n', ' ')}</span><span>${d.sub}</span></div>
-        <div class="sp-title"><span class="sp-idx">${d.n}-${String(state.target + 1).padStart(2, '0')}</span><h2>${item.name}</h2><span class="en">${item.en}</span></div>
-        <div class="sp-rule"></div>
+        <div class="sp-meta"><span><span class="a">X-0${d.n}</span>&nbsp;&nbsp;${d.n}-${String(state.target + 1).padStart(2, '0')}&nbsp;&nbsp;${item.name}</span><span class="api">${page.api || ''}</span></div>
+        ${item.tabs ? `<div class="sp-tabs" role="tablist">${tabs.map((t, k) => `<button type="button" role="tab" data-tab="${k}" aria-selected="${k === state.tab}"${k === state.tab ? ' class="on"' : ''}><b>${String(k + 1).padStart(2, '0')}</b>${t.name}</button>`).join('')}</div>` : ''}
       </div>
-      <div class="sp-body">${item.blocks.map(renderBlock).join('')}</div>
-      <div class="sp-actions">${item.actions.map((a, i) => `<button class="btn${i === 0 ? ' pri' : ''}${/删除|停止/.test(a) ? ' dng' : ''}" type="button">${a}</button>`).join('')}</div>`
+      <div class="sp-body" role="tabpanel">${page.blocks.map(renderBlock).join('')}</div>
+      <div class="sp-actions">${page.actions.map((a, i) => `<button class="btn${i === 0 ? ' pri' : ''}${/删除|停止|注销|卸下/.test(a) ? ' dng' : ''}" type="button">${a}</button>`).join('')}</div>`
     // 逐块错开显现
-    ;[...panel.querySelectorAll('.sp-head, .blk, .sp-actions')].forEach((el, k) => { el.style.transitionDelay = `${k * 70}ms` })
+    ;[...panel.querySelectorAll('.sp-head, .blk, .sp-actions')].forEach((el, k) => { el.style.transitionDelay = `${k * 60}ms` })
     panel.offsetWidth
     panel.classList.add('show')
     state.shown = state.target
@@ -844,6 +947,12 @@ function renderPanel(swap) {
     panel.classList.add('leave')
     later(160, () => { panel.classList.remove('leave'); paint() })
   } else paint()
+}
+function selectTab(k) {
+  const item = state.items[state.target]
+  if (!item?.tabs || k < 0 || k >= item.tabs.length || k === state.tab) return
+  state.tab = k
+  renderPanel(true)
 }
 
 // ── 面板交互：开关、按钮反馈、快速启动的模拟运行 ──
@@ -884,13 +993,45 @@ function startRun() {
     setRun('run', Math.round(n / (RUN_STEPS.length * 3) * 100), '运行', `${queue} · ${RUN_STEPS[Math.floor(n / 3)]}`)
   }, 700)
 }
+function setTog(t, on) {
+  t.classList.toggle('on', on)
+  t.setAttribute('aria-checked', on)
+  t.lastChild.textContent = on ? '开' : '关'
+}
+const pageApi = () => panel.querySelector('.sp-meta .api')?.textContent || ''
 panel.addEventListener('click', e => {
+  const tab = e.target.closest('[data-tab]')
+  if (tab) return selectTab(+tab.dataset.tab)
   const t = e.target.closest('.tog')
   if (t) {
     const on = !t.classList.contains('on')
-    t.classList.toggle('on', on)
-    t.setAttribute('aria-checked', on)
-    t.lastChild.textContent = on ? '开' : '关'
+    setTog(t, on)
+    // 定时启动与循环队列互斥（QueueConfig.TimeEnabled / CycleEnabled）
+    const x = t.dataset.x
+    if (on && x) {
+      const other = panel.querySelector(`.tog[data-x="${x === 'time' ? 'cycle' : 'time'}"]`)
+      if (other?.classList.contains('on')) { setTog(other, false); toast(x === 'time' ? '已关闭循环队列：定时与循环互斥' : '已关闭定时启动：定时与循环互斥') }
+    }
+    return
+  }
+  const sb = e.target.closest('.seg button')
+  if (sb) {
+    ;[...sb.parentNode.children].forEach(b => { b.classList.toggle('on', b === sb); b.setAttribute('aria-checked', b === sb) })
+    return
+  }
+  const cb = e.target.closest('.chips button')
+  if (cb) { cb.classList.toggle('on'); cb.setAttribute('aria-pressed', cb.classList.contains('on')); return }
+  const m = e.target.closest('.mini')
+  if (m) {
+    if (m.hasAttribute('data-pick')) toast('演示：打开文件选择框')
+    else if (m.textContent === '录制') { m.previousElementSibling.value = '按下组合键…'; m.previousElementSibling.focus(); toast('演示：按下新的组合键') }
+    else if (m.textContent === '启动' || m.textContent === '关闭') {
+      const row = m.closest('tr')
+      const starting = m.textContent === '启动'
+      row.children[2].innerHTML = starting ? RUN : WAIT
+      m.textContent = starting ? '关闭' : '启动'
+      toast(`${starting ? '启动' : '关闭'} ${row.children[1].textContent} · POST /api/emulator/operate`)
+    } else toast(`演示：${m.textContent}`)
     return
   }
   const b = e.target.closest('.btn')
@@ -899,7 +1040,8 @@ panel.addEventListener('click', e => {
   if (text === '开始执行') startRun()
   else if (text === '停止') { clearInterval(runTimer); setRun('idle', 0, '已停止', '队列已手动停止'); toast('队列已停止') }
   else if (/删除/.test(text)) toast('演示：删除前会二次确认')
-  else toast(`演示：${text}`)
+  else if (/保存/.test(text)) toast(`已保存 · ${pageApi()}`)
+  else toast(`演示：${text} · ${pageApi()}`)
 })
 panel.addEventListener('keydown', e => {
   const t = e.target.closest('.tog')
@@ -912,31 +1054,129 @@ function select(i) {
   const next = Math.max(0, Math.min(state.items.length - 1, i))
   if (next === state.target) return
   state.target = next
+  state.tab = 0
   kick()
   clearTimeout(selectTimer)
   selectTimer = setTimeout(() => { if (state.shown !== state.target) renderPanel(true) }, 140)
+}
+
+// 三次贝塞尔缓动（与 CSS cubic-bezier 相同的定义）
+function bezier(x1, y1, x2, y2) {
+  const cx = 3 * x1, bx = 3 * (x2 - x1) - cx, ax = 1 - cx - bx
+  const cy = 3 * y1, by = 3 * (y2 - y1) - cy, ay = 1 - cy - by
+  const X = t => ((ax * t + bx) * t + cx) * t, Y = t => ((ay * t + by) * t + cy) * t, dX = t => (3 * ax * t + 2 * bx) * t + cx
+  return x => {
+    if (x <= 0) return 0
+    if (x >= 1) return 1
+    let t = x
+    for (let k = 0; k < 8; k++) { const dx = dX(t); if (Math.abs(dx) < 1e-6) break; t = Math.min(1, Math.max(0, t - (X(t) - x) / dx)) }
+    return Y(t)
+  }
+}
+const E_MOVE = bezier(.7, 0, .2, 1), E_SIZE = bezier(.5, 0, .1, 1), E_SOFT = bezier(.2, .8, .2, 1), E_IN = bezier(.6, 0, .9, .4)
+const clamp01 = v => Math.max(0, Math.min(1, v))
+const mix = (a, b, t) => a + (b - a) * t
+// 每种过渡给出 p∈[0,1] 时的矩形（中心 cx, cy 与宽高 w, h）。位置与尺寸始终同时变化，而非先移动后拉伸。
+const MORPHS = {
+  // 弧线：沿二次贝塞尔曲线移动，尺寸同步插值
+  arc: { ms: 720, at(a, b, p) {
+    const q = E_MOVE(p), s = E_SIZE(p)
+    const mx = (a.cx + b.cx) / 2, my = (a.cy + b.cy) / 2, dx = b.cx - a.cx, dy = b.cy - a.cy
+    const L = Math.hypot(dx, dy) || 1, off = Math.min(220, L * 0.32) * this.sign
+    const kx = mx - dy / L * off, ky = my + dx / L * off
+    const u = 1 - q
+    return { cx: u * u * a.cx + 2 * u * q * kx + q * q * b.cx, cy: u * u * a.cy + 2 * u * q * ky + q * q * b.cy, w: mix(a.w, b.w, s), h: mix(a.h, b.h, s) }
+  } },
+  // 拉伸：沿运动方向拉长、垂直方向压扁，途中最明显，落点回弹
+  stretch: { ms: 640, at(a, b, p) {
+    const q = E_MOVE(p), s = E_SIZE(p), k = Math.sin(Math.PI * q) * 0.45
+    const dx = b.cx - a.cx, dy = b.cy - a.cy, L = Math.hypot(dx, dy) || 1, hx = Math.abs(dx) / L, hy = Math.abs(dy) / L
+    const w = mix(a.w, b.w, s), h = mix(a.h, b.h, s)
+    return { cx: mix(a.cx, b.cx, q), cy: mix(a.cy, b.cy, q), w: w * (1 + k * hx - k * 0.5 * hy), h: h * (1 + k * hy - k * 0.5 * hx) }
+  } },
+  // 折叠：压成细条 → 细条滑向目标并展宽 → 向下展开；三段相互重叠，保持连续
+  fold: { ms: 820, at(a, b, p) {
+    const p1 = E_SOFT(clamp01(p / 0.34)), p2 = E_MOVE(clamp01((p - 0.14) / 0.6)), p3 = E_SOFT(clamp01((p - 0.6) / 0.4))
+    const bar = 6
+    return { cx: mix(a.cx, b.cx, p2), cy: mix(a.cy, b.cy - b.h / 2 + bar / 2, p2) + (b.h / 2 - bar / 2) * p3, w: mix(a.w, b.w, p2), h: p3 > 0 ? mix(bar, b.h, p3) : mix(a.h, bar, p1) }
+  } },
+  // 残影：弧线运动并拖出两道渐隐的残影
+  echo: { ms: 760, ghosts: [0.09, 0.18], at(a, b, p) { return MORPHS.arc.at.call(this, a, b, p) } },
+}
+const INK = [11, 12, 11]
+function rgbOf(el) {
+  const m = getComputedStyle(el).backgroundColor.match(/[\d.]+/g) || ['0', '0', '0', '0']
+  const [r, g, b, al = 1] = m.map(Number)
+  return al === 0 ? [...INK, 0] : [r, g, b, al]
+}
+// 播放方块与部门卡之间的过渡；reverse 为返回索引
+function playMorph(i, reverse, done) {
+  const d = DEPTS[i]
+  const secEl = $s('s-sec'), box = secEl.querySelector('.box')
+  const tileRect = { cx: d.x, cy: d.y, w: d.w, h: d.h }
+  const cardRect = { cx: secEl.offsetLeft + box.offsetLeft + box.offsetWidth / 2, cy: secEl.offsetTop + box.offsetTop + box.offsetHeight / 2, w: box.offsetWidth, h: box.offsetHeight }
+  const keys = Object.keys(MORPHS)
+  const kind = reverse && state.morph ? state.morph.kind : keys[Math.floor(Math.random() * keys.length)]
+  const conf = Object.create(MORPHS[kind])
+  conf.sign = reverse && state.morph ? state.morph.sign : (Math.random() < 0.5 ? -1 : 1)
+  const from = rgbOf(tiles[i].el)
+  const mk = ghost => {
+    const el = document.createElement('div')
+    el.className = 's-morph' + (ghost ? ' ghost' : '')
+    hub.appendChild(el)
+    return el
+  }
+  const main = mk(false)
+  // 方块原有内容：等比缩放跟随，前段淡出（不做非等比拉伸，文字不变形）
+  const inner = tiles[i].el.cloneNode(true)
+  inner.classList.remove('focus'); inner.classList.add('s-clone'); inner.removeAttribute('aria-label'); inner.tabIndex = -1
+  Object.assign(inner.style, { width: d.w + 'px', height: d.h + 'px', transitionDelay: '0ms' })
+  main.appendChild(inner)
+  const ghosts = (conf.ghosts || []).map(lag => ({ lag, el: mk(true) }))
+  const paint = (el, p, alpha) => {
+    const r = conf.at(tileRect, cardRect, clamp01(p))
+    Object.assign(el.style, { left: r.cx - r.w / 2 + 'px', top: r.cy - r.h / 2 + 'px', width: r.w + 'px', height: r.h + 'px' })
+    const c = E_SOFT(clamp01(p / 0.7))
+    el.style.backgroundColor = `rgba(${from.slice(0, 3).map((v, k) => Math.round(mix(v, INK[k], c))).join(',')},${(mix(from[3], 1, c) * alpha).toFixed(3)})`
+    return r
+  }
+  const t0 = performance.now()
+  let finished = false
+  const frame = now => {
+    if (finished) return
+    const lin = clamp01((now - t0) / conf.ms)
+    const p = reverse ? 1 - lin : lin
+    const r = paint(main, p, 1)
+    inner.style.transform = `translate(-50%, -50%) scale(${Math.min(r.w / d.w, r.h / d.h)})`
+    inner.style.opacity = String(1 - clamp01(p / 0.4))
+    ghosts.forEach(g => {
+      const gp = reverse ? 1 - (lin - g.lag) : lin - g.lag
+      g.el.style.visibility = lin > g.lag && lin < 1 ? 'visible' : 'hidden'
+      paint(g.el, gp, g.lag < 0.1 ? 0.35 : 0.16)
+    })
+    if (lin >= 1) return finish()
+    requestAnimationFrame(frame)
+  }
+  const finish = () => {
+    if (finished) return
+    finished = true
+    ghosts.forEach(g => g.el.remove())
+    done(main)
+  }
+  state.morph = { kind, sign: conf.sign, el: main }
+  requestAnimationFrame(frame)
+  // 后台页 rAF 可能暂停：到时间仍未结束则直接落到终点
+  later(conf.ms + 400, () => { if (!finished) { const r = paint(main, reverse ? 0 : 1, 1); inner.style.opacity = reverse ? '1' : '0'; void r; finish() } })
+  return kind
 }
 
 function openSection(i) {
   if (state.open >= 0 || booting) return
   const d = DEPTS[i]
   const conf = SECTIONS[d.n]
-  state.open = i; state.items = conf.items; state.target = 0; state.shown = -1
+  state.open = i; state.items = conf.items; state.target = 0; state.tab = 0; state.shown = -1
   focusTile(i)
   hub.classList.add('sectioned')
-  // ① 方块复制一份，从原位飞到左侧部门卡的位置
-  const src = tiles[i].el
-  const clone = src.cloneNode(true)
-  clone.classList.add('s-clone')
-  clone.classList.remove('focus')
-  Object.assign(clone.style, { left: d.x - d.w / 2 + 'px', top: d.y - d.h / 2 + 'px', transform: 'none', transitionDelay: '0ms' })
-  clone.removeAttribute('aria-label'); clone.tabIndex = -1
-  hub.appendChild(clone)
-  state.clone = clone
-  const s = Math.min(410 / d.w, 290 / d.h)
-  const tx = 248 + (410 - d.w * s) / 2 - (d.x - d.w / 2), ty = 340 + (290 - d.h * s) / 2 - (d.y - d.h / 2)
-  clone.offsetWidth
-  clone.style.transform = `translate(${tx}px, ${ty}px) scale(${s})`
   // 部门卡、分页、字幕
   $s('s-sec-code').innerHTML = codeHtml({ ...d, size: d.code.includes('\n') ? 104 : 120 })
   $s('s-sec-sub').textContent = d.sub
@@ -952,36 +1192,40 @@ function openSection(i) {
     pager.appendChild(b)
   })
   showCurrent(false)
-  // ② 竖线、品牌、黑色部门卡与录像带串入场；方块副本淡出
-  later(420, () => { sect.classList.add('on', 'reel-in'); window.chain?.open(conf.items, d) })
-  later(900, () => { if (state.clone) state.clone.style.opacity = '0' })
+  // ① 方块随机选一种方式飞向左侧部门卡：位置、尺寸、颜色同时变化；落地后由真实部门卡接替
+  playMorph(i, false, el => { sect.classList.add('landed'); requestAnimationFrame(() => el.remove()); later(60, () => el.remove()) })
+  // ② 竖线、品牌、录像带串入场（与飞行并行）
+  later(260, () => { sect.classList.add('on', 'reel-in'); window.chain?.open(conf.items, d) })
   // ③ 右侧档案
-  later(760, () => renderPanel(false))
+  later(620, () => renderPanel(false))
   later(800, () => $s('s-back').focus({ preventScroll: true }))
 }
 
 function closeSection() {
-  if (state.open < 0) return
+  if (state.open < 0 || state.closing) return
   const i = state.open
+  state.closing = true
   state.timers.forEach(clearTimeout); state.timers = []
   clearInterval(runTimer)
   panel.classList.remove('show')
-  sect.classList.remove('reel-in')
+  sect.classList.remove('reel-in', 'landed')
   window.chain?.close()
-  if (state.clone) state.clone.style.opacity = '1'
-  setTimeout(() => { if (state.clone) state.clone.style.transform = 'none' }, 220)
-  setTimeout(() => {
-    state.clone?.remove(); state.clone = null
+  hub.querySelectorAll('.s-morph').forEach(el => el.remove())
+  // 部门卡按同一种方式飞回方块原位
+  playMorph(i, true, el => {
     hub.classList.remove('sectioned')
     sect.classList.remove('on')
     panel.innerHTML = ''; currentEl.innerHTML = ''
-    state.open = -1
+    setTimeout(() => el.remove(), 240)
+    el.style.transition = 'opacity .24s'; el.style.opacity = '0'
+    state.open = -1; state.closing = false; state.morph = null
     tiles[i].el.focus({ preventScroll: true })
-  }, 950)
+  })
 }
 
 sect.addEventListener('wheel', e => {
   if (state.open < 0) return
+  if (e.target.closest('input, select')) return
   e.preventDefault()
   select(state.target + (e.deltaY > 0 ? 1 : -1))
 }, { passive: false })
@@ -990,9 +1234,11 @@ document.getElementById('s-back').addEventListener('click', closeSection)
 addEventListener('keydown', e => {
   if (booting) { if (e.key === 'Escape' || e.key === ' ') finishBoot(); return }
   if (state.open >= 0) {
+    if (e.key !== 'Escape' && e.target.closest?.('input, select')) return
     if (e.key === 'Escape') closeSection()
     else if (e.key === 'ArrowDown' || e.key === 'ArrowRight') { e.preventDefault(); select(state.target + 1) }
     else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') { e.preventDefault(); select(state.target - 1) }
+    else if (/^[1-9]$/.test(e.key) && !e.target.closest('input, select')) selectTab(+e.key - 1)
     return
   }
   if (/^[0-9]$/.test(e.key)) { const i = e.key === '0' ? 9 : +e.key - 1; tiles[i].el.focus() }
