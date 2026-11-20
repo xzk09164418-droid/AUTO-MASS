@@ -83,7 +83,7 @@ Item {
     property real clarity: 0
     property var hoverCell: null
     property var hoverLifts: ({})
-    // 飞入进度（秒）：0 = 全部在空中；≥ 1.3 = 全部落位。flyDir 为 1 飞入、-1 飞出、0 静止
+    // 飞入进度（秒）：0 = 全部在画面外；≥ 1.7 = 全部落位。flyDir 为 1 飞入、-1 飞出、0 静止
     property real fly: 2
     property int flyDir: 0
 
@@ -126,7 +126,7 @@ Item {
     Timer { id: primeBlend; interval: 300; onTriggered: if (!root.active && root.blendParts.length) { root.applyAppearance(0.5); primeRestore.restart() } }
     Timer { id: primeRestore; interval: 300; onTriggered: { root.appearance = -1; root.applyAppearance(1) } }
     function flyIn() { fly = 0; flyDir = 1; running = true }
-    function flyOut() { if (fly > 1.3) fly = 1.3; flyDir = -1; detailOpen = false; running = true }
+    function flyOut() { if (fly > 1.7) fly = 1.7; flyDir = -1; detailOpen = false; running = true }
 
     function nav(axis, d) {
         if (detailOpen || flyDir !== 0) return
@@ -486,7 +486,7 @@ Item {
         idleGain += ((idle ? 1 : 0) - idleGain) * (1 - Math.exp(-dt * (idle ? 0.8 : 4)))
         pulseGain += ((detailOpen ? 0 : 1) - pulseGain) * (1 - Math.exp(-dt * 8))
         // 飞入 / 飞出
-        if (flyDir > 0) { fly += dt; if (fly >= 1.3) { fly = 2; flyDir = 0 } }
+        if (flyDir > 0) { fly += dt; if (fly >= 1.7) { fly = 2; flyDir = 0 } }
         else if (flyDir < 0) { fly -= dt * 1.8; if (fly <= 0) { fly = 0; flyDir = 0; flownOut() } }
         // 悬停抬起（最多三格同时在变化；没有悬停时跳过，不产生临时对象）
         if (hoverCell || Object.keys(hoverLifts).length) stepHover(dt)
@@ -509,9 +509,10 @@ Item {
         const q = ease(S.lift.v / 0.4)
         if (Math.abs(q - appearance) > 0.002) { appearance = q; applyAppearance(q) }
         const hover = hoverLifts[cellLane + ":" + cellRow] || 0
-        const fp = Math.max(0, Math.min(1, fly / 0.7)), fe = 1 - Math.pow(1 - fp, 3)
-        const selY = -4.6 + field(cellRow, cellLane, t) + S.lift.v + hover + 9 * (1 - fe)
-        selected.position = Qt.vector3d(chosenX, selY, chosenZ - 4 * (1 - fe))
+        // 与着色器里的飞入同一条路径：沿长边从右上方斜向滑入
+        const fp = Math.max(0, Math.min(1, fly / 0.9)), fe = 1 - Math.pow(1 - fp, 3)
+        const selY = -4.6 + field(cellRow, cellLane, t) + S.lift.v + hover + 1.5 * (1 - fe)
+        selected.position = Qt.vector3d(chosenX + 26 * (1 - fe), selY, chosenZ)
         selected.eulerRotation.x = (field(cellRow + 0.5, cellLane, t) - field(cellRow - 0.5, cellLane, t)) * 0.024 * (1 - detail) * (1 - q) * 57.2958
         disc.opacity = q
         labelPlate.opacity = q

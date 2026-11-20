@@ -36,14 +36,15 @@ void MAIN()
     float l = INSTANCE_DATA.x, r = INSTANCE_DATA.y;
     float y = field(r, l) - INSTANCE_DATA.z + hoverLift(uHover0, r, l) + hoverLift(uHover1, r, l) + hoverLift(uHover2, r, l);
     float a = (field(r + 0.5, l) - field(r - 0.5, l)) * 0.024 * (1.0 - uDetail);
-    // 飞入：以选中格为中心按行列距离错峰落位
+    // 飞入：从画面右上方之外沿录像带长边（世界 +x，画面里由右上往左下）斜向滑入各自的格位，不竖直下落；
+    // 以选中格为中心按行列距离错峰
     float delay = 0.025 * abs(r - uCellRow) + 0.07 * abs(l - uCellLane);
-    float p = clamp((uFly - delay) / 0.7, 0.0, 1.0);
+    float p = clamp((uFly - delay) / 0.9, 0.0, 1.0);
     float e = 1.0 - (1.0 - p) * (1.0 - p) * (1.0 - p);
     vec3 v = VERTEX;
     vPanel = v.y / 3.7;
     float c = cos(a), s = sin(a);
-    VERTEX = vec3(v.x, c * v.y - s * v.z, s * v.y + c * v.z) + vec3(0.0, y + 9.0 * (1.0 - e), -4.0 * (1.0 - e));
+    VERTEX = vec3(v.x, c * v.y - s * v.z, s * v.y + c * v.z) + vec3(26.0 * (1.0 - e), y + 1.5 * (1.0 - e), 0.0);
     vec3 n = NORMAL;
     NORMAL = vec3(n.x, c * n.y - s * n.z, s * n.y + c * n.z);
 }
