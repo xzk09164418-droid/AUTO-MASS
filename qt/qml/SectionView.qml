@@ -57,6 +57,7 @@ FocusScope {
     }
     property var historyFilter: ({ start: "", end: "", mode: 0 })
     property var lastSnapshot: null
+    property var demoSnapshot: null         // 演示 / 自检：用模拟的运行快照代替后端返回（不启动任何真实任务）
     function today(offset) {
         const d = new Date(Date.now() + (offset || 0) * 86400000)
         return Qt.formatDate(d, "yyyy-MM-dd")
@@ -105,12 +106,17 @@ FocusScope {
             const f = historyFilter
             call("/api/history/search", { mode: ["DAILY", "WEEKLY", "MONTHLY"][f.mode], start_date: f.start, end_date: f.end }, r => r.code === 200 ? setLive(key, Live.history(r, f)) : fail(r))
         } else if (key === "home" || key === "scheduler") {
-            callAll([["c", "/api/info/combox/task", {}], ["p", "/api/dispatch/get/power", {}]], m => {
+            callAll([["c", "/api/info/combox/task", {}], ["p", "/api/dispatch/get/power", {}], ["q", "/api/queue/get", {}]], m => {
                 api.get("/api/dispatch/runtime-snapshot", text => {
                     let snap = { tasks: [], scheduledScripts: [] }
                     try { snap = JSON.parse(text) } catch (e) {}
+                    if (demoSnapshot) snap = demoSnapshot
                     lastSnapshot = snap
-                    setLive(key, key === "home" ? Live.home(m.c.code === 200 ? m.c.data : [], snap, m.p.signal || "NoAction") : Live.dispatchCenter(snap))
+                    // 队列 ID → 名称：调度中心按队列名显示每个运行中的任务
+                    const names = {}
+                    if (m.q.code === 200) m.q.index.forEach(q => { const d = m.q.data[q.uid]; if (d && d.Info) names[q.uid] = d.Info.Name })
+                    if (demoSnapshot && demoSnapshot.queueNames) Object.assign(names, demoSnapshot.queueNames)
+                    setLive(key, key === "home" ? Live.home(m.c.code === 200 ? m.c.data : [], snap, m.p.signal || "NoAction") : Live.dispatchCenter(snap, names))
                 })
             })
         }

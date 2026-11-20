@@ -4,6 +4,9 @@
 - 用户在设置里选「增强」且组件缺失时，二次确认后用当前解释器的 pip 下载安装，版本与 PySide6 保持一致；
 - 切回减少 / 标准挡位时不立即删除，只写入删除标记；用户退出程序、下次启动加载完毕并空闲后，
   再在后台删除（见 EnhancedComponent.cleanupPending）。删除前又切回增强挡位则取消标记、保留文件。
+- 删除不能用 ``pip uninstall PySide6-Addons``：它的 RECORD 与 PySide6 / PySide6-Essentials 共有 66 个文件
+  （含 ``PySide6/__init__.py``），pip 会把这些一起删掉，整个 PySide6 就无法导入。这里只删 Addons 独有的文件
+  （见 remove_addons_files），在独立进程里执行。
 - 用户选择的挡位保存在 config/QtClient.json，下次启动沿用。
 """
 
@@ -69,6 +72,54 @@ def preload_libraries_async() -> None:
                 pass
 
     threading.Thread(target=run, name="preload-quick3d", daemon=True).start()
+
+
+def _norm(path: object) -> str:
+    return str(path).replace("\\", "/").lower()
+
+
+def remove_addons_files() -> int:
+    """只删除 PySide6-Addons 独有的文件与它的 dist-info；与 PySide6 / Essentials / shiboken6 共有的文件保留。
+
+    返回删除的文件数。也清理 pip 中途失败时留下的 ``~yside6_addons*`` 残留目录。
+    """
+
+    import importlib.metadata as md
+    import shutil
+
+    site = _pyside_dir().parent
+    for leftover in site.glob("~yside6_addons*"):
+        shutil.rmtree(leftover, ignore_errors=True)
+    try:
+        addons = md.distribution(PACKAGE)
+    except md.PackageNotFoundError:
+        return 0
+    keep: set[str] = set()
+    for name in ("PySide6", "PySide6_Essentials", "shiboken6"):
+        try:
+            keep |= {_norm(f) for f in (md.distribution(name).files or [])}
+        except md.PackageNotFoundError:
+            pass
+    removed = 0
+    dirs: set[Path] = set()
+    for f in addons.files or []:
+        if _norm(f) in keep:
+            continue
+        path = Path(addons.locate_file(f))
+        try:
+            path.unlink()
+            removed += 1
+            dirs.add(path.parent)
+        except FileNotFoundError:
+            pass
+    # 删空的目录（自深向浅），dist-info 整个删掉
+    for d in sorted(dirs, key=lambda p: len(p.parts), reverse=True):
+        while d != site and d.is_dir() and not any(d.iterdir()):
+            d.rmdir()
+            d = d.parent
+    for info in site.glob("PySide6_Addons-*.dist-info"):
+        shutil.rmtree(info, ignore_errors=True)
+    return removed
 
 
 def saved_motion() -> str:
@@ -137,7 +188,11 @@ class EnhancedComponent(QObject):
     def _set(self, state: str, detail: str = "") -> None:
         self._state = state
         self._detail = detail
-        self.changed.emit()
+        try:
+            self.changed.emit()
+        except RuntimeError:
+            # 程序已退出、对象已销毁（后台删除在退出后才结束）
+            pass
 
     @Slot()
     def markLoaded(self) -> None:
@@ -179,7 +234,18 @@ class EnhancedComponent(QObject):
         if self._state != "pending-remove" or self._loaded or not REMOVE_MARKER.exists():
             return
         REMOVE_MARKER.unlink(missing_ok=True)
-        self._run(["uninstall", "-y", "--disable-pip-version-check", PACKAGE], "removing", "正在删除")
+        # 独立进程里只删 Addons 独有的文件（见 remove_addons_files），不调用 pip uninstall
+        self._run_script(["--remove-addons"], "removing", "正在删除")
+
+    def _run_script(self, args: list[str], state: str, detail: str) -> None:
+        self._tail = []
+        self._set(state, detail)
+        process = QProcess(self)
+        process.setProcessChannelMode(QProcess.ProcessChannelMode.MergedChannels)
+        process.readyReadStandardOutput.connect(lambda: self._read(process))
+        process.finished.connect(lambda code, _s: self._finished(state, code))
+        self._process = process
+        process.start(sys.executable, [str(Path(__file__).resolve()), *args])
 
     def _run(self, args: list[str], state: str, detail: str) -> None:
         self._tail = []
@@ -214,3 +280,8 @@ class EnhancedComponent(QObject):
             self._set("installed" if is_installed() else "error", "" if is_installed() else "安装完成但未找到 QtQuick3D 模块")
         else:
             self._set("missing")
+
+
+if __name__ == "__main__":
+    if "--remove-addons" in sys.argv:
+        print(f"removed {remove_addons_files()} files")

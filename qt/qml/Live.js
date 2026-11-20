@@ -305,14 +305,61 @@ function home(taskOpts, snapshot, power) {
         ], ops: { "刷新": { reload: true } }, actions: ["刷新"] }
     ]
 }
-function dispatchCenter(snapshot) {
-    var tasks = snapshot && snapshot.tasks ? snapshot.tasks : []
-    if (!tasks.length) return [{ name: "调度空闲", en: "IDLE", live: true, api: "GET /api/dispatch/runtime-snapshot", blocks: [SD.kv("TASK", [["状态", [WAIT, "没有运行中的任务"]], ["定时关联脚本", String((snapshot.scheduledScripts || []).length) + " 个"]]), SD.note("在主页「快速启动」或调度队列里开始任务后，这里会显示执行面板。")], ops: { "刷新": { reload: true } }, actions: ["刷新"] }]
-    return tasks.map(function (t, i) {
-        return { name: "面板 " + String(i + 1).padStart(2, "0"), en: t.mode + (t.isCycle ? " · CYCLE" : ""), live: true, api: "GET /api/dispatch/runtime-snapshot", blocks: [
-            SD.kv("TASK", [["任务 ID", t.taskId], ["模式", t.mode], ["队列", t.queueId || "—"], ["状态", t.stopping ? [WAIT, "正在停止"] : [RUN, "运行中"]]]),
-            SD.table("SCRIPTS", ["脚本", "类型"], (t.scripts || []).slice(0, 8).map(function (s) { return [s.scriptId.slice(0, 8), s.scriptType] }))
-        ], ops: { "停止任务": { confirm: "将停止这个任务。", path: "/api/dispatch/stop", body: { taskId: t.taskId }, reload: true }, "上一个托管": { path: "/api/dispatch/navigation/previous", body: {} }, "下一个托管": { path: "/api/dispatch/navigation/next", body: {} } },
-          actions: ["停止任务", "上一个托管", "下一个托管"] }
+// ── 05 调度中心：每个运行中的任务（通常是一条队列）一张卡，第一张是总览 ──────────
+var STATUS_TAG = { "完成": OK, "运行": RUN, "等待": WAIT, "异常": ERR, "跳过": SD.tag("跳过", "idle"), "已暂停": SD.tag("已暂停", "idle"), "外部占用，等待释放": SD.tag("外部占用", "idle"), "任务被用户手动中止": SD.tag("已中止", "err") }
+function statusTag(s) { return STATUS_TAG[s] || SD.tag(s || "—", "idle") }
+function taskProgress(t) {
+    var list = t.task_info || [], done = 0
+    for (var i = 0; i < list.length; i++) if (["完成", "跳过", "异常"].indexOf(list[i].status) >= 0) done++
+    var cur = null
+    for (var j = 0; j < list.length; j++) if (list[j].status === "运行") { cur = list[j]; break }
+    return { done: done, total: list.length, current: cur }
+}
+function logLines(text, max) {
+    var lines = String(text || "").split(/\r?\n/).filter(function (x) { return x.trim() !== "" }).slice(-max)
+    return lines.map(function (x) {
+        var m = x.match(/^(\S+\s+\S+|\S+)\s+(.*)$/)
+        var kind = /异常|错误|失败|ERROR/i.test(x) ? "e" : /完成|成功|SUCCESS/i.test(x) ? "s" : ""
+        return m && /\d{1,2}:\d{2}/.test(m[1]) ? [m[1].slice(-8), m[2], kind] : ["", x, kind]
     })
+}
+function dispatchCenter(snapshot, queueNames) {
+    queueNames = queueNames || {}
+    var tasks = snapshot && snapshot.tasks ? snapshot.tasks : []
+    var api = "GET /api/dispatch/runtime-snapshot"
+    if (!tasks.length) return [{ name: "调度空闲", en: "IDLE", live: true, api: api, blocks: [SD.kv("TASK", [["状态", [WAIT, "没有运行中的任务"]], ["定时关联脚本", String((snapshot.scheduledScripts || []).length) + " 个"]])], ops: { "刷新": { reload: true } }, actions: ["刷新"] }]
+    function title(t, i) { return t.queueId && queueNames[t.queueId] ? queueNames[t.queueId] : (t.mode === "ScriptConfig" ? "脚本设置" : t.mode === "Update" ? "更新" : "任务 " + String(i + 1).padStart(2, "0")) }
+    // 总览：所有同时运行的任务并排列出，一眼看到各自进行到哪
+    var overview = { name: "总览", en: "OVERVIEW · " + tasks.length + " RUNNING", live: true, api: api, blocks: [
+        SD.stats("RUNNING", [["运行中", String(tasks.filter(function (t) { return !t.stopping }).length)], ["正在停止", String(tasks.filter(function (t) { return t.stopping }).length)],
+            ["循环队列", String(tasks.filter(function (t) { return t.isCycle }).length)], ["定时关联脚本", String((snapshot.scheduledScripts || []).length)]]),
+        SD.table("TASKS", ["队列 / 任务", "当前脚本", "进度", "状态"], tasks.map(function (t, i) {
+            var p = taskProgress(t)
+            return [title(t, i) + (t.isCycle ? " · 循环" : ""), p.current ? p.current.name : "—", p.done + " / " + p.total, t.stopping ? [WAIT, "正在停止"] : p.current ? RUN : WAIT]
+        }), [2, 2, 0.9, 1.1])
+    ], ops: { "刷新": { reload: true }, "全部停止": { confirm: "将停止全部 " + tasks.length + " 个运行中的任务。", path: "/api/dispatch/stop", body: { taskId: "ALL" }, reload: true } }, actions: ["刷新", "全部停止"] }
+    return [overview].concat(tasks.map(function (t, i) {
+        var p = taskProgress(t)
+        var scripts = (t.task_info || []).map(function (s) {
+            var users = s.userList || [], ud = users.filter(function (u) { return u.status === "完成" }).length
+            var cu = users.filter(function (u) { return u.status === "运行" })[0]
+            return [s.name, statusTag(s.status), users.length ? ud + " / " + users.length : "—", cu ? cu.name : "—"]
+        })
+        var tabs = [
+            { name: "执行", api: api, blocks: [
+                SD.kv("TASK", [["队列", title(t, i)], ["模式", t.mode + (t.isCycle ? " · 循环" : "")], ["状态", t.stopping ? [WAIT, "正在停止"] : [RUN, "运行中"]],
+                    ["当前脚本", p.current ? p.current.name : "—"], ["进度", p.done + " / " + p.total + " 个脚本"]]),
+                SD.table("SCRIPTS", ["脚本", "状态", "账号", "当前账号"], scripts.slice(0, 9), [2.4, 1, 0.8, 1.4])
+            ], actions: ["停止任务", "上一个托管", "下一个托管"] },
+            { name: "日志", api: api, blocks: [SD.log("LOG · " + (p.current ? p.current.name : title(t, i)), logLines(t.log, 22), true)], actions: ["停止任务"] }
+        ]
+        if (t.isCycle && (t.cycleNextList || []).length)
+            tabs.push({ name: "循环", api: api, blocks: [SD.table("NEXT", ["脚本", "下次运行", "状态"], t.cycleNextList.slice(0, 10).map(function (c) {
+                return [c.scriptName, c.nextRunAt.slice(5, 16), c.isRunning ? RUN : c.isDue ? SD.tag("到点", "run") : WAIT]
+            }), [2.4, 1.4, 1])], actions: ["停止任务"] })
+        return { name: title(t, i), en: t.mode.toUpperCase() + (t.isCycle ? " · CYCLE" : "") + " · " + String(i + 1).padStart(2, "0"), live: true,
+            ops: { "停止任务": { confirm: "将停止「" + title(t, i) + "」。", path: "/api/dispatch/stop", body: { taskId: t.taskId }, reload: true },
+                   "上一个托管": { path: "/api/dispatch/navigation/previous", body: {} }, "下一个托管": { path: "/api/dispatch/navigation/next", body: {} } },
+            tabs: tabs }
+    }))
 }
