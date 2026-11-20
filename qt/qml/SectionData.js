@@ -26,7 +26,8 @@ var OK = tag("完成", "ok"), RUN = tag("运行", "run"), WAIT = tag("等待", "
 var POWER = ["无动作", "退出 AUTO-MAS", "重启 AUTO-MAS", "睡眠", "休眠", "注销", "关机", "强制关机", "重启"]
 
 function kv(title, rows) { return { t: "kv", title: title, rows: rows } }
-function table(title, cols, rows) { return { t: "table", title: title, cols: cols, rows: rows } }
+// weights：各列宽度权重（省略时等分）
+function table(title, cols, rows, weights) { return { t: "table", title: title, cols: cols, rows: rows, weights: weights } }
 function stats(title, rows) { return { t: "stats", title: title, rows: rows } }
 function note(text) { return { t: "note", text: text } }
 function log(title, lines, tall) { return { t: "log", title: title, lines: lines, tall: !!tall } }
@@ -81,25 +82,6 @@ function demoGeneral(o) {
     return general(o.name, o.en, c, users, false)
 }
 
-// 后端 /api/scripts/get（includeUsers）→ 托管管理条目
-function generalFromApi(resp) {
-    var out = []
-    for (var i = 0; i < resp.index.length; i++) {
-        var uid = resp.index[i].uid, c = resp.data[uid]
-        if (!c || resp.index[i].type !== "GeneralConfig") continue
-        var ur = resp.users && resp.users[uid] ? resp.users[uid] : { index: [], data: {} }
-        var users = ur.index.map(function (u) {
-            var d = ur.data[u.uid] || { Info: {}, Data: {} }
-            var rd = d.Info.RemainedDay
-            var last = d.Data && d.Data.LastProxyDate && d.Data.LastProxyDate !== "2000-01-01" ? d.Data.LastProxyDate : "—"
-            return { name: d.Info.Name, status: !!d.Info.Status, remained: rd === -1 || rd === undefined ? "永久" : rd + " 天",
-                     base: idx(["independent", "shared", "native"], d.Info.Base), last: last }
-        })
-        out.push(general(c.Info.Name || "未命名脚本", "GENERAL · " + String(i + 1).padStart(2, "0"), c, users, true))
-    }
-    return out
-}
-
 // 模拟器：设备 / 配置（EmulatorConfig，/api/emulator/operate）
 function emulator(o) {
     var cfg = [["名称", inp(o.name), "Info.Name"], ["类型", seg(["通用", "MuMu", "雷电", "2.0"], o.type), "Info.Type"], ["安装路径", path(o.path), "Info.Path"], ["最大等待", num(300, "秒"), "Info.MaxWaitTime"], ["老板键", inp("Alt+Q", true), "Info.BossKey"], ["关闭时清理残留", tog(false), "Info.ForceKillOnClose"], ["启动前关闭全部", tog(false), "Info.ForceKillBeforeLaunch"]]
@@ -123,11 +105,11 @@ function queue(o) {
             kv("HOOKS", [["运行前脚本", tog(false), "Info.IfScriptBeforeTask"], ["前脚本路径", path(""), "Info.ScriptBeforeTask"], ["运行后脚本", tog(!!o.afterScript), "Info.IfScriptAfterTask"], ["后脚本路径", path(o.afterScript), "Info.ScriptAfterTask"]])
         ], actions: ["保存", "立即运行", "删除队列"] },
         { name: "定时", api: "POST /api/queue/time/update", blocks: [
-            table("TIME SET", ["启用", "周期", "时间"], o.times.map(function (t) { return [tog(t[0]), chips(t[1]), time(t[2])] })),
+            table("TIME SET", ["启用", "周期", "时间"], o.times.map(function (t) { return [tog(t[0]), chips(t[1]), time(t[2])] }), [1, 2.6, 1]),
             note(o.cycle ? "循环队列与定时启动互斥：开启循环后，按「队列项」中各脚本自己的周期持续运行。" : "同一队列可设置多个定时；周期为空时该定时不会触发。")
         ], actions: ["添加定时", "删除所选"] },
         { name: "队列项", api: "POST /api/queue/item/update", blocks: [
-            table("ITEMS", ["脚本", "参与循环", "方式", "时间 / 间隔", "下次运行"], o.items.map(function (it) { return [sel(SCRIPTS, it[0]), tog(it[1]), seg(["定时", "间隔"], it[2]), it[2] ? num(it[3], "分钟") : time(it[3]), it[4]] })),
+            table("ITEMS", ["脚本", "参与循环", "方式", "时间 / 间隔", "下次运行"], o.items.map(function (it) { return [sel(SCRIPTS, it[0]), tog(it[1]), seg(["定时", "间隔"], it[2]), it[2] ? num(it[3], "分钟") : time(it[3]), it[4]] }), [2.4, 1.1, 1.4, 1.3, 1]),
             note("「参与循环」「方式」「间隔」只在循环队列中生效；间隔可从上次开始或上次结束计时。")
         ], actions: ["添加脚本", "上移", "下移", "删除所选"] }
     ] }
@@ -233,5 +215,5 @@ var sections = {
 
 // 条目的功能分页；无分页的条目视作只有一页
 function pages(item) {
-    return item.tabs ? item.tabs : [{ name: item.name, api: item.api, blocks: item.blocks, actions: item.actions }]
+    return item.tabs ? item.tabs : [{ name: item.name, api: item.api, blocks: item.blocks, actions: item.actions, save: item.save, ops: item.ops }]
 }

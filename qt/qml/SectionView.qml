@@ -1,6 +1,7 @@
 import QtQuick
 import "."
 import "SectionData.js" as SD
+import "Live.js" as Live
 
 // 二级界面（参考 PV 1:19 构图）：左上品牌与竖线、黑色部门卡、左下录像带串、上方标志剪影、
 // 右侧分页点 + 档案卡 + 铭牌、底部字幕。
@@ -29,24 +30,160 @@ FocusScope {
         target = Math.min(target, Math.max(0, items.length - 1))
         if (chain.introTarget === 1) { chain.items = items; chain.target = target }
     }
-    function fetchLive(key) {
-        if (!api || key !== "scripts") { liveState = ""; return }
-        liveState = "loading"
-        api.request("/api/scripts/get", JSON.stringify({ includeUsers: true }), text => {
+    // ── 后端接入 ──────────────────────────────────────────────────────────
+    function call(path, body, cb) {
+        api.request(path, JSON.stringify(body || {}), text => {
             let r = null
             try { r = JSON.parse(text) } catch (e) { r = { code: 0, message: "响应无法解析" } }
-            if (r.code === 200) {
-                const list = SD.generalFromApi(r)
-                const next = Object.assign({}, live)
-                if (list.length) next.scripts = list
-                live = next
-                liveState = "ok"
-                liveMessage = ""
-            } else {
-                liveState = "error"
-                liveMessage = r.message || "读取失败"
-            }
+            cb(r)
         })
+    }
+    // 依次请求多个接口：steps = [[name, path, body], ...]，全部返回后 done(map)
+    function callAll(steps, done) {
+        const out = {}
+        let i = 0
+        const next = () => {
+            if (i >= steps.length) { done(out); return }
+            const st = steps[i++]
+            call(st[1], st[2], r => { out[st[0]] = r; next() })
+        }
+        next()
+    }
+    property var historyFilter: ({ start: "", end: "", mode: 0 })
+    property var lastSnapshot: null
+    function today(offset) {
+        const d = new Date(Date.now() + (offset || 0) * 86400000)
+        return Qt.formatDate(d, "yyyy-MM-dd")
+    }
+    function setLive(key, list) {
+        const next = Object.assign({}, live)
+        next[key] = list
+        live = next
+        liveState = "ok"
+        liveMessage = ""
+    }
+    function fail(r) { liveState = "error"; liveMessage = r && r.message ? r.message : "读取失败" }
+    function fetchLive(key) {
+        if (!api) { liveState = ""; return }
+        const supported = ["home", "scripts", "emulators", "queue", "scheduler", "localControls", "gamesign", "history", "settings"]
+        if (supported.indexOf(key) < 0) { liveState = ""; return }
+        liveState = "loading"
+        if (key === "scripts") {
+            call("/api/scripts/get", { includeUsers: true }, r => r.code === 200 ? setLive(key, Live.scripts(r)) : fail(r))
+        } else if (key === "queue") {
+            callAll([["q", "/api/queue/get", {}], ["s", "/api/info/combox/script", {}]], m => {
+                if (m.q.code !== 200) { fail(m.q); return }
+                const steps = []
+                m.q.index.forEach(q => { steps.push(["t" + q.uid, "/api/queue/time/get", { queueId: q.uid }]); steps.push(["i" + q.uid, "/api/queue/item/get", { queueId: q.uid }]) })
+                callAll(steps, n => {
+                    const times = {}, items = {}
+                    m.q.index.forEach(q => { times[q.uid] = n["t" + q.uid]; items[q.uid] = n["i" + q.uid] })
+                    setLive(key, Live.queues(m.q, times, items, m.s.code === 200 ? m.s.data : []))
+                })
+            })
+        } else if (key === "emulators") {
+            callAll([["e", "/api/emulator/get", {}], ["st", "/api/emulator/status", {}]], m => m.e.code === 200 ? setLive(key, Live.emulators(m.e, m.st)) : fail(m.e))
+        } else if (key === "settings" || key === "localControls") {
+            callAll([["g", "/api/setting/get", {}], ["v", "/api/info/version", {}]], m => {
+                if (m.g.code !== 200) { fail(m.g); return }
+                const ver = m.v.current_hash ? "本地 " + m.v.current_hash.slice(0, 8) : ""
+                setLive(key, key === "settings" ? Live.settings(m.g.data, ver) : Live.local(m.g.data, api.port))
+            })
+        } else if (key === "gamesign") {
+            callAll([["t", "/api/tools/get", {}], ["a", "/api/tools/sign/account/list", {}]], m => m.t.code === 200 ? setLive(key, Live.sign(m.t.data, m.a.code === 200 ? m.a.data : {})) : fail(m.t))
+        } else if (key === "history") {
+            if (!historyFilter.start) historyFilter = { start: today(-6), end: today(0), mode: 0 }
+            const f = historyFilter
+            call("/api/history/search", { mode: ["DAILY", "WEEKLY", "MONTHLY"][f.mode], start_date: f.start, end_date: f.end }, r => r.code === 200 ? setLive(key, Live.history(r, f)) : fail(r))
+        } else if (key === "home" || key === "scheduler") {
+            callAll([["c", "/api/info/combox/task", {}], ["p", "/api/dispatch/get/power", {}]], m => {
+                api.get("/api/dispatch/runtime-snapshot", text => {
+                    let snap = { tasks: [], scheduledScripts: [] }
+                    try { snap = JSON.parse(text) } catch (e) {}
+                    lastSnapshot = snap
+                    setLive(key, key === "home" ? Live.home(m.c.code === 200 ? m.c.data : [], snap, m.p.signal || "NoAction") : Live.dispatchCenter(snap))
+                })
+            })
+        }
+    }
+    // 保存：只提交改过的字段，同一接口的字段合并成一个请求
+    function save(then) {
+        const it = item
+        if (!it || !it.live) return
+        const reqs = Live.collect(it)
+        if (!reqs.length) { toast.show("没有需要保存的改动"); if (then) then(); return }
+        let i = 0
+        const next = () => {
+            if (i >= reqs.length) {
+                Live.clearDirty(it)
+                panel.edits++
+                toast.show("已保存到后端 · " + reqs.length + " 个请求")
+                if (then) then()
+                return
+            }
+            const q = reqs[i++]
+            call(q.path, q.body, r => {
+                if (r.code === 200) next()
+                else toast.show("保存失败：" + (r.message || q.path))
+            })
+        }
+        next()
+    }
+    function exec(op) {
+        call(op.path, op.body, r => {
+            if (r.code === 200 || r.code === undefined) {
+                toast.show(op.show && r.message ? r.message : (op.done || "已完成"))
+                if (op.reload) fetchLive(d.key)
+            } else toast.show("操作失败：" + (r.message || op.path))
+        })
+    }
+    function runOp(op) {
+        if (!op) return
+        if (op.query) {
+            const f = Object.assign({}, historyFilter)
+            const s = Live.pick(item, "start"), e = Live.pick(item, "end"), m = Live.pick(item, "mode")
+            if (s) f.start = s
+            if (e) f.end = e
+            if (m) f.mode = ["DAILY", "WEEKLY", "MONTHLY"].indexOf(m)
+            historyFilter = f
+            fetchLive("history")
+            return
+        }
+        if (op.start) {
+            const taskId = Live.pick(item, "task"), mode = Live.pick(item, "mode"), power = Live.pick(item, "power")
+            if (!taskId) { toast.show("没有可运行的任务"); return }
+            modal.ask("开始执行", "将以「" + ({ AutoProxy: "自动代理", ScriptConfig: "设置脚本", CycleRun: "循环运行" })[mode] + "」模式立即开始所选任务，完成后执行「" + SD.POWER[Live.POWER_EN.indexOf(power)] + "」。",
+                "POST /api/dispatch/start", "开始执行", false, () => {
+                    call("/api/dispatch/set/power", { signal: power }, () => {
+                        call("/api/dispatch/start", { taskId: taskId, mode: mode }, r => {
+                            if (r.code === 200) { toast.show("已开始执行 · 任务 " + (r.taskId || "").slice(0, 8)); fetchLive(d.key) }
+                            else toast.show("开始失败：" + (r.message || ""))
+                        })
+                    })
+                })
+            return
+        }
+        if (op.stopAll) {
+            const tasks = lastSnapshot && lastSnapshot.tasks ? lastSnapshot.tasks : []
+            if (!tasks.length) { toast.show("当前没有运行中的任务"); return }
+            modal.ask("停止任务", "将停止 " + tasks.length + " 个运行中的任务。", "POST /api/dispatch/stop", "停止", true, () => {
+                tasks.forEach(t => call("/api/dispatch/stop", { taskId: t.taskId }, () => {}))
+                toast.show("已发送停止指令")
+                fetchLive(d.key)
+            })
+            return
+        }
+        if (op.saveFirst) { save(() => exec(op)); return }
+        if (!op.path) { if (op.reload) fetchLive(d.key); return }
+        if (op.confirm) { modal.ask("确认操作", op.confirm + "此操作会写入后端。", "POST " + op.path, "确认", true, () => exec(op)); return }
+        exec(op)
+    }
+    function liveAction(name) {
+        const page = SD.pages(item)[Math.min(panel.tab, SD.pages(item).length - 1)]
+        const ops = Object.assign({}, item.ops || {}, page.ops || {})
+        if (name === "保存") { save(); return }
+        if (ops[name]) { runOp(ops[name]); return }
+        toast.show("「" + name + "」尚未接入后端")
     }
     property int target: 0
     readonly property var item: items.length ? items[Math.min(target, items.length - 1)] : null
@@ -94,28 +231,24 @@ FocusScope {
         const r = hub ? hub.liveTileRect(index) : morph.tileRect
         morph.start(r, null, true)
     }
-    // 首尾循环：越过末张（或首张）时先弹簧回弹并提示，回弹结束后再次同向滚动才跳到另一端
-    property int edgeDir: 0
-    property real edgeAt: 0
+    // 首尾循环：越过末张（或首张）直接回到另一端，不提示、不需要二次滚动；
+    // 先朝滚动方向轻顶一下，再以较大的阻尼滑过去，体现迟滞感
+    property bool wrapping: false
+    Timer { id: wrapTimer; interval: 180; property int to: 0; property int d: 1; onTriggered: { view.go(to, d); view.wrapping = false } }
     function select(k) {
         if (!items.length) return
         if (k < 0 || k > items.length - 1) {
+            if (wrapping || items.length < 2) return
             const d = k < 0 ? -1 : 1
-            const now = Date.now()
-            if (edgeDir === d && now - edgeAt > 350 && now - edgeAt < 2200) {
-                edgeDir = 0
-                go(d > 0 ? 0 : items.length - 1, d)
-                return
-            }
-            if (edgeDir !== d || now - edgeAt >= 2200) {
-                edgeDir = d
-                edgeAt = now
-                chain.bounce(d)
-                toast.show(d > 0 ? "已是最后一张 · 再滚动一次回到第一张" : "已是第一张 · 再滚动一次跳到最后一张")
-            }
+            wrapping = true
+            chain.bounce(d * 0.5)
+            chain.damp = Theme.richMotion ? 0.03 : chain.damp
+            wrapTimer.to = d > 0 ? 0 : items.length - 1
+            wrapTimer.d = d
+            wrapTimer.interval = Theme.richMotion ? 180 : 0
+            wrapTimer.restart()
             return
         }
-        edgeDir = 0
         if (k === target) return
         go(k, k > target ? 1 : -1)
     }
@@ -455,6 +588,8 @@ FocusScope {
             itemIndex: view.target
             onToast: text => toast.show(text)
             onConfirmDelete: (name, api) => modal.open(name, api)
+            onLiveAction: name => view.liveAction(name)
+            onLiveOp: op => view.runOp(op)
             onRequestEnhanced: {
                 if (!view.enhanced) return
                 modal.ask("下载 3D 增强组件",
@@ -712,7 +847,7 @@ FocusScope {
             anchors.centerIn: parent
             spacing: 12
             Rectangle { anchors.verticalCenter: parent.verticalCenter; width: 10; height: 10; color: Theme.accent }
-            Text { id: toastText; color: Theme.paper; font.family: Theme.font; font.pixelSize: 14; font.letterSpacing: 1.6 }
+            Text { id: toastText; objectName: "toastText"; color: Theme.paper; font.family: Theme.font; font.pixelSize: 14; font.letterSpacing: 1.6 }
         }
     }
 

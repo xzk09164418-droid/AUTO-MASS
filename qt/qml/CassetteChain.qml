@@ -43,6 +43,7 @@ Item {
 
     // 首尾越界回弹：整串朝滚动方向冲出一小段，再按弹簧阻尼振荡回位
     property real over: 0
+    property real damp: 0.0008              // 每秒剩余比例；首尾循环时临时调大，滑动更沉
     function bounce(d) {
         overSpring.stop()
         over = Theme.richMotion ? 0.55 * d : 0
@@ -132,9 +133,9 @@ Item {
         running: chain.visible && chain.moving
         onTriggered: {
             const dt = Math.min(0.05, frameTime)
-            chain.cur += (chain.target - chain.cur) * (1 - Math.pow(0.0008, dt))
+            chain.cur += (chain.target - chain.cur) * (1 - Math.pow(chain.damp, dt))
             chain.intro += (chain.introTarget - chain.intro) * (1 - Math.pow(0.004, dt))
-            if (Math.abs(chain.target - chain.cur) < 0.0005) chain.cur = chain.target
+            if (Math.abs(chain.target - chain.cur) < 0.0005) { chain.cur = chain.target; chain.damp = 0.0008 }
             if (Math.abs(chain.introTarget - chain.intro) < 0.002) chain.intro = chain.introTarget
         }
     }

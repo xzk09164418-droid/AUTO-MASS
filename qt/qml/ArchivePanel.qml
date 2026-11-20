@@ -4,6 +4,7 @@ import QtQuick.Controls.Basic as C
 import QtQuick.Effects
 import "."
 import "SectionData.js" as SD
+import "Live.js" as Live
 
 // 右侧档案卡：条目的功能分页 + 数据块 + 操作按钮。
 // 交互是二级界面的主体：所有控件都可操作，字段名悬停显示对应的后端配置键。
@@ -17,6 +18,11 @@ Item {
     signal toast(string text)
     signal confirmDelete(string name, string api)
     signal requestEnhanced()
+    // 实时条目的按钮与行内操作交给 SectionView 调后端
+    signal liveAction(string name)
+    signal liveOp(var op)
+    property int edits: 0                   // 控件改动计数（驱动「未保存 N 处」）
+    readonly property int unsaved: { edits; return item && item.live ? Live.dirtyCount(item) : 0 }
     signal leaveEnhanced()
     onTabChanged: if (item) item._tab = tab
 
@@ -37,6 +43,7 @@ Item {
     property var statOverride: ({})
 
     property var lastItem: null
+    property int blockCount: 0
     property real dec: 1            // 解密进度 0→1（借鉴 RhineLabUI 的同步解密）
     property real tabFade: 1
     property int tickets: 0         // 遮挡条依次退开的序号
@@ -61,7 +68,10 @@ Item {
         runState = "idle"; runPct = 0; runTitle = "待命"; runText = "选择任务后开始执行"; statOverride = ({})
         excl = item && item.exclusive !== undefined ? item.exclusive : ""
         tickets = 0
+        // 先清零再给数量，保证换页时数据块全部重建（入场动画、遮挡条序号随之重置）
+        blockCount = 0
         shown = page
+        blockCount = page.blocks.length
         content.opacity = 1
         content.y = 0
     }
@@ -78,8 +88,7 @@ Item {
 
     function act(name) {
         const api = shown ? shown.api : ""
-        // 实时数据目前只读：写回接口在下一步接入
-        if (item && item.live && /保存|删除|复制|添加|恢复默认|设置脚本/.test(name)) { toast("实时数据暂为只读，写回将在下一步接入 · " + api); return }
+        if (item && item.live) { liveAction(name); return }
         if (name === "开始执行") startRun()
         else if (name === "停止" || name === "停止任务") { runTimer.stop(); runState = "idle"; runPct = 0; runTitle = "已停止"; runText = "队列已手动停止"; toast("队列已停止 · POST /api/dispatch/stop") }
         else if (/删除/.test(name)) confirmDelete(item ? item.name : "", api)
@@ -164,8 +173,9 @@ Item {
     component Tog: Item {
         id: tg
         property var spec
+        objectName: "tog:" + (spec && spec.key ? spec.key : "")
         property bool local: spec.v
-        onLocalChanged: if (spec.v !== local) { spec.v = local; spec.dirty = true }
+        onLocalChanged: if (spec.v !== local) { spec.v = local; spec.dirty = true; panel.edits++ }
         readonly property bool on: spec.x ? panel.excl === spec.x : local
         implicitWidth: 72
         implicitHeight: 24
@@ -180,6 +190,10 @@ Item {
                     if (panel.excl === other) panel.toast(spec.x === "time" ? "已关闭循环队列：定时与循环互斥" : "已关闭定时启动：定时与循环互斥")
                     panel.excl = spec.x
                 }
+                if (panel.item) Live.eachSpec(panel.item, function (sp) {
+                    if (sp.x) { const v = panel.excl === sp.x; if (sp.v !== v) { sp.v = v; sp.dirty = true } }
+                })
+                panel.edits++
             } else local = !local
         }
         Keys.onSpacePressed: flip()
@@ -226,9 +240,12 @@ Item {
         id: sg
         property var spec
         readonly property var motions: ["reduced", "standard", "enhanced"]
-        property int cur: spec.k === "motion" ? Math.max(0, motions.indexOf(Theme.motion)) : spec.v
+        readonly property var themes: ["system", "light", "dark"]
+        property int cur: spec.k === "motion" ? Math.max(0, motions.indexOf(Theme.motion))
+            : spec.k === "theme" ? Math.max(0, themes.indexOf(Theme.mode)) : spec.v
         // 动态效果挡位：直接改 Theme.motion；增强挡位需要另行安装的 3D 组件
-        onCurChanged: if (spec.k !== "motion") { if (spec.v !== cur) { spec.v = cur; spec.dirty = true } }
+        onCurChanged: if (spec.k === "theme") { Theme.mode = themes[cur] }
+        else if (spec.k !== "motion") { if (spec.v !== cur) { spec.v = cur; spec.dirty = true; panel.edits++ } }
         else if (motions[cur] !== Theme.motion) {
             if (cur === 2 && !Theme.enhancedAvailable) {
                 // 组件缺失：先回到当前挡位，二次确认后再下载
@@ -280,12 +297,12 @@ Item {
         model: spec.opts
         currentIndex: spec.v
         implicitHeight: 30
-        implicitWidth: Math.max(140, contentWidthHint + 40)
+        implicitWidth: Math.max(110, contentWidthHint + 40)
         property real contentWidthHint: 0
         font.family: Theme.font
         font.pixelSize: 15
         onActivated: {
-            if (spec.v !== currentIndex) { spec.v = currentIndex; spec.dirty = true }
+            if (spec.v !== currentIndex) { spec.v = currentIndex; spec.dirty = true; panel.edits++ }
             if (spec.k === "queue") panel.queueName = currentText
         }
         Component.onCompleted: {
@@ -346,7 +363,7 @@ Item {
                     const m = ch.spec.v.split("")
                     m[chip.index] = chip.on ? "1" : "0"
                     ch.spec.v = m.join("")
-                    ch.spec.dirty = true
+                    ch.spec.dirty = true; panel.edits++
                 } }
             }
         }
@@ -394,21 +411,21 @@ Item {
         Component { id: cText; Label { text: String(ctl.spec); elide: Text.ElideRight } }
         Component { id: cUnit; Text { text: ctl.spec.t; color: Theme.muted; font.family: Theme.font; font.pixelSize: 13 } }
         Component { id: cTog; Tog { spec: ctl.spec } }
-        Component { id: cInp; Field { text: ctl.spec.v; mono: ctl.spec.mono; onTextEdited: { ctl.spec.v = text; ctl.spec.dirty = true } } }
+        Component { id: cInp; Field { text: ctl.spec.v; mono: ctl.spec.mono; onTextEdited: { ctl.spec.v = text; ctl.spec.dirty = true; panel.edits++ } } }
         Component {
             id: cNum
             Row {
                 spacing: 8
-                Field { width: 76; text: String(ctl.spec.v); horizontalAlignment: Text.AlignRight; onTextEdited: { ctl.spec.v = Number(text); ctl.spec.dirty = true } validator: IntValidator { bottom: 0; top: 99999 } }
+                Field { width: 76; text: String(ctl.spec.v); horizontalAlignment: Text.AlignRight; onTextEdited: { ctl.spec.v = Number(text); ctl.spec.dirty = true; panel.edits++ } validator: IntValidator { bottom: 0; top: 99999 } }
                 Text { visible: ctl.spec.unit !== ""; anchors.verticalCenter: parent.verticalCenter; text: ctl.spec.unit; color: Theme.muted; font.family: Theme.font; font.pixelSize: 13 }
             }
         }
-        Component { id: cTime; Field { width: ctl.spec.c === "date" ? 150 : 90; text: ctl.spec.v; mono: true; inputMask: ctl.spec.c === "date" ? "9999-99-99" : "99:99"; onTextEdited: { ctl.spec.v = text; ctl.spec.dirty = true } } }
+        Component { id: cTime; Field { width: ctl.spec.c === "date" ? 150 : 90; text: ctl.spec.v; mono: true; inputMask: ctl.spec.c === "date" ? "9999-99-99" : "99:99"; onTextEdited: { ctl.spec.v = text; ctl.spec.dirty = true; panel.edits++ } } }
         Component {
             id: cPath
             RowLayout {
                 spacing: 10
-                Field { Layout.fillWidth: true; text: ctl.spec.v; mono: true; onTextEdited: { ctl.spec.v = text; ctl.spec.dirty = true } }
+                Field { Layout.fillWidth: true; text: ctl.spec.v; mono: true; onTextEdited: { ctl.spec.v = text; ctl.spec.dirty = true; panel.edits++ } }
                 Btn { text: "浏览"; small: true; onClicked: panel.toast("演示：打开文件选择框") }
             }
         }
@@ -424,10 +441,12 @@ Item {
                     model: ctl.spec.names
                     Btn {
                         required property string modelData
+                        required property int index
                         text: modelData
                         small: true
                         onClicked: {
-                            if (text === "启动" || text === "关闭") {
+                            if (ctl.spec.ops && ctl.spec.ops[index]) panel.liveOp(ctl.spec.ops[index])
+                            else if (text === "启动" || text === "关闭") {
                                 panel.toast(text + "模拟器实例 · POST /api/emulator/operate")
                                 text = text === "启动" ? "关闭" : "启动"
                             } else if (text === "录制") panel.toast("演示：按下新的组合键")
@@ -440,22 +459,26 @@ Item {
     }
     // 一格内容：单个控件或控件数组
     component Cell: RowLayout {
+        id: cell
         property var value
+        readonly property var list: value && typeof value === "object" && !value.c && value.length !== undefined ? value : [value]
         spacing: 10
         Repeater {
-            model: Array.isArray(parent.value) ? parent.value : [parent.value]
-            Ctl { required property var modelData; spec: modelData }
+            model: cell.list.length
+            Ctl { required property int index; spec: cell.list[index]; Layout.maximumWidth: cell.width }
         }
     }
 
     // ── 数据块 ──────────────────────────────────────────────────────────
     component KvBlock: Column {
+        id: kvb
         property var b
         Repeater {
-            model: parent.b.rows
+            model: kvb.b.rows.length
             Item {
                 id: kvRow
-                required property var modelData
+                required property int index
+                readonly property var modelData: kvb.b.rows[index]
                 width: parent.width
                 height: 42
                 Text {
@@ -490,7 +513,9 @@ Item {
     component TableBlock: Column {
         id: tb
         property var b
-        readonly property real colW: (width - 44) / b.cols.length
+        readonly property var weights: b.weights && b.weights.length === b.cols.length ? b.weights : b.cols.map(() => 1)
+        readonly property real wsum: weights.reduce((a, x) => a + x, 0)
+        function colW(i) { return (width - 44) * weights[i] / wsum }
         Item {
             width: parent.width
             height: 34
@@ -499,7 +524,7 @@ Item {
                 Text { width: 44; height: 34; verticalAlignment: Text.AlignVCenter; leftPadding: 6; text: "#"; color: Theme.muted; font.family: Theme.font; font.pixelSize: 12; font.weight: Font.Bold; font.letterSpacing: 2 }
                 Repeater {
                     model: tb.b.cols
-                    Text { required property string modelData; width: tb.colW; height: 34; verticalAlignment: Text.AlignVCenter; leftPadding: 6; text: modelData; color: Theme.muted; font.family: Theme.font; font.pixelSize: 12; font.weight: Font.Bold; font.letterSpacing: 2 }
+                    Text { required property string modelData; required property int index; width: tb.colW(index); height: 34; verticalAlignment: Text.AlignVCenter; leftPadding: 6; text: modelData; color: Theme.muted; font.family: Theme.font; font.pixelSize: 12; font.weight: Font.Bold; font.letterSpacing: 2 }
                 }
             }
             Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: Theme.hair }
@@ -516,11 +541,11 @@ Item {
             }
         }
         Repeater {
-            model: tb.b.rows
+            model: tb.b.rows.length
             Item {
                 id: tr
-                required property var modelData
                 required property int index
+                readonly property var modelData: tb.b.rows[index]
                 width: tb.width
                 height: 44
                 Rectangle { anchors.fill: parent; color: Theme.ink; opacity: trHover.hovered ? 0.05 : 0 }
@@ -529,10 +554,12 @@ Item {
                     anchors.fill: parent
                     Text { width: 44; height: parent.height; verticalAlignment: Text.AlignVCenter; leftPadding: 6; text: String(tr.index + 1).padStart(2, "0"); color: Theme.muted; font.family: Theme.font; font.pixelSize: 14 }
                     Repeater {
-                        model: tr.modelData
+                        model: tr.modelData.length
                         Item {
-                            required property var modelData
-                            width: tb.colW
+                            required property int index
+                            readonly property var modelData: tr.modelData[index]
+                            width: tb.colW(index)
+                            clip: true
                             height: tr.height
                             Cell { x: 6; width: parent.width - 12; anchors.verticalCenter: parent.verticalCenter; value: parent.modelData }
                             Item { x: 6; width: parent.width - 12; height: parent.height; Redact {} }
@@ -673,7 +700,7 @@ Item {
             }
             Text {
                 anchors.right: parent.right
-                text: panel.shown ? panel.shown.api || "" : ""
+                text: (panel.unsaved > 0 ? "● 未保存 " + panel.unsaved + " 处    " : "") + (panel.shown ? panel.shown.api || "" : "")
                 color: Theme.muted
                 font.family: "Consolas"
                 font.pixelSize: 12
@@ -728,11 +755,11 @@ Item {
             width: parent.width
             spacing: 16
             Repeater {
-                model: panel.shown ? panel.shown.blocks : []
+                model: panel.blockCount
                 Column {
                     id: blk
-                    required property var modelData
                     required property int index
+                    readonly property var modelData: panel.shown.blocks[index]
                     width: body.width
                     spacing: 8
                     opacity: 0

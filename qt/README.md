@@ -39,7 +39,8 @@ PySide6 + QML 重写的桌面前端，按「莱茵生命」PV 视觉组织。它
 | `qml/BootSequence.qml` + `Tracks.js` | 启动动画，复刻 PV 0–27 秒段落；画面是 25fps 帧号的纯函数，便于逐帧校准 |
 | `qml/DepartmentHub.qml` + `Departments.js` | 一级界面 01–10 部门索引，入场编排参考 PV 1:00–1:12 |
 | `qml/SectionView.qml` | 二级界面：部门卡、录像带串、档案卡、铭牌、确认弹窗；方块与部门卡之间随机变形过渡 |
-| `qml/ArchivePanel.qml` + `SectionData.js` | 档案卡：按功能分页的表单，字段对齐后端配置；托管管理已读取实时数据（暂只读） |
+| `qml/ArchivePanel.qml` + `SectionData.js` | 档案卡：按功能分页的表单（`SectionData.js` 为未连后端时的演示数据） |
+| `qml/Live.js` | 后端数据 → 档案卡条目；控件带配置键与保存目标，保存时只提交改过的字段 |
 | `qml/CassetteChain.qml` / `Chain3D.qml` | 录像带串：标准挡位为透视投影的 2D 卡带，增强挡位为 Qt Quick 3D 实体卡带 |
 | `qml/RollText.qml` / `RollDigits.qml` | 滚动文字与逐位滚动 |
 | `qml/BackendPanel.qml` | 后端启动中 / 失败面板 |
