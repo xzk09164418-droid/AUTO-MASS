@@ -90,7 +90,7 @@ Item {
     property real clarity: 0
     property var hoverCell: null
     property var hoverLifts: ({})
-    // 进出场（同原项目 ArchiveScene.reveal / entryZ）：整列阵列沿 −z 方向平移 28 个单位，从远处的雾里滑入；
+    // 进出场：节奏同原项目 ArchiveScene.reveal（指数逼近，速率 2.8），方向按示意图：整列阵列从画面右上方（世界 +x）沿录像带长边滑入，向左下落位；
     // 离开时反向滑回。reveal 以选择过渡同样的指数速率（2.8）逼近目标
     property real reveal: 0
     property real targetReveal: 0
@@ -643,7 +643,7 @@ Item {
         reveal += (targetReveal - reveal) * (1 - Math.exp(-dt * (Theme.richMotion ? 2.8 : 35)))
         if (Math.abs(targetReveal - reveal) < 0.0005) reveal = targetReveal
         if (leaving && reveal < 0.03) { leaving = false; flownOut() }
-        const entryZ = -28 * (1 - reveal)
+        const entryX = 28 * (1 - reveal)          // 世界 +x 在画面里是右上方
         // 悬停抬起（最多三格同时在变化；没有悬停时跳过，不产生临时对象）
         if (hoverCell || Object.keys(hoverLifts).length) stepHover(dt)
         damp(S.lift, detailOpen ? inspectionLift : 0.4 * targetReveal, Theme.richMotion ? 4.2 : 35, dt)
@@ -661,7 +661,7 @@ Item {
         uShoulder = S.shoulder.v; uFocus = S.focus.v; uDetail = detail
         if (visualLane() !== builtLane || visualRow() !== builtRow) rebuild()
         const trackX = S.track.v, rail = S.rail.v
-        arrayRoot.position = Qt.vector3d(-trackX, 0, rail + entryZ)
+        arrayRoot.position = Qt.vector3d(-trackX + entryX, 0, rail)
         stepOutgoing(dt, t)
         const q = ease(S.lift.v / 0.4)
         if (Math.abs(q - appearance) > 0.002) { appearance = q; applyAppearance(q) }
@@ -679,7 +679,7 @@ Item {
         const right = Qt.vector3d(0, 1, 0).crossProduct(d).normalized()
         const up = d.crossProduct(right).normalized()
         const pixelScale = 1080 / span
-        let detailAim = Qt.vector3d(chosenX - trackX, selY, chosenZ + rail + entryZ).plus(Qt.vector3d(0, 1.85, 0))
+        let detailAim = Qt.vector3d(chosenX - trackX + entryX, selY, chosenZ + rail).plus(Qt.vector3d(0, 1.85, 0))
         detailAim = detailAim.plus(right.times((0.5 - 550 / 1920) * 1920 / pixelScale)).plus(up.times((560 / 1080 - 0.5) * 1080 / pixelScale))
         const arrayAim = Qt.vector3d(-1.091, -0.045, 0.481)
         const aim = arrayAim.times(1 - detail).plus(detailAim.times(detail))
