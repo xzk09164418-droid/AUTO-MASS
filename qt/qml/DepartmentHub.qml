@@ -26,7 +26,8 @@ FocusScope {
     property real mx: 0
     property real my: 0
     property real clock: 0
-    property real intro: 0               // 0→1 整体入场时间轴（约 2.4 秒）
+    property real intro: 0               // 0→1 整体入场时间轴
+    property int introMs: 2400           // 加载完成即收尾时缩短为快速入场
 
     function tileRect(i) {
         const d = departments[i]
@@ -56,7 +57,7 @@ FocusScope {
 
     SequentialAnimation {
         id: introAnim
-        NumberAnimation { target: hub; property: "intro"; from: 0; to: 1; duration: 2400; easing.type: Easing.Linear }
+        NumberAnimation { target: hub; property: "intro"; from: 0; to: 1; duration: hub.introMs; easing.type: Easing.Linear }
         ScriptAction { script: { hub.current = hub.centerIndex; hub.focusCurrent() } }
     }
 

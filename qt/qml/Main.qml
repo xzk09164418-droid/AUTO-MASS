@@ -65,6 +65,8 @@ Window {
 
     function finishBoot() {
         if (booted) return
+        // 后端就绪即收尾的情况下，索引也快速入场，不再让用户等动画（须在 booted 之前设定）
+        if (bootSeq.exiting || skipBoot) hub.introMs = 700
         booted = true
         if (initialSection >= 1 && initialSection <= 10)
             Qt.callLater(() => hub.open(initialSection - 1))
@@ -102,6 +104,8 @@ Window {
             anchors.fill: parent
             visible: !root.booted
             running: !root.skipBoot
+            // 有后端（或模拟后端）时，加载到 100% 立即收尾；离线预览仍完整播放
+            quickExitOnReady: root.source !== null
             // 后端未就绪时停在授权段；出错也放行，交给 BackendPanel 呈现
             backendReady: !root.source || root.source.status === "ready" || root.source.status === "error"
             backendProgress: root.source ? root.source.progress : 1

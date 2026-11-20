@@ -48,6 +48,30 @@ Item {
         return (m < 10 ? "0" : "") + m + ":" + (s < 10 ? "0" : "") + s
     }
 
+    // 后端到 100% 即以最短方式收尾：不再等动画走完，原背景色由中心铺满后直接进入主页
+    property bool quickExitOnReady: false
+    property bool exiting: false
+    property real exitP: 0
+    function quickExit() {
+        if (exiting || done) return
+        exiting = true
+        exitAnim.start()
+    }
+    onBackendReadyChanged: if (backendReady && quickExitOnReady && running) quickExit()
+    NumberAnimation {
+        id: exitAnim
+        target: boot
+        property: "exitP"
+        from: 0
+        to: 1
+        duration: 380
+        easing.type: Easing.InOutCubic
+        onFinished: {
+            boot.done = true
+            boot.finished()
+        }
+    }
+
     function skip() {
         done = true
         frame = endFrame
@@ -58,12 +82,14 @@ Item {
         frame = 0
         idle = 0
         done = false
+        exiting = false
+        exitP = 0
         stageLog = backendStage ? [backendStage] : []
     }
 
     FrameAnimation {
         id: clock
-        running: boot.running && !boot.done
+        running: boot.running && !boot.done && !boot.exiting
         onTriggered: {
             const step = Math.min(frameTime, 0.1) * boot.fps
             if (!boot.backendReady && boot.frame >= boot.holdFrame - 0.001) {
@@ -453,7 +479,8 @@ Item {
 
     // ── 收尾：原背景色由中心铺满（不缩放） ─────────────────────────────────
     Rectangle {
-        readonly property real p: T.easeInOut(T.ramp(boot.frame, 420, 446))
+        readonly property real p: Math.max(T.easeInOut(T.ramp(boot.frame, 420, 446)), boot.exitP)
+        z: 100
         width: 2300 * p
         height: width
         radius: width / 2

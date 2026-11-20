@@ -1,153 +1,182 @@
 import QtQuick
 import "."
 
-// 部门索引的随机方块（PV 0–27 秒网格上闪现的小方块）。
-// 方块吸附 96px 网格，避开部门方块、品牌区与底栏；按"闪入 → 停留 → 闪出 → 换位"循环。
-// 由 Timer 逐步推进，只在状态变化时重绘，空闲时不占用持续帧。
+// 部门索引上的随机方块（PV 0–27 秒画面里零散出现的小方块）。
+// 不吸附网格：位置与尺寸随机，由避让算法排开部门方块、标签、品牌区、底栏与其他方块；
+// 每 2–10 秒出现一个，停留数秒后离场；入场与离场各自从多种动画中随机选取。
+// 只在动画进行时重绘，静止停留期间不占用持续帧。
 Item {
     id: field
 
     property bool active: false
     property var avoid: []          // [{x, y, w, h}] 中心点坐标的矩形
-    property int count: 10
-    property real px: 0             // 视差位移（跟随部门方块的远景层）
+    property real px: 0             // 视差位移
     property real py: 0
 
-    readonly property int cell: 96
-    readonly property int cols: Math.floor(width / cell)
-    readonly property int rows: Math.floor(height / cell)
-    property var freeCells: []
-    property var taken: ({})
-
-    function computeFree() {
-        const out = []
-        const pad = 18
-        for (let r = 0; r < rows; r++) {
-            for (let c = 0; c < cols; c++) {
-                const x0 = c * cell, y0 = r * cell, x1 = x0 + cell, y1 = y0 + cell
-                if (r === 0 || c === 0 || c === cols - 1) continue   // 画面边缘
-                if (y1 > height - 110) continue                 // 底栏
-                if (x0 < 430 && y0 < 230) continue               // 左上品牌
-                let hit = false
-                for (const a of avoid) {
-                    if (x1 > a.x - a.w / 2 - pad && x0 < a.x + a.w / 2 + pad
-                        && y1 > a.y - a.h / 2 - pad - 40 && y0 < a.y + a.h / 2 + pad) { hit = true; break }
-                }
-                if (!hit) out.push(r * 1000 + c)
-            }
-        }
-        freeCells = out
-    }
-
-    function claim(prev) {
-        if (prev >= 0) delete taken[prev]
-        for (let tries = 0; tries < 12 && freeCells.length; tries++) {
-            const k = freeCells[Math.floor(Math.random() * freeCells.length)]
-            if (!taken[k]) { taken[k] = true; return k }
-        }
-        return -1
-    }
-
-    onWidthChanged: computeFree()
-    onHeightChanged: computeFree()
-    onAvoidChanged: computeFree()
+    readonly property int margin: 48
+    readonly property int gap: 26    // 与其他物体保持的最小间距
 
     transform: Translate { x: field.px; y: field.py }
 
+    function rand(a, b) { return a + Math.random() * (b - a) }
+
+    // 与任一障碍或在场方块相交（含间距）即视为冲突
+    function blocked(x, y, w, h, self) {
+        if (x < margin || y < margin || x + w > width - margin || y + h > height - 120) return true
+        if (x < 440 && y < 240) return true                                   // 左上品牌
+        for (const a of avoid) {
+            const l = a.x - a.w / 2 - gap, t = a.y - a.h / 2 - gap - 44  // 上方留出标签高度
+            const r = a.x + a.w / 2 + gap, b = a.y + a.h / 2 + gap
+            if (x + w > l && x < r && y + h > t && y < b) return true
+        }
+        for (let i = 0; i < pool.count; i++) {
+            const o = pool.itemAt(i)
+            if (!o || o === self || !o.busy) continue
+            if (x + w > o.x - gap && x < o.x + o.width + gap && y + h > o.y - gap && y < o.y + o.height + gap) return true
+        }
+        return false
+    }
+
+    // 拒绝采样：随机取点，冲突则重试；全部失败时本轮跳过
+    function findSpot(w, h, self) {
+        for (let tries = 0; tries < 60; tries++) {
+            const x = Math.round(rand(margin, width - margin - w))
+            const y = Math.round(rand(margin, height - 120 - h))
+            if (!blocked(x, y, w, h, self)) return Qt.point(x, y)
+        }
+        return null
+    }
+
+    function spawn() {
+        for (let i = 0; i < pool.count; i++) {
+            const b = pool.itemAt(i)
+            if (b && !b.busy) { b.launch(); return }
+        }
+    }
+
+    Timer {
+        id: scheduler
+        running: field.active
+        repeat: true
+        interval: 2600
+        onTriggered: {
+            field.spawn()
+            interval = Math.round(field.rand(2000, 10000))
+        }
+    }
+
     Repeater {
-        model: field.count
+        id: pool
+        model: 4
         delegate: Item {
             id: blk
             required property int index
 
-            property int key: -1
+            property bool busy: false
             property int kind: 0
-            property var script: []
-            property int step: 0
-            property bool lit: false
+            property int mode: 0        // 动画方式：0 淡入 1 缩放 2 横向擦除 3 纵向擦除 4 闪烁 5 滑入
+            property int exitMode: 0
+            property int dir: 1
+            property real p: 0          // 0 隐藏 → 1 完全显现
+            visible: busy && p > 0
 
-            readonly property var sizes: [[48, 48], [96, 96], [24, 24], [96, 48], [96, 96], [48, 48]]
-            x: key < 0 ? 0 : (key % 1000) * field.cell + (kind === 2 ? 36 : kind === 0 || kind === 5 ? 24 : 0)
-            y: key < 0 ? 0 : Math.floor(key / 1000) * field.cell + (kind === 2 ? 36 : kind === 0 || kind === 5 ? 24 : kind === 3 ? 24 : 0)
-            width: sizes[kind][0]
-            height: sizes[kind][1]
-            visible: lit && key >= 0
-
-            // 一轮：闪入（亮灭交替）→ 停留 → 闪出 → 隐藏等待；每项为 [亮?, 毫秒]
-            function plan() {
-                const hold = 1600 + Math.random() * 3400
-                const rest = 500 + Math.random() * 3200
-                script = [[1, 60], [0, 50], [1, 70], [0, 40], [1, hold], [0, 60], [1, 50], [0, rest]]
-                step = 0
-            }
-            function relocate() {
-                key = field.claim(key)
+            function launch() {
                 kind = Math.floor(Math.random() * 6)
-                opacity = kind === 2 ? 1 : 0.55 + Math.random() * 0.35
-            }
-            function advance() {
-                if (step >= script.length || key < 0) { relocate(); plan() }
-                const s = script[step++]
-                lit = s[0] === 1
-                ticker.interval = s[1]
-                ticker.restart()
+                const base = kind === 2 ? field.rand(14, 30) : field.rand(36, 120)
+                const w = Math.round(kind === 3 ? base * 1.8 : base)
+                const h = Math.round(kind === 3 ? base * 0.8 : base)
+                const spot = field.findSpot(w, h, blk)
+                if (!spot) return
+                width = w
+                height = h
+                x = spot.x
+                y = spot.y
+                mode = Math.floor(Math.random() * 6)
+                exitMode = Math.floor(Math.random() * 6)
+                dir = Math.random() < 0.5 ? -1 : 1
+                opacity = kind === 2 ? 1 : field.rand(0.55, 0.9)
+                enterAnim.duration = mode === 4 ? 420 : Math.round(field.rand(260, 700))
+                exitAnim.duration = exitMode === 4 ? 380 : Math.round(field.rand(240, 620))
+                hold.duration = Math.round(field.rand(2500, 7000))
+                busy = true
+                life.restart()
             }
 
-            Timer {
-                id: ticker
-                running: false
-                onTriggered: if (field.active) blk.advance()
+            SequentialAnimation {
+                id: life
+                NumberAnimation { id: enterAnim; target: blk; property: "p"; from: 0; to: 1; easing.type: Easing.OutCubic }
+                PauseAnimation { id: hold }
+                ScriptAction { script: { blk.mode = blk.exitMode; blk.dir = -blk.dir } }
+                NumberAnimation { id: exitAnim; target: blk; property: "p"; from: 1; to: 0; easing.type: Easing.InCubic }
+                ScriptAction { script: blk.busy = false }
             }
             Connections {
                 target: field
                 function onActiveChanged() {
-                    if (field.active) {
-                        // 错开首轮出现时间，避免同时亮起
-                        blk.lit = false
-                        blk.step = blk.script.length   // 下一步重新选位
-                        ticker.interval = 200 + blk.index * 260 + Math.random() * 600
-                        ticker.restart()
-                    } else {
-                        ticker.stop()
-                    }
+                    if (!field.active && blk.busy) { life.stop(); blk.p = 0; blk.busy = false }
                 }
             }
-            Component.onCompleted: { plan(); if (field.active) { ticker.interval = 200 + index * 260; ticker.start() } }
 
-            // 0 墨色小方块
-            Rectangle { anchors.fill: parent; visible: blk.kind === 0; color: Theme.block }
-            // 1 白卡 + 灰色内芯
-            Rectangle {
-                anchors.fill: parent
-                visible: blk.kind === 1
-                color: Theme.paper
-                Rectangle { anchors.centerIn: parent; width: 36; height: 36; color: Theme.decoGrey }
-            }
-            // 2 琥珀小点
-            Rectangle { anchors.fill: parent; visible: blk.kind === 2; color: Theme.accent }
-            // 3 条纹块
-            Rectangle {
-                anchors.fill: parent
-                visible: blk.kind === 3
-                color: Theme.block
-                Rectangle { width: parent.width; height: 20; anchors.verticalCenter: parent.verticalCenter; color: Theme.paper }
-            }
-            // 4 空框 + 角标
+            // 动画方式到外观的映射
+            readonly property real fade: mode === 0 || mode === 5 ? p
+                : mode === 4 ? (p >= 0.8 || Math.floor(p * 5) % 2 === 1 ? 1 : 0) : 1
+            readonly property real grow: mode === 1 ? p : 1
+            readonly property real wipeX: mode === 2 ? p : 1
+            readonly property real wipeY: mode === 3 ? p : 1
+
             Item {
-                anchors.fill: parent
-                visible: blk.kind === 4
-                Rectangle { anchors.fill: parent; color: "transparent"; border.width: 1.5; border.color: Theme.ink; opacity: 0.6 }
-                Rectangle { x: -1; y: -1; width: 14; height: 3; color: Theme.ink }
-                Rectangle { x: -1; y: -1; width: 3; height: 14; color: Theme.ink }
-                Rectangle { x: parent.width - 13; y: parent.height - 2; width: 14; height: 3; color: Theme.ink }
-                Rectangle { x: parent.width - 2; y: parent.height - 13; width: 3; height: 14; color: Theme.ink }
-            }
-            // 5 十字准星
-            Item {
-                anchors.fill: parent
-                visible: blk.kind === 5
-                Rectangle { x: 23; width: 2; height: parent.height; color: Theme.ink }
-                Rectangle { y: 23; height: 2; width: parent.width; color: Theme.ink }
+                id: clipBox
+                clip: blk.mode === 2 || blk.mode === 3
+                width: blk.width * blk.wipeX
+                height: blk.height * blk.wipeY
+                x: blk.dir < 0 ? blk.width - width : 0
+                y: blk.dir < 0 ? blk.height - height : 0
+                opacity: blk.fade
+                scale: blk.grow
+                transform: Translate { y: blk.mode === 5 ? 22 * (1 - blk.p) * blk.dir : 0 }
+
+                Item {
+                    width: blk.width
+                    height: blk.height
+                    x: -clipBox.x
+                    y: -clipBox.y
+
+                    // 0 墨色方块
+                    Rectangle { anchors.fill: parent; visible: blk.kind === 0; color: Theme.block }
+                    // 1 白卡 + 灰色内芯
+                    Rectangle {
+                        anchors.fill: parent
+                        visible: blk.kind === 1
+                        color: Theme.paper
+                        Rectangle { anchors.centerIn: parent; width: parent.width * 0.38; height: width; color: Theme.decoGrey }
+                    }
+                    // 2 琥珀小块
+                    Rectangle { anchors.fill: parent; visible: blk.kind === 2; color: Theme.accent }
+                    // 3 条纹块
+                    Rectangle {
+                        anchors.fill: parent
+                        visible: blk.kind === 3
+                        color: Theme.block
+                        Rectangle { width: parent.width; height: parent.height * 0.42; anchors.verticalCenter: parent.verticalCenter; color: Theme.paper }
+                    }
+                    // 4 空框 + 角标
+                    Item {
+                        anchors.fill: parent
+                        visible: blk.kind === 4
+                        Rectangle { anchors.fill: parent; color: "transparent"; border.width: 1.5; border.color: Theme.ink; opacity: 0.6 }
+                        Rectangle { width: 14; height: 3; color: Theme.ink }
+                        Rectangle { width: 3; height: 14; color: Theme.ink }
+                        Rectangle { x: parent.width - 14; y: parent.height - 3; width: 14; height: 3; color: Theme.ink }
+                        Rectangle { x: parent.width - 3; y: parent.height - 14; width: 3; height: 14; color: Theme.ink }
+                    }
+                    // 5 十字准星
+                    Item {
+                        anchors.fill: parent
+                        visible: blk.kind === 5
+                        Rectangle { x: parent.width / 2 - 1; width: 2; height: parent.height; color: Theme.ink }
+                        Rectangle { y: parent.height / 2 - 1; height: 2; width: parent.width; color: Theme.ink }
+                    }
+                }
             }
         }
     }
