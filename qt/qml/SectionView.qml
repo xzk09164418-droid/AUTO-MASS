@@ -29,6 +29,9 @@ FocusScope {
     signal closed()
 
     visible: busy
+    // 部门说明不在画面上显示（不加底部白字），只提供给读屏
+    Accessible.name: d ? d.zh : ""
+    Accessible.description: conf ? conf.caption + " 共 " + items.length + " 项。" : ""
 
     // ── 打开 / 关闭 ──────────────────────────────────────────────────────
     function open(i, r, tileItem) {
@@ -401,20 +404,6 @@ FocusScope {
     }
 
     // ── 底部：字幕、POWERED BY、提示 ─────────────────────────────────────
-    Text {
-        width: parent.width
-        y: 1026
-        z: 6
-        horizontalAlignment: Text.AlignHCenter
-        text: view.conf ? view.conf.caption + " 共 " + view.items.length + " 项。" : ""
-        color: "#ffffff"
-        style: Text.Outline
-        styleColor: Qt.rgba(0, 0, 0, 0.75)
-        font.family: Theme.font
-        font.pixelSize: 19
-        font.letterSpacing: 1.5
-        opacity: view.reveal
-    }
     Row {
         anchors.right: parent.right
         anchors.rightMargin: 56

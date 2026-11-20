@@ -229,7 +229,8 @@ svg { display: block; }
 #s-plate.swap .txt, #s-plate.swap .detail { opacity: 0; transform: translateY(10px); transition: none; }
 
 /* 底部字幕：部门说明（PV 的字幕位置） */
-#s-sub { position: absolute; left: 0; right: 0; top: 1026px; text-align: center; font-size: 19px; letter-spacing: .08em; color: #fff; text-shadow: 0 0 2px rgba(0,0,0,.9), 0 0 8px rgba(0,0,0,.6); z-index: 6; pointer-events: none; }
+/* 部门说明不再以底部白字显示，只留给读屏 */
+#s-sub { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .s-powered { position: absolute; right: 56px; top: 1044px; font-size: 14px; letter-spacing: .04em; }
 .s-powered b { font-weight: 700; }
 .s-hint { position: absolute; right: 250px; top: 1048px; font-size: 11px; letter-spacing: .2em; color: var(--muted); }
