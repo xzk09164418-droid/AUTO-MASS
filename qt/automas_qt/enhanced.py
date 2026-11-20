@@ -1,6 +1,6 @@
 """3D 增强组件（可选安装）。
 
-增强动态效果挡位需要 Qt Quick 3D，它在 PySide6-Addons 包里（约 180 MB），默认不安装：
+增强动态效果挡位需要 Qt Quick 3D，它在 PySide6-Addons 包里（下载约 161 MB，安装后约 420 MB），默认不安装：
 - 用户在设置里选「增强」且组件缺失时，二次确认后用当前解释器的 pip 下载安装，版本与 PySide6 保持一致；
 - 切回减少 / 标准挡位时直接删除这些文件。本次运行已加载过 3D 模块时 Windows 会锁住 DLL，
   先写入删除标记，下次启动、在加载任何 Qt 模块之前完成删除（见 cleanup_pending_removal）。
@@ -80,7 +80,7 @@ class EnhancedComponent(QObject):
 
     @Property(str, constant=True)
     def sizeText(self) -> str:
-        return "约 180 MB"
+        return "下载约 161 MB，安装后约 420 MB"
 
     def _set(self, state: str, detail: str = "") -> None:
         self._state = state

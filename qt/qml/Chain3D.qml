@@ -35,9 +35,9 @@ Item {
             clipNear: 1
             clipFar: 60
         }
-        DirectionalLight { eulerRotation.x: -38; eulerRotation.y: -24; brightness: 1.5; color: "#fffaf2" }
-        DirectionalLight { eulerRotation.x: 10; eulerRotation.y: 160; brightness: 0.35 }
-        DirectionalLight { brightness: 0.55 }
+        DirectionalLight { eulerRotation.x: -38; eulerRotation.y: -24; brightness: 1.15; color: "#ffffff" }
+        DirectionalLight { eulerRotation.x: 10; eulerRotation.y: 160; brightness: 0.25 }
+        DirectionalLight { brightness: 0.4 }
 
         Repeater3D {
             model: root.chain ? root.items.length + root.chain.pad * 2 : 0
@@ -64,7 +64,7 @@ Item {
                     property int k: cas.k
                     scale: Qt.vector3d(0.026, 0.017, 0.0026)
                     materials: PrincipledMaterial {
-                        baseColor: Theme.dark ? "#3a474c" : "#f3f1ec"
+                        baseColor: Theme.dark ? "#3a474c" : "#f1f0ec"
                         roughness: 0.38
                         metalness: 0
                         opacity: Math.min(0.8, 0.32 + 0.48 * cas.p.focus + (cas.hot ? 0.12 : 0)) * cas.fade
