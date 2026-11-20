@@ -22,18 +22,7 @@ QT_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(QT_DIR))
 
 from automas_qt.backend import BackendSupervisor  # noqa: E402
-
-
-def enhanced_available() -> bool:
-    """3D 增强组件是否已安装：需要 Qt Quick 3D 模块与档案模型资源。
-
-    增强组件为可选安装；安装时未勾选「增强视觉效果」则不放入（或删除）这些文件，客户端只能用减少 / 标准挡位。
-    """
-    import PySide6
-
-    qml_dir = Path(PySide6.__file__).resolve().parent / "qml" / "QtQuick3D"
-    assets = QT_DIR / "assets3d"
-    return qml_dir.is_dir() and assets.is_dir() and any(assets.glob("*.glb"))
+from automas_qt.enhanced import EnhancedComponent, cleanup_pending_removal  # noqa: E402
 
 
 def parse_args() -> argparse.Namespace:
@@ -58,9 +47,13 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
+    # 上次运行里选择了删除 3D 增强组件、但当时文件被占用：在加载 Qt Quick 之前补删
+    cleanup_pending_removal()
     # 显式要求垂直同步：交换链按显示器刷新节拍呈现，避免圆环等大幅运动时撕裂
     fmt = QSurfaceFormat.defaultFormat()
     fmt.setSwapInterval(1)
+    # 4× 多重采样：旋转的玻璃卡、透视卡带、斜线等边缘不再出现锯齿
+    fmt.setSamples(4)
     QSurfaceFormat.setDefaultFormat(fmt)
     app = QGuiApplication(sys.argv)
     app.setApplicationName("AUTO-MAS")
@@ -70,6 +63,7 @@ def main() -> int:
         app.setWindowIcon(QIcon(str(icon)))
 
     backend = BackendSupervisor()
+    enhanced = EnhancedComponent()
     engine = QQmlApplicationEngine()
     engine.warnings.connect(
         lambda warnings: [print(w.toString(), file=sys.stderr, flush=True) for w in warnings]
@@ -84,7 +78,7 @@ def main() -> int:
             "returnAfter": args.return_after,
             "themeMode": args.theme,
             "motionMode": args.motion,
-            "enhancedAvailable": enhanced_available(),
+            "enhanced": enhanced,
         }
     )
     engine.load(QUrl.fromLocalFile(str(QT_DIR / "qml" / "Main.qml")))

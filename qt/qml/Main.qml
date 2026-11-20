@@ -14,7 +14,7 @@ Window {
     property int returnAfter: 0             // 自检：进入二级界面 N 毫秒后自动返回
     property string themeMode: "system"
     property string motionMode: "standard"
-    property bool enhancedAvailable: false
+    property var enhanced: null             // EnhancedComponent：3D 增强组件（可选安装）
     property real simulateLoad: 0           // >0：按真实阶段模拟一次耗时 N 秒的后端启动
     property bool booted: false
 
@@ -63,8 +63,8 @@ Window {
 
     Component.onCompleted: {
         Theme.mode = themeMode
-        Theme.enhancedAvailable = enhancedAvailable
-        Theme.motion = motionMode === "enhanced" && !enhancedAvailable ? "standard" : motionMode
+        Theme.enhancedAvailable = !!enhanced && enhanced.installed
+        Theme.motion = motionMode === "enhanced" && !Theme.enhancedAvailable ? "standard" : motionMode
         if (skipBoot) finishBoot()
     }
 
@@ -107,6 +107,8 @@ Window {
             anchors.fill: parent
             departments: hub.departments
             hub: hub
+            enhanced: root.enhanced
+            api: root.backendEnabled && root.backend && root.backend.status === "ready" ? root.backend : null
             onClosed: hub.focusCurrent()
         }
 
@@ -123,6 +125,11 @@ Window {
             backendStage: root.source ? root.source.stage : "OFFLINE PREVIEW"
             onFinished: root.finishBoot()
         }
+    }
+
+    Connections {
+        target: root.enhanced
+        function onChanged() { Theme.enhancedAvailable = root.enhanced.installed }
     }
 
     Timer { id: returnTimer; interval: root.returnAfter; onTriggered: sections.close() }

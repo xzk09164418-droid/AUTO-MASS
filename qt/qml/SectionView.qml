@@ -15,7 +15,39 @@ FocusScope {
     readonly property bool busy: index >= 0
     readonly property var d: index >= 0 ? departments[index] : null
     readonly property var conf: d ? SD.sections[d.n] : null
-    readonly property var items: conf ? conf.items : []
+    // 已接入后端的部门用实时数据，其余仍是演示数据（逐步接入）
+    property var api: null                  // BackendSupervisor（后端就绪时）
+    property var enhanced: null             // EnhancedComponent
+    onApiChanged: if (opened && d) fetchLive(d.key)
+    property var live: ({})                 // 部门 key → 条目
+    property string liveState: ""           // loading / ok / error
+    property string liveMessage: ""
+    readonly property bool isLive: !!(d && live[d.key])
+    readonly property var items: d && live[d.key] ? live[d.key] : conf ? conf.items : []
+    onItemsChanged: {
+        if (!opened) return
+        target = Math.min(target, Math.max(0, items.length - 1))
+        if (chain.introTarget === 1) { chain.items = items; chain.target = target }
+    }
+    function fetchLive(key) {
+        if (!api || key !== "scripts") { liveState = ""; return }
+        liveState = "loading"
+        api.request("/api/scripts/get", JSON.stringify({ includeUsers: true }), text => {
+            let r = null
+            try { r = JSON.parse(text) } catch (e) { r = { code: 0, message: "响应无法解析" } }
+            if (r.code === 200) {
+                const list = SD.generalFromApi(r)
+                const next = Object.assign({}, live)
+                if (list.length) next.scripts = list
+                live = next
+                liveState = "ok"
+                liveMessage = ""
+            } else {
+                liveState = "error"
+                liveMessage = r.message || "读取失败"
+            }
+        })
+    }
     property int target: 0
     readonly property var item: items.length ? items[Math.min(target, items.length - 1)] : null
 
@@ -38,8 +70,10 @@ FocusScope {
         if (hub) { r = hub.liveTileRect(i); hub.hiddenIndex = i }
         returning = false
         index = i
-        target = 0
-        panel.tab = 0
+        fetchLive(departments[i].key)
+        // 记忆：回到上次停留的条目与功能分页
+        target = Math.min(memory[departments[i].key] || 0, Math.max(0, items.length - 1))
+        panel.tab = items[target] && items[target]._tab ? items[target]._tab : 0
         landed = false
         opened = true
         morph.start(r, tileItem, false)
@@ -60,18 +94,43 @@ FocusScope {
         const r = hub ? hub.liveTileRect(index) : morph.tileRect
         morph.start(r, null, true)
     }
+    // 首尾循环：越过末张（或首张）时先弹簧回弹并提示，回弹结束后再次同向滚动才跳到另一端
+    property int edgeDir: 0
+    property real edgeAt: 0
     function select(k) {
         if (!items.length) return
-        const next = Math.max(0, Math.min(items.length - 1, k))
-        if (next === target) return
-        dir = next > target ? 1 : -1
+        if (k < 0 || k > items.length - 1) {
+            const d = k < 0 ? -1 : 1
+            const now = Date.now()
+            if (edgeDir === d && now - edgeAt > 350 && now - edgeAt < 2200) {
+                edgeDir = 0
+                go(d > 0 ? 0 : items.length - 1, d)
+                return
+            }
+            if (edgeDir !== d || now - edgeAt >= 2200) {
+                edgeDir = d
+                edgeAt = now
+                chain.bounce(d)
+                toast.show(d > 0 ? "已是最后一张 · 再滚动一次回到第一张" : "已是第一张 · 再滚动一次跳到最后一张")
+            }
+            return
+        }
+        edgeDir = 0
+        if (k === target) return
+        go(k, k > target ? 1 : -1)
+    }
+    function go(next, d) {
+        dir = d
         target = next
-        panel.tab = 0
+        memory[view.d.key] = next
+        // 记忆：每个条目保留自己的功能分页
+        panel.tab = items[next] && items[next]._tab ? items[next]._tab : 0
         chain.target = next
     }
     property int dir: 1
+    property var memory: ({})               // 部门 key → 上次停留的条目
 
-    Timer { id: chainDelay; interval: 260; onTriggered: chain.open(view.items, view.d.n) }
+    Timer { id: chainDelay; interval: 260; onTriggered: chain.open(view.items, view.d.n, view.target) }
     NumberAnimation { id: revealAnim; target: view; property: "reveal"; to: 1; duration: 700; easing.type: Easing.OutCubic }
     NumberAnimation { id: hideAnim; target: view; property: "reveal"; to: 0; duration: 260 }
 
@@ -266,6 +325,7 @@ FocusScope {
         width: 900
         height: 640
         z: 2
+        enhanced: view.enhanced
         onPicked: k => view.select(k)
     }
     Row {
@@ -281,6 +341,30 @@ FocusScope {
         }
     }
 
+    // ── 数据来源标记：实时数据 / 演示数据 ─────────────────────────────────
+    Row {
+        x: 1150
+        y: 26
+        z: 5
+        spacing: 8
+        opacity: view.reveal
+        Rectangle {
+            anchors.verticalCenter: parent.verticalCenter
+            width: 8; height: 8; radius: 4
+            color: view.isLive ? Theme.success : view.liveState === "error" ? Theme.error : view.liveState === "loading" ? Theme.warning : Theme.muted
+        }
+        Text {
+            text: view.isLive ? "实时数据 · 来自后端 · 共 " + view.items.length + " 项"
+                : view.liveState === "loading" ? "正在读取后端…"
+                : view.liveState === "error" ? "后端读取失败：" + view.liveMessage + " · 显示演示数据"
+                : "演示数据 · 该部门尚未接入后端"
+            color: Theme.muted
+            font.family: Theme.font
+            font.pixelSize: 12
+            font.letterSpacing: 1.2
+        }
+    }
+
     // ── 右侧：分页点、档案卡、铭牌 ───────────────────────────────────────
     Row {
         id: pager
@@ -289,11 +373,26 @@ FocusScope {
         z: 5
         spacing: 4
         opacity: view.reveal
+        readonly property int maxDots: 12
+        readonly property int first: view.items.length <= maxDots ? 0
+            : Math.max(0, Math.min(view.items.length - maxDots, view.target - Math.floor(maxDots / 2)))
+        Text {
+            visible: view.items.length > pager.maxDots
+            anchors.verticalCenter: parent.verticalCenter
+            rightPadding: 10
+            text: String(view.target + 1).padStart(2, "0") + " / " + String(view.items.length).padStart(2, "0")
+            color: Theme.accent
+            font.family: Theme.font
+            font.pixelSize: 13
+            font.weight: Font.Bold
+            font.letterSpacing: 1
+        }
         Repeater {
-            model: view.items.length
+            model: Math.min(view.items.length, pager.maxDots)
             Item {
                 id: dot
-                required property int index
+                required property int modelData
+                readonly property int index: pager.first + modelData
                 readonly property bool on: view.target === index
                 width: on ? 42 : 22
                 height: 22
@@ -356,6 +455,13 @@ FocusScope {
             itemIndex: view.target
             onToast: text => toast.show(text)
             onConfirmDelete: (name, api) => modal.open(name, api)
+            onRequestEnhanced: {
+                if (!view.enhanced) return
+                modal.ask("下载 3D 增强组件",
+                    "增强挡位用 Qt Quick 3D 绘制实体档案卡带，需要另外下载 " + view.enhanced.packageText + "（" + view.enhanced.sizeText + "，来自 PyPI）。安装完成后自动切换到增强挡位；以后切回减少或标准挡位时，会直接删除这些文件。",
+                    "OPTIONAL COMPONENT", "下载并安装", false, () => view.enhanced.install())
+            }
+            onLeaveEnhanced: if (view.enhanced && view.enhanced.installed) view.enhanced.remove()
         }
     }
 
@@ -458,8 +564,22 @@ FocusScope {
         property string api: ""
         visible: p > 0
         function open(name, a) {
+            title = "确认删除"; okText = "删除"; danger = true; onOk = null
             api = a
             mText.text = "将删除「" + name + "」。此操作会写入后端，删除后无法撤销。"
+            shown = true
+            outAnim.stop()
+            inAnim.restart()
+            cancelBtn.forceActiveFocus()
+        }
+        property string title: "确认删除"
+        property string okText: "删除"
+        property bool danger: true
+        property var onOk: null
+        function ask(t, body, meta, ok, isDanger, fn) {
+            title = t; okText = ok; danger = isDanger; onOk = fn
+            api = meta
+            mText.text = body
             shown = true
             outAnim.stop()
             inAnim.restart()
@@ -508,7 +628,7 @@ FocusScope {
                     Text { anchors.right: parent.right; text: modal.api; color: Theme.muted; font.family: "Consolas"; font.pixelSize: 12 }
                 }
                 Item { width: 1; height: 18 }
-                Text { text: "确认删除"; color: Theme.ink; font.family: Theme.font; font.pixelSize: 30; font.weight: Font.Bold; font.letterSpacing: 1.2 }
+                Text { text: modal.title; color: Theme.ink; font.family: Theme.font; font.pixelSize: 30; font.weight: Font.Bold; font.letterSpacing: 1.2 }
                 Item { width: 1; height: 18 }
                 Rectangle { width: parent.width; height: 2; color: Theme.ink }
                 Item { width: 1; height: 20 }
@@ -518,15 +638,16 @@ FocusScope {
                     anchors.right: parent.right
                     spacing: 12
                     Repeater {
-                        model: ["取消", "删除"]
+                        model: ["取消", modal.okText]
                         Rectangle {
                             id: mb
                             required property string modelData
                             required property int index
                             readonly property bool danger: index === 1
+                            readonly property bool hotRed: danger && modal.danger
                             width: mbText.implicitWidth + 44
                             height: 40
-                            color: danger ? (mbMouse.containsMouse || activeFocus ? Theme.error : Theme.ink) : "transparent"
+                            color: danger ? (mbMouse.containsMouse || activeFocus ? (hotRed ? Theme.error : Theme.accent) : Theme.ink) : "transparent"
                             border.width: 1.5
                             border.color: danger ? color : mbMouse.containsMouse || activeFocus ? Theme.accent : Theme.ink
                             activeFocusOnTab: true
@@ -534,7 +655,8 @@ FocusScope {
                             Accessible.name: modelData
                             Component.onCompleted: if (index === 0) modal.cancelRef = mb
                             function trigger() {
-                                if (danger) { const a = modal.api; modal.close(() => toast.show("已删除 · " + a)) }
+                                if (danger && modal.onOk) { const f = modal.onOk; modal.close(() => f()) }
+                                else if (danger) { const a = modal.api; modal.close(() => toast.show("已删除 · " + a)) }
                                 else modal.close()
                             }
                             Keys.onReturnPressed: trigger()
@@ -550,6 +672,20 @@ FocusScope {
         readonly property Item cancelBtn: cancelRef
     }
 
+    // 组件下载 / 删除进度
+    Connections {
+        target: view.enhanced
+        function onChanged() {
+            const e = view.enhanced
+            if (e.state === "installing") toast.show("3D 增强组件：" + (e.detail || "准备下载") + "…", true)
+            else if (e.state === "removing") toast.show("正在删除 3D 增强组件…", true)
+            else if (e.state === "installed") { Theme.motion = "enhanced"; toast.show("3D 增强组件已安装，已切换到增强挡位") }
+            else if (e.state === "missing") toast.show("已删除 3D 增强组件")
+            else if (e.state === "pending-remove") toast.show("3D 增强组件将在下次启动时删除（当前文件正在使用）")
+            else if (e.state === "error") toast.show("3D 增强组件失败：" + e.detail)
+        }
+    }
+
     // ── 提示条 ─────────────────────────────────────────────────────────
     Rectangle {
         id: toast
@@ -562,10 +698,11 @@ FocusScope {
         color: Theme.ink
         property real shownP: 0
         opacity: shownP
-        function show(t) {
+        function show(t, sticky) {
             toastText.text = t
             toastIn.restart()
-            toastTimer.restart()
+            if (sticky) toastTimer.stop()
+            else toastTimer.restart()
         }
         NumberAnimation { id: toastIn; target: toast; property: "shownP"; to: 1; duration: 220; easing.type: Easing.OutCubic }
         NumberAnimation { id: toastOut; target: toast; property: "shownP"; to: 0; duration: 200 }

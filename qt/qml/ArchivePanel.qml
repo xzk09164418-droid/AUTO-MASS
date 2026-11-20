@@ -16,6 +16,9 @@ Item {
     property int tab: 0
     signal toast(string text)
     signal confirmDelete(string name, string api)
+    signal requestEnhanced()
+    signal leaveEnhanced()
+    onTabChanged: if (item) item._tab = tab
 
     readonly property var pages: item ? SD.pages(item) : []
     readonly property var page: pages.length ? pages[Math.min(tab, pages.length - 1)] : null
@@ -23,6 +26,7 @@ Item {
     // 当前显示的页（切换时先淡出旧页再换内容）
     property var shown: null
     property string excl: ""                 // 队列：定时启动与循环队列互斥
+    onExclChanged: if (item && item.exclusive !== undefined && item.exclusive !== excl) item.exclusive = excl
 
     // 快速启动的模拟运行
     property string runState: "idle"
@@ -55,7 +59,7 @@ Item {
     function apply() {
         runTimer.stop()
         runState = "idle"; runPct = 0; runTitle = "待命"; runText = "选择任务后开始执行"; statOverride = ({})
-        excl = item && item.exclusive ? item.exclusive : ""
+        excl = item && item.exclusive !== undefined ? item.exclusive : ""
         tickets = 0
         shown = page
         content.opacity = 1
@@ -74,6 +78,8 @@ Item {
 
     function act(name) {
         const api = shown ? shown.api : ""
+        // 实时数据目前只读：写回接口在下一步接入
+        if (item && item.live && /保存|删除|复制|添加|恢复默认|设置脚本/.test(name)) { toast("实时数据暂为只读，写回将在下一步接入 · " + api); return }
         if (name === "开始执行") startRun()
         else if (name === "停止" || name === "停止任务") { runTimer.stop(); runState = "idle"; runPct = 0; runTitle = "已停止"; runText = "队列已手动停止"; toast("队列已停止 · POST /api/dispatch/stop") }
         else if (/删除/.test(name)) confirmDelete(item ? item.name : "", api)
@@ -159,6 +165,7 @@ Item {
         id: tg
         property var spec
         property bool local: spec.v
+        onLocalChanged: if (spec.v !== local) { spec.v = local; spec.dirty = true }
         readonly property bool on: spec.x ? panel.excl === spec.x : local
         implicitWidth: 72
         implicitHeight: 24
@@ -221,14 +228,18 @@ Item {
         readonly property var motions: ["reduced", "standard", "enhanced"]
         property int cur: spec.k === "motion" ? Math.max(0, motions.indexOf(Theme.motion)) : spec.v
         // 动态效果挡位：直接改 Theme.motion；增强挡位需要另行安装的 3D 组件
-        onCurChanged: if (spec.k === "motion" && motions[cur] !== Theme.motion) {
+        onCurChanged: if (spec.k !== "motion") { if (spec.v !== cur) { spec.v = cur; spec.dirty = true } }
+        else if (motions[cur] !== Theme.motion) {
             if (cur === 2 && !Theme.enhancedAvailable) {
-                panel.toast("未安装 3D 增强组件：安装时勾选「增强视觉效果」后可用")
+                // 组件缺失：先回到当前挡位，二次确认后再下载
                 cur = Math.max(0, motions.indexOf(Theme.motion))
+                panel.requestEnhanced()
                 return
             }
+            const was = Theme.motion
             Theme.motion = motions[cur]
             panel.toast("动态效果：" + spec.opts[cur])
+            if (was === "enhanced") panel.leaveEnhanced()
         }
         Repeater {
             model: sg.spec.opts
@@ -273,7 +284,10 @@ Item {
         property real contentWidthHint: 0
         font.family: Theme.font
         font.pixelSize: 15
-        onActivated: if (spec.k === "queue") panel.queueName = currentText
+        onActivated: {
+            if (spec.v !== currentIndex) { spec.v = currentIndex; spec.dirty = true }
+            if (spec.k === "queue") panel.queueName = currentText
+        }
         Component.onCompleted: {
             let w = 0
             for (const o of spec.opts) w = Math.max(w, metrics.advanceWidth(o))
@@ -327,7 +341,13 @@ Item {
                 border.width: 1.5
                 border.color: on ? Theme.ink : chipMouse.containsMouse ? Theme.accent : Theme.hair
                 Text { anchors.centerIn: parent; text: chip.modelData; color: chip.on ? Theme.paper : Theme.muted; font.family: Theme.font; font.pixelSize: 13; font.weight: Font.DemiBold }
-                MouseArea { id: chipMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: chip.on = !chip.on }
+                MouseArea { id: chipMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: {
+                    chip.on = !chip.on
+                    const m = ch.spec.v.split("")
+                    m[chip.index] = chip.on ? "1" : "0"
+                    ch.spec.v = m.join("")
+                    ch.spec.dirty = true
+                } }
             }
         }
     }
@@ -374,21 +394,21 @@ Item {
         Component { id: cText; Label { text: String(ctl.spec); elide: Text.ElideRight } }
         Component { id: cUnit; Text { text: ctl.spec.t; color: Theme.muted; font.family: Theme.font; font.pixelSize: 13 } }
         Component { id: cTog; Tog { spec: ctl.spec } }
-        Component { id: cInp; Field { text: ctl.spec.v; mono: ctl.spec.mono } }
+        Component { id: cInp; Field { text: ctl.spec.v; mono: ctl.spec.mono; onTextEdited: { ctl.spec.v = text; ctl.spec.dirty = true } } }
         Component {
             id: cNum
             Row {
                 spacing: 8
-                Field { width: 76; text: String(ctl.spec.v); horizontalAlignment: Text.AlignRight; validator: IntValidator { bottom: 0; top: 99999 } }
+                Field { width: 76; text: String(ctl.spec.v); horizontalAlignment: Text.AlignRight; onTextEdited: { ctl.spec.v = Number(text); ctl.spec.dirty = true } validator: IntValidator { bottom: 0; top: 99999 } }
                 Text { visible: ctl.spec.unit !== ""; anchors.verticalCenter: parent.verticalCenter; text: ctl.spec.unit; color: Theme.muted; font.family: Theme.font; font.pixelSize: 13 }
             }
         }
-        Component { id: cTime; Field { width: ctl.spec.c === "date" ? 150 : 90; text: ctl.spec.v; mono: true; inputMask: ctl.spec.c === "date" ? "9999-99-99" : "99:99" } }
+        Component { id: cTime; Field { width: ctl.spec.c === "date" ? 150 : 90; text: ctl.spec.v; mono: true; inputMask: ctl.spec.c === "date" ? "9999-99-99" : "99:99"; onTextEdited: { ctl.spec.v = text; ctl.spec.dirty = true } } }
         Component {
             id: cPath
             RowLayout {
                 spacing: 10
-                Field { Layout.fillWidth: true; text: ctl.spec.v; mono: true }
+                Field { Layout.fillWidth: true; text: ctl.spec.v; mono: true; onTextEdited: { ctl.spec.v = text; ctl.spec.dirty = true } }
                 Btn { text: "浏览"; small: true; onClicked: panel.toast("演示：打开文件选择框") }
             }
         }

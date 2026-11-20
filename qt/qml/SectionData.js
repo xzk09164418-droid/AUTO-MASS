@@ -33,33 +33,71 @@ function log(title, lines, tall) { return { t: "log", title: title, lines: lines
 function banner(o) { o.t = "banner"; return o }
 function list(title, rows) { return { t: "list", title: title, rows: rows } }
 
-// 通用脚本：程序 / 判定 / 游戏 / 限制 / 账号（GeneralConfig、GeneralUserConfig）
-function general(o) {
+// 通用脚本：程序 / 判定 / 游戏 / 限制 / 账号。c 为后端 GeneralConfig 结构 {Info, Script, Game, Run}，
+// users 为 [{name, status, remained, base, last}]；字段键与 /api/scripts/get 返回一致。
+function idx(list, v, d) { var i = list.indexOf(v); return i < 0 ? (d || 0) : i }
+function general(name, en, c, users, live) {
     var api = "POST /api/scripts/update"
-    return { name: o.name, en: o.en, tabs: [
+    var I = c.Info, S = c.Script, G = c.Game, R = c.Run
+    var gameType = idx(["Emulator", "Client", "URL"], G.Type, 1)
+    return { name: name, en: en, live: !!live, tabs: [
         { name: "程序", api: api, blocks: [
-            kv("SCRIPT", [["脚本名称", inp(o.name), "Info.Name"], ["根目录", path(o.root), "Info.RootPath"], ["启动程序", path(o.exe), "Script.ScriptPath"], ["启动参数", inp(o.args, true), "Script.Arguments"], ["配置路径", path(o.cfg), "Script.ConfigPath"], ["路径类型", seg(["文件", "文件夹"], o.folder ? 1 : 0), "Script.ConfigPathMode"], ["回写配置", seg(["从不", "成功时", "失败时", "总是"], 1), "Script.UpdateConfigMode"]]),
-            kv("PROCESS", [["追踪进程", tog(!!o.track), "Script.IfTrackProcess"], ["进程名", inp(o.track, true), "Script.TrackProcessName"], ["清理范围", seg(["跨会话强力", "仅本轮", "当前会话"], 0), "Script.TaskKillMode"]])
+            kv("SCRIPT", [["脚本名称", inp(I.Name), "Info.Name"], ["根目录", path(I.RootPath), "Info.RootPath"], ["启动程序", path(S.ScriptPath), "Script.ScriptPath"], ["启动参数", inp(S.Arguments, true), "Script.Arguments"], ["配置路径", path(S.ConfigPath), "Script.ConfigPath"], ["路径类型", seg(["文件", "文件夹"], idx(["File", "Folder"], S.ConfigPathMode)), "Script.ConfigPathMode"], ["回写配置", seg(["从不", "成功时", "失败时", "总是"], idx(["Never", "Success", "Failure", "Always"], S.UpdateConfigMode)), "Script.UpdateConfigMode"]]),
+            kv("PROCESS", [["追踪进程", tog(S.IfTrackProcess), "Script.IfTrackProcess"], ["进程名", inp(S.TrackProcessName, true), "Script.TrackProcessName"], ["清理范围", seg(["跨会话强力", "仅本轮", "当前会话"], idx(["Force", "Tracked", "Session"], S.TaskKillMode)), "Script.TaskKillMode"]])
         ], actions: ["保存", "复制脚本", "删除脚本"] },
         { name: "判定", api: api, blocks: [
-            kv("LOG FILE", [["日志路径", path(o.log), "Script.LogPath"], ["路径日期格式", inp("%Y-%m-%d", true), "Script.LogPathFormat"], ["时间戳位置", [num(1), unit("至"), num(19), unit("列")], "Script.LogTimeStart / LogTimeEnd"], ["时间格式", inp("%Y-%m-%d %H:%M:%S", true), "Script.LogTimeFormat"]]),
-            kv("MATCH", [["成功判定", [inp(o.ok), seg(["关键字", "正则"], 0)], "Script.SuccessLog / SuccessLogMode"], ["失败判定", [inp(o.err), seg(["关键字", "正则"], 0)], "Script.ErrorLog / ErrorLogMode"], ["日志预处理", tog(false), "Script.LogHookEnabled"], ["推送日志", tog(true), "Script.PushLogEnabled"]]),
+            kv("LOG FILE", [["日志路径", path(S.LogPath), "Script.LogPath"], ["路径日期格式", inp(S.LogPathFormat, true), "Script.LogPathFormat"], ["时间戳位置", [num(S.LogTimeStart), unit("至"), num(S.LogTimeEnd), unit("列")], "Script.LogTimeStart / LogTimeEnd"], ["时间格式", inp(S.LogTimeFormat, true), "Script.LogTimeFormat"]]),
+            kv("MATCH", [["成功判定", [inp(S.SuccessLog), seg(["关键字", "正则"], idx(["Split", "Regex"], S.SuccessLogMode))], "Script.SuccessLog / SuccessLogMode"], ["失败判定", [inp(S.ErrorLog), seg(["关键字", "正则"], idx(["Split", "Regex"], S.ErrorLogMode))], "Script.ErrorLog / ErrorLogMode"], ["日志预处理", tog(S.LogHookEnabled), "Script.LogHookEnabled"], ["推送日志", tog(S.PushLogEnabled), "Script.PushLogEnabled"]]),
             note("关键字模式用「|」分隔多个子串，任一命中即判定；正则模式按整行匹配。预处理先于判定执行。")
         ], actions: ["保存", "测试匹配"] },
         { name: "游戏", api: api, blocks: [
-            kv("GAME", [["随脚本启动游戏", tog(!!o.game), "Game.Enabled"], ["启动方式", seg(["模拟器", "客户端", "URL 协议"], o.gameType === undefined ? 1 : o.gameType), "Game.Type"], ["游戏路径", path(o.game), "Game.Path"], ["进程名", inp(o.gameProc, true), "Game.ProcessName"], ["启动参数", inp("", true), "Game.Arguments"], ["启动后等待", num(30, "秒"), "Game.WaitTime"], ["结束后强制关闭", tog(true), "Game.IfForceClose"]]),
-            kv("EMULATOR", [["模拟器", sel(["未选择", "MuMu 12", "雷电 9", "Android AVD"], o.gameType === 0 ? 1 : 0), "Game.EmulatorId"], ["实例", sel(["未选择", "MuMu-0", "MuMu-1", "MuMu-2"], o.gameType === 0 ? 1 : 0), "Game.EmulatorIndex"]])
+            kv("GAME", [["随脚本启动游戏", tog(G.Enabled), "Game.Enabled"], ["启动方式", seg(["模拟器", "客户端", "URL 协议"], gameType), "Game.Type"], [gameType === 2 ? "协议地址" : "游戏路径", gameType === 2 ? inp(G.URL, true) : path(G.Path), gameType === 2 ? "Game.URL" : "Game.Path"], ["进程名", inp(G.ProcessName, true), "Game.ProcessName"], ["启动参数", inp(G.Arguments, true), "Game.Arguments"], ["启动后等待", num(G.WaitTime, "秒"), "Game.WaitTime"], ["结束后强制关闭", tog(G.IfForceClose), "Game.IfForceClose"]]),
+            kv("EMULATOR", [["模拟器", G.EmulatorId === "-" ? "未选择" : G.EmulatorId, "Game.EmulatorId"], ["实例", G.EmulatorIndex === "-" ? "未选择" : G.EmulatorIndex, "Game.EmulatorIndex"]])
         ], actions: ["保存"] },
         { name: "限制", api: api, blocks: [
-            kv("RUN LIMIT", [["单账号总时限", num(120, "分钟"), "Run.HardTimeLimit"], ["单次运行时限", num(o.limit || 60, "分钟"), "Run.RunTimeLimit"], ["单次重试次数", num(3, "次"), "Run.RunTimesLimit"], ["每日代理上限", num(0, "次 · 0 为不限"), "Run.ProxyTimesLimit"]]),
-            stats("TODAY", [["已代理", "1"], ["已重试", "0"], ["剩余时限", "118m"]]),
+            kv("RUN LIMIT", [["单账号总时限", num(R.HardTimeLimit, "分钟"), "Run.HardTimeLimit"], ["单次运行时限", num(R.RunTimeLimit, "分钟"), "Run.RunTimeLimit"], ["单次重试次数", num(R.RunTimesLimit, "次"), "Run.RunTimesLimit"], ["每日代理上限", num(R.ProxyTimesLimit, "次 · 0 为不限"), "Run.ProxyTimesLimit"]]),
             note("总时限包含等待游戏与全部重试；单次超时会先按清理清单结束进程，再按重启清单补跑。")
         ], actions: ["保存", "恢复默认"] },
         { name: "账号", api: "POST /api/scripts/user/update", blocks: [
-            table("USERS", ["名称", "启用", "剩余天数", "配置来源", "上次代理"], o.users.map(function (u) { return [u[0], tog(u[1]), u[2], sel(["独立", "共享", "原生"], u[3]), u[4]] })),
-            note("配置来源：独立 = 账号单独一份脚本配置；共享 = 与同脚本账号共用；原生 = 直接使用脚本自身配置。")
+            table("USERS", ["名称", "启用", "剩余天数", "配置来源", "上次代理"], users.slice(0, 8).map(function (u) { return [u.name, tog(u.status), u.remained, sel(["独立", "共享", "原生"], u.base), u.last] })),
+            note(users.length > 8 ? "共 " + users.length + " 个账号，这里列出前 8 个。" : "配置来源：独立 = 账号单独一份脚本配置；共享 = 与同脚本账号共用；原生 = 直接使用脚本自身配置。")
         ], actions: ["添加账号", "设置脚本", "删除所选"] }
     ] }
+}
+
+// 演示数据转成后端结构
+function demoGeneral(o) {
+    var c = {
+        Info: { Name: o.name, RootPath: o.root },
+        Script: { ScriptPath: o.exe, Arguments: o.args || "", ConfigPath: o.cfg, ConfigPathMode: o.folder ? "Folder" : "File", UpdateConfigMode: "Success",
+                  IfTrackProcess: !!o.track, TrackProcessName: o.track || "", TaskKillMode: "Force", LogPath: o.log, LogPathFormat: "%Y-%m-%d",
+                  LogTimeStart: 1, LogTimeEnd: 19, LogTimeFormat: "%Y-%m-%d %H:%M:%S", SuccessLog: o.ok, SuccessLogMode: "Split",
+                  ErrorLog: o.err, ErrorLogMode: "Split", LogHookEnabled: false, PushLogEnabled: true },
+        Game: { Enabled: !!o.game, Type: ["Emulator", "Client", "URL"][o.gameType === undefined ? 1 : o.gameType], Path: o.game || "", URL: "",
+                ProcessName: o.gameProc || "", Arguments: "", WaitTime: 30, IfForceClose: true, EmulatorId: "-", EmulatorIndex: "-" },
+        Run: { HardTimeLimit: 120, RunTimeLimit: o.limit || 60, RunTimesLimit: 3, ProxyTimesLimit: 0 }
+    }
+    var users = o.users.map(function (u) { return { name: u[0], status: u[1], remained: u[2], base: u[3], last: u[4] } })
+    return general(o.name, o.en, c, users, false)
+}
+
+// 后端 /api/scripts/get（includeUsers）→ 托管管理条目
+function generalFromApi(resp) {
+    var out = []
+    for (var i = 0; i < resp.index.length; i++) {
+        var uid = resp.index[i].uid, c = resp.data[uid]
+        if (!c || resp.index[i].type !== "GeneralConfig") continue
+        var ur = resp.users && resp.users[uid] ? resp.users[uid] : { index: [], data: {} }
+        var users = ur.index.map(function (u) {
+            var d = ur.data[u.uid] || { Info: {}, Data: {} }
+            var rd = d.Info.RemainedDay
+            var last = d.Data && d.Data.LastProxyDate && d.Data.LastProxyDate !== "2000-01-01" ? d.Data.LastProxyDate : "—"
+            return { name: d.Info.Name, status: !!d.Info.Status, remained: rd === -1 || rd === undefined ? "永久" : rd + " 天",
+                     base: idx(["independent", "shared", "native"], d.Info.Base), last: last }
+        })
+        out.push(general(c.Info.Name || "未命名脚本", "GENERAL · " + String(i + 1).padStart(2, "0"), c, users, true))
+    }
+    return out
 }
 
 // 模拟器：设备 / 配置（EmulatorConfig，/api/emulator/operate）
@@ -110,10 +148,10 @@ var sections = {
         ], actions: ["刷新", "查看历史记录"] }
     ] },
     "02": { caption: "通用脚本托管：程序、日志判定、游戏启动、运行限制与账号，按功能分页。", items: [
-        general({ name: "BGI 每日", en: "GENERAL · RDP", root: "D:\\BetterGI", exe: "D:\\BetterGI\\BetterGI.exe", args: "--startOneDragon", cfg: "D:\\BetterGI\\User\\config.json", track: "BetterGI.exe", log: "D:\\BetterGI\\log\\better-genshin-impact%Y%m%d.log", ok: "一条龙完成", err: "任务异常|ERROR", game: "D:\\Genshin Impact\\YuanShen.exe", gameProc: "YuanShen.exe", users: [["主号", true, "永久", 0, "今天 06:12"], ["小号", true, "30 天", 0, "昨天 06:30"], ["测试号", false, "—", 1, "—"]] }),
-        general({ name: "鸣潮日常", en: "GENERAL", root: "D:\\ok-ww", exe: "D:\\ok-ww\\ok-ww.exe", args: "-t 1 -e", cfg: "D:\\ok-ww\\configs", folder: true, log: "D:\\ok-ww\\logs\\ok-script.log", ok: "任务完成", err: "Exception", game: "D:\\Wuthering Waves\\launcher.exe", gameProc: "Client-Win64-Shipping.exe", users: [["鸣潮主号", true, "永久", 2, "今天 06:40"]] }),
-        general({ name: "星铁清体力", en: "GENERAL", root: "D:\\M7A", exe: "D:\\M7A\\March7th Assistant.exe", cfg: "D:\\M7A\\config.yaml", track: "March7th Assistant.exe", log: "D:\\M7A\\logs\\%Y-%m-%d.log", ok: "任务完成", err: "ERROR", game: "D:\\Star Rail\\StarRail.exe", gameProc: "StarRail.exe", limit: 45, users: [["星铁", true, "12 天", 0, "今天 06:52"], ["星铁小号", false, "—", 0, "—"]] }),
-        general({ name: "自定义脚本", en: "GENERAL", root: "C:\\Tools", exe: "C:\\Tools\\daily.bat", cfg: "", log: "C:\\Tools\\daily.log", ok: "done", err: "fail", gameType: 2, users: [["默认", true, "永久", 0, "周日 22:10"]] })
+        demoGeneral({ name: "BGI 每日", en: "GENERAL · RDP", root: "D:\\BetterGI", exe: "D:\\BetterGI\\BetterGI.exe", args: "--startOneDragon", cfg: "D:\\BetterGI\\User\\config.json", track: "BetterGI.exe", log: "D:\\BetterGI\\log\\better-genshin-impact%Y%m%d.log", ok: "一条龙完成", err: "任务异常|ERROR", game: "D:\\Genshin Impact\\YuanShen.exe", gameProc: "YuanShen.exe", users: [["主号", true, "永久", 0, "今天 06:12"], ["小号", true, "30 天", 0, "昨天 06:30"], ["测试号", false, "—", 1, "—"]] }),
+        demoGeneral({ name: "鸣潮日常", en: "GENERAL", root: "D:\\ok-ww", exe: "D:\\ok-ww\\ok-ww.exe", args: "-t 1 -e", cfg: "D:\\ok-ww\\configs", folder: true, log: "D:\\ok-ww\\logs\\ok-script.log", ok: "任务完成", err: "Exception", game: "D:\\Wuthering Waves\\launcher.exe", gameProc: "Client-Win64-Shipping.exe", users: [["鸣潮主号", true, "永久", 2, "今天 06:40"]] }),
+        demoGeneral({ name: "星铁清体力", en: "GENERAL", root: "D:\\M7A", exe: "D:\\M7A\\March7th Assistant.exe", cfg: "D:\\M7A\\config.yaml", track: "March7th Assistant.exe", log: "D:\\M7A\\logs\\%Y-%m-%d.log", ok: "任务完成", err: "ERROR", game: "D:\\Star Rail\\StarRail.exe", gameProc: "StarRail.exe", limit: 45, users: [["星铁", true, "12 天", 0, "今天 06:52"], ["星铁小号", false, "—", 0, "—"]] }),
+        demoGeneral({ name: "自定义脚本", en: "GENERAL", root: "C:\\Tools", exe: "C:\\Tools\\daily.bat", cfg: "", log: "C:\\Tools\\daily.log", ok: "done", err: "fail", gameType: 2, users: [["默认", true, "永久", 0, "周日 22:10"]] })
     ] },
     "03": { caption: "模拟器：实例启动、关闭、显示与设备检测；配置与 2.0 稳定模式。", items: [
         emulator({ name: "MuMu 12", en: "EMULATOR", type: 1, path: "D:\\MuMuPlayer-12.0", devices: [["MuMu-0", RUN, "127.0.0.1:16384"], ["MuMu-1", WAIT, "127.0.0.1:16416"], ["MuMu-2", WAIT, "127.0.0.1:16448"]] }),

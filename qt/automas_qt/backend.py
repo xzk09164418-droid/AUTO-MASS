@@ -25,6 +25,7 @@ from PySide6.QtCore import (
     Slot,
 )
 from PySide6.QtNetwork import QNetworkAccessManager, QNetworkReply, QNetworkRequest
+from PySide6.QtQml import QJSValue
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 HEALTH_PATH = "/api/core/health"
@@ -187,6 +188,28 @@ class BackendSupervisor(QObject):
         match = LOG_LEVEL_PATTERN.search(line)
         self._logs.append({"level": match.group(1) if match else "", "text": line})
         self.logsChanged.emit()
+
+    @Slot(str, str, "QJSValue")
+    def request(self, path: str, body: str, callback: QJSValue) -> None:
+        """POST 后端接口；body 为 JSON 字符串，callback(text) 收到响应 JSON 字符串（失败时 code 为 0）。"""
+
+        request = QNetworkRequest(QUrl(f"http://127.0.0.1:{self._port}{path}"))
+        request.setHeader(QNetworkRequest.KnownHeaders.ContentTypeHeader, "application/json")
+        request.setRawHeader(b"x-auto-mas-instance", self._expected_id.encode("ascii"))
+        request.setTransferTimeout(15000)
+        payload = (body or "{}").encode("utf-8")
+        reply = self._network.post(request, payload)
+
+        def done() -> None:
+            reply.deleteLater()
+            if reply.error() == QNetworkReply.NetworkError.NoError:
+                text = bytes(reply.readAll().data()).decode("utf-8", errors="replace")
+            else:
+                text = json.dumps({"code": 0, "status": "error", "message": reply.errorString()}, ensure_ascii=False)
+            if callback.isCallable():
+                callback.call([QJSValue(text)])
+
+        reply.finished.connect(done)
 
     def _probe(self, first: bool = False) -> None:
         request = QNetworkRequest(QUrl(f"http://127.0.0.1:{self._port}{HEALTH_PATH}"))

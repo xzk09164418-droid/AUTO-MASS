@@ -41,6 +41,15 @@ Item {
         onTriggered: chain.breathGoal = 1
     }
 
+    // 首尾越界回弹：整串朝滚动方向冲出一小段，再按弹簧阻尼振荡回位
+    property real over: 0
+    function bounce(d) {
+        overSpring.stop()
+        over = Theme.richMotion ? 0.55 * d : 0
+        if (Theme.richMotion) overSpring.start()
+    }
+    SpringAnimation { id: overSpring; target: chain; property: "over"; to: 0; spring: 3.2; damping: 0.16; mass: 1; epsilon: 0.002 }
+
     // 档案抽出：选中的卡带先抬起、向镜头靠近并转正，再随串归位
     property int pullK: -1
     property real pullP: 0
@@ -77,11 +86,11 @@ Item {
     readonly property int cw: 260           // 卡带设计尺寸（像素），对应 2.6 × 1.7 单位
     readonly property int ch: 170
 
-    function open(list, n) {
+    function open(list, n, t) {
         deptN = n
         items = list
-        target = 0
-        cur = -8
+        target = t || 0
+        cur = target - 8
         intro = 0
         introTarget = 1
     }
@@ -130,14 +139,25 @@ Item {
         }
     }
 
+    // 增强挡位且已安装 3D 组件时换成 Qt Quick 3D 绘制（文件只在此时才解析，未安装也不影响其它挡位）
+    property var enhanced: null
+    readonly property bool use3D: Theme.motion === "enhanced" && Theme.enhancedAvailable
+    Loader {
+        id: loader3d
+        anchors.fill: parent
+        active: chain.use3D
+        source: active ? Qt.resolvedUrl("Chain3D.qml") : ""
+        onLoaded: { item.chain = chain; if (chain.enhanced) chain.enhanced.markLoaded() }
+    }
+
     Repeater {
-        model: chain.items.length + chain.pad * 2
+        model: chain.use3D && loader3d.status === Loader.Ready ? 0 : chain.items.length + chain.pad * 2
         Item {
             id: cas
             required property int index
             readonly property int k: index - chain.pad
             readonly property bool real: k >= 0 && k < chain.items.length
-            readonly property real s: k - chain.cur + 9 * (1 - chain.intro)
+            readonly property real s: k - chain.cur - chain.over + 9 * (1 - chain.intro)
             property real lift: hot ? 1 : 0
             Behavior on lift { enabled: Theme.richMotion; NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
             readonly property var p: chain.placeAt(s, k, lift)
