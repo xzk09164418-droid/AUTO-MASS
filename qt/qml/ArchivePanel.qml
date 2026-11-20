@@ -23,7 +23,7 @@ Item {
     signal liveOp(var op)
     property int edits: 0                   // 控件改动计数（驱动「未保存 N 处」）
     readonly property int unsaved: { edits; return item && item.live ? Live.dirtyCount(item) : 0 }
-    signal leaveEnhanced()
+    signal motionChosen(string motion)      // 用户切换了动态效果挡位（记住选择；离开增强挡位时标记延后删除）
     onTabChanged: if (item) item._tab = tab
 
     readonly property var pages: item ? SD.pages(item) : []
@@ -253,10 +253,9 @@ Item {
                 panel.requestEnhanced()
                 return
             }
-            const was = Theme.motion
             Theme.motion = motions[cur]
             panel.toast("动态效果：" + spec.opts[cur])
-            if (was === "enhanced") panel.leaveEnhanced()
+            panel.motionChosen(motions[cur])
         }
         Repeater {
             model: sg.spec.opts

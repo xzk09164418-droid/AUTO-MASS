@@ -99,7 +99,8 @@ function emulator(o) {
 // 调度队列：调度 / 定时 / 队列项（QueueConfig、TimeSet、QueueItem）
 var SCRIPTS = ["BGI 每日", "鸣潮日常", "星铁清体力", "自定义脚本"]
 function queue(o) {
-    return { name: o.name, en: o.en, exclusive: o.cycle ? "cycle" : "time", tabs: [
+    return { name: o.name, en: o.en, exclusive: o.cycle ? "cycle" : "time", icon: "",
+        accounts: o.items.map(function (it) { return SCRIPTS[it[0]] }), rowIcons: [""].concat(o.items.map(function () { return "" })), tabs: [
         { name: "调度", api: "POST /api/queue/update", blocks: [
             kv("SCHEDULE", [["队列名称", inp(o.name), "Info.Name"], ["定时启动", tog(!o.cycle, "time"), "Info.TimeEnabled"], ["循环队列", tog(!!o.cycle, "cycle"), "Info.CycleEnabled"], ["启动时运行", seg(["从不", "每次", "每日首次"], o.startup || 0), "Info.StartUpMode"], ["完成后", sel(POWER, o.after || 0), "Info.AfterAccomplish"], ["延时执行", num(0, "分钟"), "Info.AfterAccomplishDelay"]]),
             kv("HOOKS", [["运行前脚本", tog(false), "Info.IfScriptBeforeTask"], ["前脚本路径", path(""), "Info.ScriptBeforeTask"], ["运行后脚本", tog(!!o.afterScript), "Info.IfScriptAfterTask"], ["后脚本路径", path(o.afterScript), "Info.ScriptAfterTask"]])

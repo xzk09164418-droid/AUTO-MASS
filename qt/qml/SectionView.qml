@@ -19,11 +19,12 @@ FocusScope {
     // 已接入后端的部门用实时数据，其余仍是演示数据（逐步接入）
     property var api: null                  // BackendSupervisor（后端就绪时）
     property var enhanced: null             // EnhancedComponent
-    // 增强挡位 + 已装 3D 组件 + 托管管理：以多列档案阵列取代标准版式
-    readonly property bool arrayMode: Theme.motion === "enhanced" && Theme.enhancedAvailable && !!d && d.key === "scripts"
-    readonly property var arrayItem: arrayLoader.status === Loader.Ready ? arrayLoader.item : null
+    // 增强挡位 + 已装 3D 组件 + 托管管理 / 调度队列：以多列档案阵列取代标准版式
+    readonly property bool arrayMode: Theme.motion === "enhanced" && Theme.enhancedAvailable && !!d && (d.key === "scripts" || d.key === "queue")
+    property var arrayHostItem: null        // Main.qml 里常驻的 ArchiveArray3D（未加载完时为 null）
+    readonly property var arrayItem: arrayMode ? arrayHostItem : null
     readonly property bool arrayDetail: !!arrayItem && arrayItem.detailOpen
-    readonly property var arrayColumns: arrayMode ? items.map(it => ({ name: it.name, en: it.en, icon: it.icon || "", accounts: it.accounts || [] })) : []
+    readonly property var arrayColumns: arrayMode ? items.map(it => ({ name: it.name, en: it.en, icon: it.icon || "", accounts: it.accounts || [], rowIcons: it.rowIcons || null })) : []
     onApiChanged: if (opened && d) fetchLive(d.key)
     property var live: ({})                 // 部门 key → 条目
     property string liveState: ""           // loading / ok / error
@@ -33,7 +34,7 @@ FocusScope {
     onItemsChanged: {
         if (!opened) return
         target = Math.min(target, Math.max(0, items.length - 1))
-        if (chain.introTarget === 1) { chain.items = items; chain.target = target }
+        if (chain.introTarget === 1) { chain.items = items; chain.goTo(target, 1) }
     }
     // ── 后端接入 ──────────────────────────────────────────────────────────
     function call(path, body, cb) {
@@ -76,14 +77,17 @@ FocusScope {
         if (key === "scripts") {
             call("/api/scripts/get", { includeUsers: true }, r => r.code === 200 ? setLive(key, Live.scripts(r)) : fail(r))
         } else if (key === "queue") {
-            callAll([["q", "/api/queue/get", {}], ["s", "/api/info/combox/script", {}]], m => {
+            callAll([["q", "/api/queue/get", {}], ["s", "/api/info/combox/script", {}], ["sc", "/api/scripts/get", {}]], m => {
                 if (m.q.code !== 200) { fail(m.q); return }
                 const steps = []
                 m.q.index.forEach(q => { steps.push(["t" + q.uid, "/api/queue/time/get", { queueId: q.uid }]); steps.push(["i" + q.uid, "/api/queue/item/get", { queueId: q.uid }]) })
                 callAll(steps, n => {
                     const times = {}, items = {}
                     m.q.index.forEach(q => { times[q.uid] = n["t" + q.uid]; items[q.uid] = n["i" + q.uid] })
-                    setLive(key, Live.queues(m.q, times, items, m.s.code === 200 ? m.s.data : []))
+                    // 队列项所选脚本的启动程序：阵列里作图标唱片
+                    const paths = {}
+                    if (m.sc.code === 200) m.sc.index.forEach(x => { const c = m.sc.data[x.uid]; if (c && c.Script && c.Script.ScriptPath) paths[x.uid] = c.Script.ScriptPath })
+                    setLive(key, Live.queues(m.q, times, items, m.s.code === 200 ? m.s.data : [], paths))
                 })
             })
         } else if (key === "emulators") {
@@ -218,7 +222,9 @@ FocusScope {
         panel.tab = items[target] && items[target]._tab ? items[target]._tab : 0
         landed = false
         opened = true
-        morph.start(r, tileItem, false)
+        // 增强阵列：方块直接消失不再重建，阵列飞入
+        if (arrayMode) { landed = true; setupArray() }
+        else morph.start(r, tileItem, false)
         revealAnim.stop(); hideAnim.stop()
         revealAnim.start()
         chainDelay.restart()
@@ -233,29 +239,27 @@ FocusScope {
         chain.close()
         // 索引在飞回途中就开始淡入；目标方块保持隐藏，落地同一帧再换成真身，避免闪一下
         returning = true
+        if (arrayMode) {
+            // 增强阵列：阵列飞出，索引同时淡入，方块随索引一起出现
+            if (hub) hub.hiddenIndex = -1
+            if (arrayItem) arrayItem.flyOut()
+            else finishClose()
+            return
+        }
         const r = hub ? hub.liveTileRect(index) : morph.tileRect
         morph.start(r, null, true)
     }
-    // 首尾循环：越过末张（或首张）直接回到另一端，不提示、不需要二次滚动；
-    // 先朝滚动方向轻顶一下，再以较大的阻尼滑过去，体现迟滞感
-    property bool wrapping: false
-    Timer { id: wrapTimer; interval: 180; property int to: 0; property int d: 1; onTriggered: { view.go(to, d); view.wrapping = false } }
-    function select(k) {
-        if (!items.length) return
-        if (k < 0 || k > items.length - 1) {
-            if (wrapping || items.length < 2) return
-            const d = k < 0 ? -1 : 1
-            wrapping = true
-            chain.bounce(d * 0.5)
-            chain.damp = Theme.richMotion ? 0.03 : chain.damp
-            wrapTimer.to = d > 0 ? 0 : items.length - 1
-            wrapTimer.d = d
-            wrapTimer.interval = Theme.richMotion ? 180 : 0
-            wrapTimer.restart()
-            return
+    // 首尾循环：越过末张（或首张）直接接到另一端，录像带串按同一方向继续滑过去（不提示、不需要二次滚动）
+    function select(k, d) {
+        const n = items.length
+        if (!n) return
+        if (k < 0 || k > n - 1) {
+            if (n < 2) return
+            d = k < 0 ? -1 : 1
+            k = ((k % n) + n) % n
         }
         if (k === target) return
-        go(k, k > target ? 1 : -1)
+        go(k, d || (k > target ? 1 : -1))
     }
     function go(next, d) {
         dir = d
@@ -263,7 +267,7 @@ FocusScope {
         memory[view.d.key] = next
         // 记忆：每个条目保留自己的功能分页
         panel.tab = items[next] && items[next]._tab ? items[next]._tab : 0
-        chain.target = next
+        chain.goTo(next, d)
     }
     property int dir: 1
     property var memory: ({})               // 部门 key → 上次停留的条目
@@ -313,8 +317,13 @@ FocusScope {
             view.tiltX = -(point.position.y / view.height - 0.5) * 2
         }
     }
-    // 吞掉点击，避免穿透到背后的索引
-    MouseArea { anchors.fill: parent; enabled: view.opened }
+    function finishClose() {
+        returning = false
+        index = -1
+        closed()
+    }
+    // 吞掉点击，避免穿透到背后的索引（增强阵列在本界面之下，需要接收点击）
+    MouseArea { anchors.fill: parent; enabled: view.opened && !view.arrayMode }
 
     // ── 左上：品牌、竖线、数据库标签 ─────────────────────────────────────
     Rectangle {
@@ -473,27 +482,27 @@ FocusScope {
         }
     }
 
-    // ── 增强挡位：多列档案阵列（Qt Quick 3D，按需加载） ──────────────────
-    Loader {
-        id: arrayLoader
-        anchors.fill: parent
-        z: 1
-        active: view.arrayMode && view.opened
-        opacity: view.reveal
-        source: active ? Qt.resolvedUrl("ArchiveArray3D.qml") : ""
-        onLoaded: { if (view.enhanced) view.enhanced.markLoaded(); item.columns = Qt.binding(() => view.arrayColumns); item.cellLane = 2 + view.target }
-        Connections {
-            target: arrayLoader.item
-            // 读取：右侧档案卡切到对应脚本；选的是账号行时直接停在「账号」页
-            function onOpened(lane, row) {
-                view.select(lane)
-                const pages = SD.pages(view.items[lane] || {})
-                const k = pages.findIndex(p => p.name === "账号")
-                panel.tab = row > 0 && k >= 0 ? k : 0
-            }
-            function onMoved(lane, row) { if (lane !== view.target) view.select(lane) }
+    // ── 增强挡位：多列档案阵列（实例在 Main.qml 里常驻、启动空闲后预加载，这里只驱动它） ──
+    Connections {
+        target: view.arrayItem
+        // 读取：右侧档案卡切到对应条目；选的是账号 / 队列项行时直接停在对应分页
+        function onOpened(lane, row) {
+            view.select(lane)
+            const pages = SD.pages(view.items[lane] || {})
+            const k = pages.findIndex(p => p.name === (view.d && view.d.key === "queue" ? "队列项" : "账号"))
+            panel.tab = row > 0 && k >= 0 ? k : 0
         }
+        function onMoved(lane, row) { if (lane !== view.target) view.select(lane) }
+        function onFlownOut() { if (!view.opened) view.finishClose() }
     }
+    function setupArray() {
+        if (!arrayItem || !d) return
+        arrayItem.mode = d.key
+        arrayItem.columns = Qt.binding(() => view.arrayColumns)
+        arrayItem.reset(target)
+        arrayItem.flyIn()
+    }
+    onArrayItemChanged: if (opened && arrayItem) setupArray()
 
     // ── 左下：录像带串 + 访问等级 ───────────────────────────────────────────
     CassetteChain {
@@ -504,7 +513,6 @@ FocusScope {
         width: 900
         height: 640
         z: 2
-        enhanced: view.enhanced
         onPicked: k => view.select(k)
     }
     Row {
@@ -642,10 +650,10 @@ FocusScope {
             onRequestEnhanced: {
                 if (!view.enhanced) return
                 modal.ask("下载 3D 增强组件",
-                    "增强挡位用 Qt Quick 3D 绘制实体档案卡带，需要另外下载 " + view.enhanced.packageText + "（" + view.enhanced.sizeText + "，来自 PyPI）。安装完成后自动切换到增强挡位；以后切回减少或标准挡位时，会直接删除这些文件。",
+                    "增强挡位用 Qt Quick 3D 绘制实体档案卡带，需要另外下载 " + view.enhanced.packageText + "（" + view.enhanced.sizeText + "，来自 PyPI）。安装完成后自动切换到增强挡位；以后切回减少或标准挡位时，会在退出程序、下次启动空闲后删除这些文件。",
                     "OPTIONAL COMPONENT", "下载并安装", false, () => view.enhanced.install())
             }
-            onLeaveEnhanced: if (view.enhanced && view.enhanced.installed) view.enhanced.remove()
+            onMotionChosen: motion => { if (view.enhanced) view.enhanced.choose(motion) }
         }
     }
 
@@ -864,9 +872,10 @@ FocusScope {
             const e = view.enhanced
             if (e.state === "installing") toast.show("3D 增强组件：" + (e.detail || "准备下载") + "…", true)
             else if (e.state === "removing") toast.show("正在删除 3D 增强组件…", true)
-            else if (e.state === "installed") { Theme.motion = "enhanced"; toast.show("3D 增强组件已安装，已切换到增强挡位") }
+            else if (e.state === "installed" && e.detail === "kept") toast.show("已取消删除 3D 增强组件")
+            else if (e.state === "installed") { Theme.motion = "enhanced"; e.choose("enhanced"); toast.show("3D 增强组件已安装，已切换到增强挡位") }
             else if (e.state === "missing") toast.show("已删除 3D 增强组件")
-            else if (e.state === "pending-remove") toast.show("3D 增强组件将在下次启动时删除（当前文件正在使用）")
+            else if (e.state === "pending-remove") toast.show("3D 增强组件将在退出程序、下次启动空闲后删除")
             else if (e.state === "error") toast.show("3D 增强组件失败：" + e.detail)
         }
     }

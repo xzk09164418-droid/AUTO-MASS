@@ -92,6 +92,7 @@ Window {
 
         DepartmentHub {
             id: hub
+            objectName: "hub"
             anchors.fill: parent
             focus: true
             active: root.booted
@@ -101,6 +102,41 @@ Window {
             onOpenRequested: (i, r) => sections.open(i, r, hub.tileItem(i))
         }
 
+        // 增强挡位的 3D 档案阵列：托管管理与调度队列共用一份常驻实例。
+        // 启动完成、程序空闲后异步预加载，并在索引之下先渲染约一秒，让模型、着色器与管线提前就绪，进入时不再卡顿。
+        Item {
+            id: arrayHost
+            anchors.fill: parent
+            readonly property bool wanted: Theme.motion === "enhanced" && Theme.enhancedAvailable
+            readonly property bool showing: sections.arrayMode && sections.busy
+            property bool warming: false
+            property bool preloaded: false
+            // 索引显示期间也留在索引之下（被不透明的索引底色挡住）：3D 画面静止时不重绘，几乎不占资源，
+            // 但渲染目标与管线保持就绪，点开托管管理 / 调度队列时不再卡一下
+            readonly property bool parked: preloaded && !sections.busy
+            z: showing ? 0 : -1
+            visible: (showing || warming || parked) && arrayLoader.status === Loader.Ready
+            Loader {
+                id: arrayLoader
+                anchors.fill: parent
+                asynchronous: true
+                active: arrayHost.wanted && (arrayHost.preloaded || arrayHost.showing)
+                source: active ? Qt.resolvedUrl("ArchiveArray3D.qml") : ""
+                onLoaded: {
+                    if (root.enhanced) root.enhanced.markLoaded()
+                    item.enabled = Qt.binding(() => arrayHost.showing)
+                    arrayHost.warming = true
+                    warmTimer.restart()
+                }
+            }
+            Timer { id: warmTimer; interval: 1200; onTriggered: arrayHost.warming = false }
+            Timer {
+                interval: 1500
+                running: root.booted && arrayHost.wanted && !arrayHost.preloaded
+                onTriggered: arrayHost.preloaded = true
+            }
+        }
+
         SectionView {
             objectName: "sections"
             id: sections
@@ -108,6 +144,7 @@ Window {
             departments: hub.departments
             hub: hub
             enhanced: root.enhanced
+            arrayHostItem: arrayLoader.status === Loader.Ready ? arrayLoader.item : null
             api: root.backendEnabled && root.backend && root.backend.status === "ready" ? root.backend : null
             onClosed: hub.focusCurrent()
         }
@@ -133,6 +170,13 @@ Window {
     }
 
     Timer { id: returnTimer; interval: root.returnAfter; onTriggered: sections.close() }
+
+    // 上次运行离开了增强挡位：本次启动加载完毕、空闲 8 秒后在后台删除 3D 组件文件（本次未加载 3D 才执行）
+    Timer {
+        interval: 8000
+        running: root.booted && !!root.enhanced && root.enhanced.state === "pending-remove" && Theme.motion !== "enhanced"
+        onTriggered: root.enhanced.cleanupPending()
+    }
 
     Shortcut {
         sequences: ["Esc", "Space"]

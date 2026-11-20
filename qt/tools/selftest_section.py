@@ -31,7 +31,7 @@ def patched_exec(self=None):
     qw = shiboken6.wrapInstance(shiboken6.getCppPointer(root)[0], QQuickWindow)
     def shot(name): qw.grabWindow().save(str(out / name))
     def tab(): find("archivePanel").setProperty("tab", 3)
-    def sel(): QMetaObject.invokeMethod(find("sections"), "select", Q_ARG("QVariant", 1))
+    def sel(): QMetaObject.invokeMethod(find("sections"), "select", Q_ARG("QVariant", 1), Q_ARG("QVariant", 0))
     def modal(): QMetaObject.invokeMethod(find("confirmModal"), "open", Q_ARG("QVariant", "BGI 每日"), Q_ARG("QVariant", "POST /api/scripts/update"))
     plan = [(2600, tab), (2700, lambda: shot("t_tab_mid.png")), (3200, lambda: shot("t_tab.png")), (3250, lambda: print("DBG", find("archivePanel").property("tabFade"), find("archivePanel").property("dec"), find("archivePanel").property("tab"), find("archivePanel").property("opacity"), flush=True)),
             (3400, sel), (3600, lambda: shot("t_pull.png")), (5600, lambda: shot("t_sel.png")), (5650, lambda: print("DBG2", find("sections").property("target"), flush=True)),

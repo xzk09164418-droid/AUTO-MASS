@@ -116,7 +116,8 @@ function general(uid, c, ur, i) {
 
 // ── 04 调度队列 ───────────────────────────────────────────────────────
 // scriptOpts：[{label, value}]（/api/info/combox/script）
-function queues(qresp, times, qitems, scriptOpts) {
+function queues(qresp, times, qitems, scriptOpts, scriptPaths) {
+    scriptPaths = scriptPaths || {}
     var names = scriptOpts.map(function (o) { return o.label.replace(/^通用 - /, "") }), values = scriptOpts.map(function (o) { return o.value })
     var power = ["NoAction", "KillSelf", "RestartSelf", "Sleep", "Hibernate", "Logoff", "Shutdown", "ShutdownForce", "Reboot"]
     return qresp.index.map(function (q, i) {
@@ -135,7 +136,11 @@ function queues(qresp, times, qitems, scriptOpts) {
                     B(SD.seg(["定时", "间隔"], interval ? 1 : 0), "Schedule.Mode", ["fixed_time", "interval"], s),
                     interval ? B(SD.num(sc.IntervalMinutes, "分钟"), "Schedule.IntervalMinutes", null, s) : B(SD.time(sc.Time), "Schedule.Time", null, s), next]
         })
+        // 3D 阵列：列内各行 = 队列配置 + 各队列项（以所选脚本的启动程序图标作唱片）
+        var rowNames = it.index.map(function (t) { var sid = it.data[t.uid].Info.ScriptId; return sid && values.indexOf(sid) >= 0 ? names[values.indexOf(sid)] : "未选择脚本" })
+        var rowIcons = [""].concat(it.index.map(function (t) { return scriptPaths[it.data[t.uid].Info.ScriptId] || "" }))
         return { name: I.Name, en: (I.CycleEnabled ? "QUEUE · CYCLE · " : "QUEUE · ") + String(i + 1).padStart(2, "0"), live: true, uid: qid,
+            icon: "", accounts: rowNames, rowIcons: rowIcons,
             exclusive: I.CycleEnabled ? "cycle" : I.TimeEnabled ? "time" : "",
             ops: {
                 "立即运行": { confirm: "将立即运行队列「" + I.Name + "」。", path: "/api/dispatch/start", body: { taskId: qid, mode: I.CycleEnabled ? "CycleRun" : "AutoProxy" }, done: "已开始运行" },

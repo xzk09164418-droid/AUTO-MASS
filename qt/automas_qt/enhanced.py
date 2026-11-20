@@ -2,13 +2,14 @@
 
 增强动态效果挡位需要 Qt Quick 3D，它在 PySide6-Addons 包里（下载约 161 MB，安装后约 420 MB），默认不安装：
 - 用户在设置里选「增强」且组件缺失时，二次确认后用当前解释器的 pip 下载安装，版本与 PySide6 保持一致；
-- 切回减少 / 标准挡位时直接删除这些文件。本次运行已加载过 3D 模块时 Windows 会锁住 DLL，
-  先写入删除标记，下次启动、在加载任何 Qt 模块之前完成删除（见 cleanup_pending_removal）。
+- 切回减少 / 标准挡位时不立即删除，只写入删除标记；用户退出程序、下次启动加载完毕并空闲后，
+  再在后台删除（见 EnhancedComponent.cleanupPending）。删除前又切回增强挡位则取消标记、保留文件。
+- 用户选择的挡位保存在 config/QtClient.json，下次启动沿用。
 """
 
 from __future__ import annotations
 
-import subprocess
+import json
 import sys
 from pathlib import Path
 
@@ -17,6 +18,8 @@ from PySide6.QtCore import Property, QObject, QProcess, Signal, Slot
 ROOT_DIR = Path(__file__).resolve().parents[2]
 PACKAGE = "PySide6-Addons"
 REMOVE_MARKER = ROOT_DIR / "config" / "QtEnhancedRemove.flag"
+CLIENT_CONFIG = ROOT_DIR / "config" / "QtClient.json"
+MOTIONS = ("reduced", "standard", "enhanced")
 
 
 def _pyside_dir() -> Path:
@@ -32,21 +35,32 @@ def _version() -> str:
 
 
 def is_installed() -> bool:
-    return (_pyside_dir() / "qml" / "QtQuick3D").is_dir() and not REMOVE_MARKER.exists()
+    return (_pyside_dir() / "qml" / "QtQuick3D").is_dir()
 
 
-def cleanup_pending_removal() -> None:
-    """启动早期调用：上次运行里已选择删除、但当时文件被占用，这里补删。"""
+def saved_motion() -> str:
+    """上次选择的动态效果挡位（没有记录时为标准）。"""
 
-    if not REMOVE_MARKER.exists():
-        return
-    subprocess.run(
-        [sys.executable, "-m", "pip", "uninstall", "-y", "--disable-pip-version-check", PACKAGE],
-        capture_output=True,
-        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-        check=False,
-    )
-    REMOVE_MARKER.unlink(missing_ok=True)
+    try:
+        motion = json.loads(CLIENT_CONFIG.read_text(encoding="utf-8")).get("motion", "")
+    except (OSError, ValueError, AttributeError):
+        motion = ""
+    return motion if motion in MOTIONS else "standard"
+
+
+def save_motion(motion: str) -> None:
+    try:
+        data = json.loads(CLIENT_CONFIG.read_text(encoding="utf-8")) if CLIENT_CONFIG.exists() else {}
+        if not isinstance(data, dict):
+            data = {}
+    except (OSError, ValueError):
+        data = {}
+    data["motion"] = motion
+    try:
+        CLIENT_CONFIG.parent.mkdir(parents=True, exist_ok=True)
+        CLIENT_CONFIG.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    except OSError:
+        pass
 
 
 class EnhancedComponent(QObject):
@@ -56,7 +70,11 @@ class EnhancedComponent(QObject):
 
     def __init__(self, parent: QObject | None = None) -> None:
         super().__init__(parent)
-        self._state = "installed" if is_installed() else "missing"
+        if not is_installed():
+            REMOVE_MARKER.unlink(missing_ok=True)
+            self._state = "missing"
+        else:
+            self._state = "pending-remove" if REMOVE_MARKER.exists() else "installed"
         self._detail = ""
         self._loaded = False
         self._process: QProcess | None = None
@@ -68,7 +86,8 @@ class EnhancedComponent(QObject):
 
     @Property(bool, notify=changed)
     def installed(self) -> bool:
-        return self._state == "installed"
+        """文件在且可用（等待删除期间仍可用，切回增强挡位即取消删除）。"""
+        return self._state in ("installed", "pending-remove")
 
     @Property(str, notify=changed)
     def detail(self) -> str:
@@ -103,15 +122,30 @@ class EnhancedComponent(QObject):
             return
         self._run(["install", "--disable-pip-version-check", "--no-deps", f"{PACKAGE}=={_version()}"], "installing", "正在下载")
 
-    @Slot()
-    def remove(self) -> None:
-        if self._state in ("installing", "removing", "missing"):
+    @Slot(str)
+    def choose(self, motion: str) -> None:
+        """用户切换动态效果挡位：记住选择；离开增强挡位只标记删除，回到增强挡位则取消标记。"""
+
+        if motion not in MOTIONS:
             return
-        if self._loaded:
+        save_motion(motion)
+        if motion == "enhanced":
+            if self._state == "pending-remove":
+                REMOVE_MARKER.unlink(missing_ok=True)
+                self._set("installed", "kept")
+            return
+        if self._state == "installed":
             REMOVE_MARKER.parent.mkdir(parents=True, exist_ok=True)
-            REMOVE_MARKER.write_text("remove PySide6-Addons on next start\n", encoding="utf-8")
-            self._set("pending-remove", "3D 模块正在使用中，下次启动时完成删除")
+            REMOVE_MARKER.write_text("remove PySide6-Addons after next start\n", encoding="utf-8")
+            self._set("pending-remove", "退出程序后，下次启动加载完毕、空闲时删除")
+
+    @Slot()
+    def cleanupPending(self) -> None:  # noqa: N802
+        """启动加载完毕、程序空闲时调用：上次运行里离开了增强挡位，这里在后台删除组件文件。"""
+
+        if self._state != "pending-remove" or self._loaded or not REMOVE_MARKER.exists():
             return
+        REMOVE_MARKER.unlink(missing_ok=True)
         self._run(["uninstall", "-y", "--disable-pip-version-check", PACKAGE], "removing", "正在删除")
 
     def _run(self, args: list[str], state: str, detail: str) -> None:

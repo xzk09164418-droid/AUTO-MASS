@@ -22,7 +22,7 @@ QT_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(QT_DIR))
 
 from automas_qt.backend import BackendSupervisor  # noqa: E402
-from automas_qt.enhanced import EnhancedComponent, cleanup_pending_removal  # noqa: E402
+from automas_qt.enhanced import EnhancedComponent, saved_motion  # noqa: E402
 from automas_qt.exeicon import ExeIconProvider  # noqa: E402
 
 
@@ -32,8 +32,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--no-backend", action="store_true", help="不连接后端，仅预览界面")
     parser.add_argument("--section", type=int, default=0, help="启动后直接进入第 N 个一级界面")
     parser.add_argument("--theme", choices=["system", "light", "dark"], default="system")
-    parser.add_argument("--motion", choices=["reduced", "standard", "enhanced"], default="standard",
-                        help="动态效果挡位：减少 / 标准 / 增强")
+    parser.add_argument("--motion", choices=["reduced", "standard", "enhanced"], default=None,
+                        help="动态效果挡位：减少 / 标准 / 增强（默认沿用上次的选择）")
     parser.add_argument("--capture", type=Path, help="截图保存路径")
     parser.add_argument("--after", type=int, default=3000, help="截图延时（毫秒）")
     parser.add_argument(
@@ -48,8 +48,6 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
-    # 上次运行里选择了删除 3D 增强组件、但当时文件被占用：在加载 Qt Quick 之前补删
-    cleanup_pending_removal()
     # 显式要求垂直同步：交换链按显示器刷新节拍呈现，避免圆环等大幅运动时撕裂
     fmt = QSurfaceFormat.defaultFormat()
     fmt.setSwapInterval(1)
@@ -80,7 +78,7 @@ def main() -> int:
             "initialSection": args.section,
             "returnAfter": args.return_after,
             "themeMode": args.theme,
-            "motionMode": args.motion,
+            "motionMode": args.motion or saved_motion(),
             "enhanced": enhanced,
         }
     )

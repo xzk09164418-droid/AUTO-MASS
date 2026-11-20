@@ -4,19 +4,24 @@ import "."
 // 左下录像带串（PV 1:19 的卡带堆）。不依赖 Qt Quick 3D：每盒卡带是普通 Item，
 // 用 4×4 透视矩阵投影到画面上（与演示里 three.js 的相机参数一致：fov 30°、相机 z=12.4）。
 // 串从左上斜向右下、越往下越靠近镜头；选中项放大 20%、向画面中心抽出、80% 不透明，前后卡带让开。
-// 只在滑动 / 入场时逐帧更新，静止后不再重绘。
+// 首尾相接循环：末张之后接第一张、第一张之前接末张，切换为带小回弹的非线性过渡（类 iOS）。
+// 只在滑动 / 入场时更新，静止后不再重绘。
 Item {
     id: chain
 
     property var items: []
     property string deptN: ""
-    property int target: 0
+    property int target: 0                  // 选中条目（0..n-1）
+    // 串首尾相接：pos 是不取模的绝对槽位，cur 朝它做带小回弹的非线性过渡；
+    // 第 m 个槽位显示 items[m mod n]，所以末张之后紧接着就是第一张（反向同理）
+    property real pos: 0
     property real cur: -8
     property real intro: 0
     property real introTarget: 0
-    property int hovered: -1
+    property int hovered: -10000            // 悬停的绝对槽位
+    readonly property int count: items.length
+    function wrap(m) { const n = Math.max(1, count); return ((m % n) + n) % n }
     onHoveredChanged: poke()
-    onTargetChanged: { poke(); pull(target) }
 
     // 借鉴 RhineLabUI：停止操作 2.5 秒后渐入呼吸起伏（8 秒与 13 秒周期叠加，相邻错相）
     property real breath: 0
@@ -41,22 +46,40 @@ Item {
         onTriggered: chain.breathGoal = 1
     }
 
-    // 首尾越界回弹：整串朝滚动方向冲出一小段，再按弹簧阻尼振荡回位
-    property real over: 0
-    property real damp: 0.0008              // 每秒剩余比例；首尾循环时临时调大，滑动更沉
-    function bounce(d) {
-        overSpring.stop()
-        over = Theme.richMotion ? 0.55 * d : 0
-        if (Theme.richMotion) overSpring.start()
+    // 切到条目 k：d 为方向（+1 向下 / -1 向上），按方向走最近的一圈；点击的槽位直接作为落点
+    property int pickedSlot: -10000
+    function goTo(k, d) {
+        let m
+        if (pickedSlot !== -10000 && wrap(pickedSlot) === k) m = pickedSlot
+        else {
+            const n = Math.max(1, count)
+            let delta = ((k - wrap(Math.round(pos))) % n + n) % n
+            if (d < 0 && delta > 0) delta -= n
+            m = Math.round(pos) + delta
+        }
+        pickedSlot = -10000
+        target = k
+        if (m === pos) return
+        pos = m
+        poke()
+        if (intro < 1 && introTarget === 1) { slide.stop(); cur = m; return }     // 入场途中直接对位
+        slide.stop()
+        slide.from = cur
+        slide.to = m
+        // 类 iOS：先快后慢的非线性减速，末尾小幅越过再回位；连续滚动时从当前位置接着走
+        slide.duration = Theme.richMotion ? 560 : 220
+        slide.easing.type = Theme.richMotion ? Easing.OutBack : Easing.OutCubic
+        slide.start()
+        pull(m)
     }
-    SpringAnimation { id: overSpring; target: chain; property: "over"; to: 0; spring: 3.2; damping: 0.16; mass: 1; epsilon: 0.002 }
+    NumberAnimation { id: slide; target: chain; property: "cur"; easing.overshoot: 0.9 }
 
     // 档案抽出：选中的卡带先抬起、向镜头靠近并转正，再随串归位
-    property int pullK: -1
+    property int pullK: -10000
     property real pullP: 0
-    function pull(k) {
+    function pull(m) {
         if (!Theme.richMotion || introTarget !== 1) return
-        pullK = k
+        pullK = m
         pullAnim.restart()
     }
     SequentialAnimation {
@@ -65,13 +88,13 @@ Item {
         PauseAnimation { duration: 140 }
         NumberAnimation { target: chain; property: "pullP"; to: 0; duration: 560; easing.type: Easing.InOutCubic }
     }
-    // 在曲线位置上叠加呼吸、悬停抬起与抽出
-    function placeAt(s, k, lift) {
+    // 在曲线位置上叠加呼吸、悬停抬起与抽出（m 为绝对槽位）
+    function placeAt(s, m, lift) {
         const p = place(s)
         if (breath > 0)
-            p.y += breath * 0.06 * (0.6 * Math.sin(clockT * Math.PI / 4 + k * 0.7) + 0.4 * Math.sin(clockT * Math.PI / 6.5 + k * 1.3))
+            p.y += breath * 0.06 * (0.6 * Math.sin(clockT * Math.PI / 4 + m * 0.7) + 0.4 * Math.sin(clockT * Math.PI / 6.5 + m * 1.3))
         p.y += lift * 0.22
-        if (k === pullK && pullP > 0) {
+        if (m === pullK && pullP > 0) {
             p.y += 0.5 * pullP
             p.z += 0.8 * pullP
             p.ry *= 1 - pullP
@@ -81,21 +104,24 @@ Item {
     }
     signal picked(int k)
 
-    readonly property int pad: 3
     readonly property real focal: (height / 2) / Math.tan(15 * Math.PI / 180)
     readonly property real camZ: 12.4
     readonly property int cw: 260           // 卡带设计尺寸（像素），对应 2.6 × 1.7 单位
     readonly property int ch: 170
+    // 画面上的槽位：选中位之前 3 个、之后 5 个（条目少时按循环重复出现，与示意图一致）
+    readonly property int before: 3
+    readonly property int after: 5
 
     function open(list, n, t) {
         deptN = n
         items = list
         target = t || 0
-        cur = target - 8
+        pos = target
+        cur = target
         intro = 0
         introTarget = 1
     }
-    function close() { introTarget = 0; breathGoal = 0; idleTimer.stop() }
+    function close() { introTarget = 0; breathGoal = 0; idleTimer.stop(); slide.stop() }
 
     // 曲线：s 为相对选中位置的槽位
     function place(s) {
@@ -128,42 +154,30 @@ Item {
                             -az, -bz, 0, -oz)
     }
 
-    readonly property bool moving: Math.abs(target - cur) > 0 || Math.abs(introTarget - intro) > 0
     FrameAnimation {
-        running: chain.visible && chain.moving
+        running: chain.visible && Math.abs(chain.introTarget - chain.intro) > 0
         onTriggered: {
             const dt = Math.min(0.05, frameTime)
-            chain.cur += (chain.target - chain.cur) * (1 - Math.pow(chain.damp, dt))
             chain.intro += (chain.introTarget - chain.intro) * (1 - Math.pow(0.004, dt))
-            if (Math.abs(chain.target - chain.cur) < 0.0005) { chain.cur = chain.target; chain.damp = 0.0008 }
             if (Math.abs(chain.introTarget - chain.intro) < 0.002) chain.intro = chain.introTarget
         }
     }
 
-    // 增强挡位且已安装 3D 组件时换成 Qt Quick 3D 绘制（文件只在此时才解析，未安装也不影响其它挡位）
-    property var enhanced: null
-    readonly property bool use3D: Theme.motion === "enhanced" && Theme.enhancedAvailable
-    Loader {
-        id: loader3d
-        anchors.fill: parent
-        active: chain.use3D
-        source: active ? Qt.resolvedUrl("Chain3D.qml") : ""
-        onLoaded: { item.chain = chain; if (chain.enhanced) chain.enhanced.markLoaded() }
-    }
-
     Repeater {
-        model: chain.use3D && loader3d.status === Loader.Ready ? 0 : chain.items.length + chain.pad * 2
+        model: chain.count > 0 ? chain.before + chain.after + 2 : 0
         Item {
             id: cas
             required property int index
-            readonly property int k: index - chain.pad
-            readonly property bool real: k >= 0 && k < chain.items.length
-            readonly property real s: k - chain.cur - chain.over + 9 * (1 - chain.intro)
+            // 绝对槽位：以当前位置为基准向两侧展开；k 为实际条目
+            readonly property int m: Math.floor(chain.cur) - chain.before + index
+            readonly property int k: chain.wrap(m)
+            readonly property bool real: true
+            readonly property real s: m - chain.cur + 9 * (1 - chain.intro)
             property real lift: hot ? 1 : 0
             Behavior on lift { enabled: Theme.richMotion; NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
-            readonly property var p: chain.placeAt(s, k, lift)
+            readonly property var p: chain.placeAt(s, m, lift)
             readonly property real fade: Math.max(0, Math.min(1, 1.8 - Math.abs(s) / 4.2)) * Math.min(1, chain.intro * 1.4)
-            readonly property bool hot: real && chain.hovered === k
+            readonly property bool hot: chain.hovered === m
             visible: fade > 0.01
             z: 100 + s * 4
 
@@ -246,8 +260,8 @@ Item {
                     enabled: cas.real && cas.fade > 0.3
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
-                    onContainsMouseChanged: chain.hovered = containsMouse ? cas.k : (chain.hovered === cas.k ? -1 : chain.hovered)
-                    onClicked: chain.picked(cas.k)
+                    onContainsMouseChanged: chain.hovered = containsMouse ? cas.m : (chain.hovered === cas.m ? -10000 : chain.hovered)
+                    onClicked: { chain.pickedSlot = cas.m; chain.picked(cas.k) }
                 }
             }
         }
