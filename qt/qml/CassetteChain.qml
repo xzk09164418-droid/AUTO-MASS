@@ -4,7 +4,7 @@ import "."
 // 左下录像带串（PV 1:19 的卡带堆）。不依赖 Qt Quick 3D：每盒卡带是普通 Item，
 // 用 4×4 透视矩阵投影到画面上（与演示里 three.js 的相机参数一致：fov 30°、相机 z=12.4）。
 // 串从左上斜向右下、越往下越靠近镜头；选中项放大 20%、向画面中心抽出、80% 不透明，前后卡带让开。
-// 首尾相接循环：末张之后接第一张、第一张之前接末张，切换为带小回弹的非线性过渡（类 iOS）。
+// 首尾相接循环：末张之后接第一张、第一张之前接末张；普通切换快速贴靠，越过首尾时带小回弹（类 iOS）。
 // 只在滑动 / 入场时更新，静止后不再重绘。
 Item {
     id: chain
@@ -46,8 +46,17 @@ Item {
         onTriggered: chain.breathGoal = 1
     }
 
-    // 切到条目 k：d 为方向（+1 向下 / -1 向上），按方向走最近的一圈；点击的槽位直接作为落点
+    // 切到条目 k：d 为方向（+1 向下 / -1 向上），按方向走最近的一圈；点击的槽位直接作为落点。
+    // 每次切换排进队列，一步走完（基本到位）再走下一步：
+    //   · 普通一步：快速贴靠（指数逼近，不回弹）；
+    //   · 越过首尾的一步：只有它是队列里最后一步时，才用非线性减速 + 末尾小回弹（类 iOS），
+    //     连续滚动途中越过首尾的那步和普通一步一样，不打断节奏；
+    //   · 积压超过 2 步时后面每步走得更快，不丢格、尽快追上。
     property int pickedSlot: -10000
+    property var queue: []                  // 待走的绝对槽位
+    property real dest: 0                   // 正在走的这一步的落点
+    property bool stepping: false
+    property bool bouncing: false
     function goTo(k, d) {
         let m
         if (pickedSlot !== -10000 && wrap(pickedSlot) === k) m = pickedSlot
@@ -62,17 +71,47 @@ Item {
         if (m === pos) return
         pos = m
         poke()
-        if (intro < 1 && introTarget === 1) { slide.stop(); cur = m; return }     // 入场途中直接对位
-        slide.stop()
-        slide.from = cur
-        slide.to = m
-        // 类 iOS：先快后慢的非线性减速，末尾小幅越过再回位；连续滚动时从当前位置接着走
-        slide.duration = Theme.richMotion ? 560 : 220
-        slide.easing.type = Theme.richMotion ? Easing.OutBack : Easing.OutCubic
-        slide.start()
-        pull(m)
+        if (intro < 1 && introTarget === 1) { queue = []; stepping = false; bounceAnim.stop(); bouncing = false; dest = m; cur = m; return }   // 入场途中直接对位
+        hovered = -10000
+        const q = queue.slice(); q.push(m); queue = q
+        // 正在回弹时又来了新的一步：回弹那步不再是最后一步，改为普通贴靠接着走
+        if (bouncing) { bounceAnim.stop(); bouncing = false }
+        if (!stepping) nextStep()
     }
-    NumberAnimation { id: slide; target: chain; property: "cur"; easing.overshoot: 0.9 }
+    function nextStep() {
+        if (!queue.length) { stepping = false; return }
+        const from = dest, m = queue[0]
+        queue = queue.slice(1)
+        dest = m
+        stepping = true
+        pull(m)
+        const n = Math.max(1, count)
+        const crossing = n > 1 && Math.floor(from / n) !== Math.floor(m / n)
+        if (crossing && queue.length === 0) {
+            bouncing = true
+            bounceAnim.stop()
+            bounceAnim.from = cur
+            bounceAnim.to = m
+            bounceAnim.duration = Theme.richMotion ? 560 : 240
+            bounceAnim.easing.type = Theme.richMotion ? Easing.OutBack : Easing.OutCubic
+            bounceAnim.start()
+        }
+    }
+    NumberAnimation { id: bounceAnim; target: chain; property: "cur"; easing.overshoot: 0.9
+        onFinished: if (chain.bouncing) { chain.bouncing = false; chain.cur = chain.dest; chain.nextStep() } }
+    FrameAnimation {
+        running: chain.visible && chain.stepping && !chain.bouncing
+        onTriggered: {
+            const dt = Math.min(0.05, frameTime)
+            // 每秒剩余比例：普通 0.0008（约 0.35 秒到位，与上一版相同）；积压时更快
+            const rate = chain.queue.length >= 2 ? 1e-7 : 0.0008
+            chain.cur += (chain.dest - chain.cur) * (1 - Math.pow(rate, dt))
+            const near = Math.abs(chain.dest - chain.cur) < (chain.queue.length ? 0.08 : 0.0005)
+            if (near) { if (!chain.queue.length) chain.cur = chain.dest; chain.nextStep() }
+        }
+    }
+    // 滑动期间不响应悬停：卡带在指针下移动时不再反复抬起 / 落下，与滚轮动画冲突
+    readonly property bool sliding: stepping || Math.abs(cur - pos) > 0.02
 
     // 档案抽出：选中的卡带先抬起、向镜头靠近并转正，再随串归位
     property int pullK: -10000
@@ -115,13 +154,15 @@ Item {
     function open(list, n, t) {
         deptN = n
         items = list
-        target = t || 0
-        pos = target
-        cur = target
         intro = 0
+        target = t || 0
+        queue = []; stepping = false; bouncing = false; bounceAnim.stop()
+        pos = target
+        dest = target
+        cur = target
         introTarget = 1
     }
-    function close() { introTarget = 0; breathGoal = 0; idleTimer.stop(); slide.stop() }
+    function close() { introTarget = 0; breathGoal = 0; idleTimer.stop(); queue = []; stepping = false; bounceAnim.stop(); bouncing = false }
 
     // 曲线：s 为相对选中位置的槽位
     function place(s) {
@@ -177,7 +218,7 @@ Item {
             Behavior on lift { enabled: Theme.richMotion; NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
             readonly property var p: chain.placeAt(s, m, lift)
             readonly property real fade: Math.max(0, Math.min(1, 1.8 - Math.abs(s) / 4.2)) * Math.min(1, chain.intro * 1.4)
-            readonly property bool hot: chain.hovered === m
+            readonly property bool hot: !chain.sliding && chain.hovered === m
             visible: fade > 0.01
             z: 100 + s * 4
 
@@ -260,7 +301,7 @@ Item {
                     enabled: cas.real && cas.fade > 0.3
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
-                    onContainsMouseChanged: chain.hovered = containsMouse ? cas.m : (chain.hovered === cas.m ? -10000 : chain.hovered)
+                    onContainsMouseChanged: if (!chain.sliding) chain.hovered = containsMouse ? cas.m : (chain.hovered === cas.m ? -10000 : chain.hovered)
                     onClicked: { chain.pickedSlot = cas.m; chain.picked(cas.k) }
                 }
             }
