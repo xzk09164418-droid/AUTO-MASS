@@ -7,3 +7,4 @@ DeptTile 1.0 DeptTile.qml
 Ledger 1.0 Ledger.qml
 SectionHost 1.0 SectionHost.qml
 BackendPanel 1.0 BackendPanel.qml
+RandomBlocks 1.0 RandomBlocks.qml

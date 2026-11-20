@@ -4,8 +4,8 @@ import "."
 import "Departments.js" as Depts
 
 // 一级界面：部门索引（对应 PV 1:00–1:12 的科室总览）。
-// 入场编排：中央调度中心先出现（"以总辖构件科为首"）→ 四条斜线由中心向四角展开
-// → 其余方块按编号依次显现 → SEARCHING 标签扫过各方块后停回中央。
+// 入场编排：中央主页先出现 → 四条斜线由中心向四角展开 → 其余方块按编号依次显现，
+// 标签直接停在主页上（不再逐个框选 01–10）；之后网格上随机闪现 PV 开场式的小方块。
 FocusScope {
     id: hub
 
@@ -14,7 +14,6 @@ FocusScope {
     property int current: centerIndex
     property bool paused: false          // 二级界面打开时暂停视差与漂浮
     property string backendStatus: ""
-    property bool scanning: false
 
     signal openRequested(int index, rect r)
 
@@ -58,27 +57,7 @@ FocusScope {
     SequentialAnimation {
         id: introAnim
         NumberAnimation { target: hub; property: "intro"; from: 0; to: 1; duration: 2400; easing.type: Easing.Linear }
-        // 标签依次扫过各方块，再停回中央（由 scanTimer 逐格推进）
-        ScriptAction { script: hub.scanning = true }
-    }
-
-    Timer {
-        id: scanTimer
-        property int step: 0
-        interval: 110
-        repeat: true
-        running: hub.scanning
-        onTriggered: {
-            if (step < hub.departments.length) {
-                hub.current = step
-                step++
-            } else {
-                hub.current = hub.centerIndex
-                step = 0
-                hub.scanning = false
-                hub.focusCurrent()
-            }
-        }
+        ScriptAction { script: { hub.current = hub.centerIndex; hub.focusCurrent() } }
     }
 
     Keys.onPressed: event => {
@@ -247,6 +226,19 @@ FocusScope {
         }
     }
 
+    // ── 随机闪现的小方块（PV 开场网格元素） ─────────────────────────────────
+    RandomBlocks {
+        anchors.fill: parent
+        // 窗口失焦仍继续（计时器开销极小），最小化 / 隐藏时停下
+        active: hub.active && hub.intro >= 1 && !hub.paused && hub.visible
+            && Qt.application.state !== Qt.ApplicationHidden
+            && Qt.application.state !== Qt.ApplicationSuspended
+        avoid: hub.departments.concat(hub.decorations)
+        px: -hub.mx * 3
+        py: -hub.my * 3
+        opacity: Math.max(0, Math.min(1, (hub.intro - 0.85) / 0.15))
+    }
+
     // ── 部门方块 ────────────────────────────────────────────────────────
     Repeater {
         id: tiles
@@ -287,7 +279,7 @@ FocusScope {
             Text {
                 id: label
                 anchors.centerIn: parent
-                text: hub.scanning ? "SEARCHING" : "ACCESS // " + searching.d.zh
+                text: "ACCESS // " + searching.d.zh
                 color: Theme.ink
                 font.family: Theme.font
                 font.pixelSize: 13

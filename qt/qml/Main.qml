@@ -12,6 +12,7 @@ Window {
     property bool backendEnabled: true
     property int initialSection: 0
     property string themeMode: "system"
+    property real simulateLoad: 0           // >0：按真实阶段模拟一次耗时 N 秒的后端启动
     property bool booted: false
 
     width: 1600
@@ -22,6 +23,40 @@ Window {
     visible: true
     title: "AUTO-MAS"
     color: Theme.bg
+
+    // 启动进度的数据源：真实后端 / 模拟后端 / 无（离线预览）
+    readonly property var source: simulateLoad > 0 ? sim : (backendEnabled ? backend : null)
+
+    QtObject {
+        id: sim
+        property string status: "starting"
+        property real progress: 0.03
+        property string stage: "连接后端"
+        property real t: 0
+        // [时间占比, 进度, 阶段]：与 BackendSupervisor 的真实阶段一致
+        readonly property var plan: [
+            [0.00, 0.03, "连接后端"], [0.04, 0.08, "启动后端进程"], [0.12, 0.15, "加载配置"],
+            [0.25, 0.40, "核心服务就绪"], [0.36, 0.479, "初始化：本地远程桌面分身"],
+            [0.48, 0.557, "初始化：桌面显示输出守卫"], [0.55, 0.636, "初始化：全局热键服务"],
+            [0.66, 0.714, "初始化：通知渠道"], [0.80, 0.793, "初始化：主业务定时器"],
+            [0.88, 0.871, "初始化：启动参数直接运行任务"], [0.96, 0.95, "初始化：MCP 服务挂载"],
+            [1.00, 1.0, "就绪"]
+        ]
+    }
+    Timer {
+        interval: 100
+        repeat: true
+        running: root.simulateLoad > 0 && sim.status !== "ready"
+        onTriggered: {
+            sim.t += 0.1
+            const f = sim.t / root.simulateLoad
+            let cur = sim.plan[0]
+            for (const p of sim.plan) if (f >= p[0]) cur = p
+            sim.progress = cur[1]
+            sim.stage = cur[2]
+            if (f >= 1) sim.status = "ready"
+        }
+    }
 
     Component.onCompleted: {
         Theme.mode = themeMode
@@ -51,7 +86,7 @@ Window {
             focus: true
             active: root.booted
             paused: sections.busy
-            backendStatus: root.backendEnabled && root.backend ? root.backend.status : ""
+            backendStatus: root.source ? root.source.status : ""
             onOpenRequested: (i, r) => sections.open(i, r)
         }
 
@@ -68,10 +103,9 @@ Window {
             visible: !root.booted
             running: !root.skipBoot
             // 后端未就绪时停在授权段；出错也放行，交给 BackendPanel 呈现
-            backendReady: !root.backendEnabled || !root.backend
-                || root.backend.status === "ready" || root.backend.status === "error"
-            backendProgress: root.backendEnabled && root.backend ? root.backend.progress : 1
-            backendStage: root.backendEnabled && root.backend ? root.backend.stage : "OFFLINE PREVIEW"
+            backendReady: !root.source || root.source.status === "ready" || root.source.status === "error"
+            backendProgress: root.source ? root.source.progress : 1
+            backendStage: root.source ? root.source.stage : "OFFLINE PREVIEW"
             onFinished: root.finishBoot()
         }
     }

@@ -34,6 +34,20 @@ Item {
     property real idle: 0
     property bool done: false
 
+    // 长时间加载：停帧超过 1 秒后显出启动日志、耗时与提示；圆环转入呼吸
+    property var stageLog: []
+    onBackendStageChanged: {
+        if (backendStage && stageLog[stageLog.length - 1] !== backendStage)
+            stageLog = stageLog.concat([backendStage]).slice(-9)
+    }
+    readonly property bool waiting: !backendReady && frame >= holdFrame - 0.001
+    property real waitShow: waiting && idle > 1.0 ? 1 : 0
+    Behavior on waitShow { NumberAnimation { duration: 360; easing.type: Easing.OutCubic } }
+    function clockText(sec) {
+        const m = Math.floor(sec / 60), s = Math.floor(sec % 60)
+        return (m < 10 ? "0" : "") + m + ":" + (s < 10 ? "0" : "") + s
+    }
+
     function skip() {
         done = true
         frame = endFrame
@@ -44,6 +58,7 @@ Item {
         frame = 0
         idle = 0
         done = false
+        stageLog = backendStage ? [backendStage] : []
     }
 
     FrameAnimation {
@@ -193,6 +208,7 @@ Item {
                 x: 960
                 y: 540
                 scale: T.steps(boot.frame, 320, 3, [1.08, 0.94, 1.05, 0.98, 1])
+                    * (1 + 0.014 * Math.sin(boot.idle * 2.4) * boot.waitShow)
 
                 Ring {
                     x: -width / 2
@@ -280,6 +296,105 @@ Item {
                     sweep: 330 * p
                     rotation: modelData.dir * modelData.end * p
                     visible: boot.frame >= 325
+                }
+            }
+
+            // 等待面板：右侧启动日志（已完成 / 进行中），左侧耗时
+            Item {
+                id: waitPanel
+                anchors.fill: parent
+                opacity: boot.waitShow
+                visible: opacity > 0.01
+
+                Column {
+                    x: 1470
+                    y: 360
+                    width: 360
+                    spacing: 0
+                    transform: Translate { x: 30 * (1 - boot.waitShow) }
+
+                    Row {
+                        spacing: 10
+                        Rectangle { width: 14; height: 3; color: Theme.accent; anchors.verticalCenter: parent.verticalCenter }
+                        BootText { text: "BACKEND // STARTUP LOG"; font.pixelSize: 13; font.letterSpacing: 3 }
+                    }
+                    Rectangle { width: 360; height: 1.5; color: boot.ink; opacity: 0.8 }
+                    Item { width: 1; height: 8 }
+                    Repeater {
+                        model: boot.stageLog
+                        Item {
+                            required property string modelData
+                            required property int index
+                            readonly property bool last: index === boot.stageLog.length - 1
+                            width: 360
+                            height: 30
+                            Text {
+                                width: 40
+                                y: 6
+                                text: parent.last ? "" : "OK"
+                                color: Theme.success
+                                font.family: Theme.font
+                                font.pixelSize: 12
+                                font.weight: Font.Bold
+                                font.letterSpacing: 1.5
+                            }
+                            Ring {
+                                visible: parent.last
+                                x: 4
+                                y: 7
+                                radius: 7
+                                stroke: 2.5
+                                sweep: 270
+                                color: Theme.accent
+                                rotation: boot.idle * 400
+                            }
+                            Text {
+                                x: 44
+                                y: 4
+                                width: 316
+                                elide: Text.ElideRight
+                                text: parent.modelData
+                                color: boot.ink
+                                opacity: parent.last ? 1 : 0.55
+                                font.family: Theme.font
+                                font.pixelSize: 15
+                                font.weight: parent.last ? Font.Bold : Font.Normal
+                                font.letterSpacing: 1
+                            }
+                            Rectangle { y: 29; width: 360; height: 1; color: boot.ink; opacity: 0.12 }
+                        }
+                    }
+                }
+
+                Column {
+                    x: 150
+                    y: 420
+                    spacing: 6
+                    transform: Translate { x: -30 * (1 - boot.waitShow) }
+                    BootText { text: "ELAPSED"; font.pixelSize: 13; font.letterSpacing: 4; opacity: 0.6 }
+                    BootText {
+                        text: boot.clockText(boot.holdFrame / boot.fps + boot.idle)
+                        font.pixelSize: 64
+                        font.weight: Font.Light
+                        font.bold: false
+                        font.letterSpacing: 3
+                    }
+                    Rectangle { width: 220; height: 2; color: boot.ink }
+                    BootText {
+                        text: Math.round(boot.shownProgress * 100) + "% · " + (boot.stageLog.length) + " STAGES"
+                        font.pixelSize: 13
+                        font.letterSpacing: 2.5
+                        opacity: 0.6
+                    }
+                }
+
+                BootText {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    y: 890
+                    font.pixelSize: 14
+                    font.letterSpacing: 3
+                    opacity: Math.max(0, Math.min(1, (boot.idle - 12) / 1)) * 0.65
+                    text: "后端启动较慢 · 点击任意处可先进入界面，就绪后自动连接"
                 }
             }
 
@@ -394,7 +509,10 @@ Item {
     property real shownProgress: 0
     Behavior on shownProgress { NumberAnimation { duration: 320; easing.type: Easing.OutCubic } }
     onBackendProgressChanged: shownProgress = backendProgress
-    Component.onCompleted: shownProgress = backendProgress
+    Component.onCompleted: {
+        shownProgress = backendProgress
+        if (backendStage) stageLog = [backendStage]
+    }
 
     // ── 黑场标志 ─────────────────────────────────────────────────────────
     Rectangle {

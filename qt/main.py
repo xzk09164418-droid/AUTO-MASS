@@ -4,6 +4,7 @@
     .venv\\Scripts\\python.exe qt\\main.py
     .venv\\Scripts\\python.exe qt\\main.py --skip-boot            # 跳过启动动画
     .venv\\Scripts\\python.exe qt\\main.py --no-backend           # 不探测/拉起后端（只看界面）
+    .venv\\Scripts\\python.exe qt\\main.py --simulate-load 30     # 模拟 30 秒的后端启动（演示长时间加载）
     .venv\\Scripts\\python.exe qt\\main.py --capture out.png --after 3000   # 定时截图后退出（自检用）
 """
 
@@ -31,6 +32,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--theme", choices=["system", "light", "dark"], default="system")
     parser.add_argument("--capture", type=Path, help="截图保存路径")
     parser.add_argument("--after", type=int, default=3000, help="截图延时（毫秒）")
+    parser.add_argument(
+        "--simulate-load", type=float, default=0, metavar="SECONDS",
+        help="不连接后端，按真实阶段模拟一次耗时 N 秒的后端启动（演示长时间加载）",
+    )
     parser.add_argument("--size", help="窗口逻辑尺寸，如 1920x1080（分辨率适配测试用）")
     return parser.parse_args()
 
@@ -57,7 +62,8 @@ def main() -> int:
         {
             "backend": backend,
             "skipBoot": args.skip_boot,
-            "backendEnabled": not args.no_backend,
+            "backendEnabled": not (args.no_backend or args.simulate_load > 0),
+            "simulateLoad": args.simulate_load,
             "initialSection": args.section,
             "themeMode": args.theme,
         }
@@ -69,7 +75,7 @@ def main() -> int:
         w, h = (int(v) for v in args.size.lower().split("x"))
         engine.rootObjects()[0].resize(w, h)
 
-    if not args.no_backend:
+    if not (args.no_backend or args.simulate_load > 0):
         backend.start()
     app.aboutToQuit.connect(backend.shutdown)
 
