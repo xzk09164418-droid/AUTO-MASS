@@ -191,11 +191,11 @@ const REDUCE = matchMedia('(prefers-reduced-motion: reduce)').matches
 
 // ── 数据：五列 = 五个通用脚本；列内 = 脚本配置 + 各账号（演示数据） ──
 const COLUMNS = [
-  { name: 'BGI 每日', en: 'BETTERGI DAILY', accounts: ['主号', '小号', '测试号', '活动号', '备用号', '双开号', '旧号'] },
-  { name: '鸣潮日常', en: 'WUTHERING DAILY', accounts: ['鸣潮主号', '鸣潮小号', '声骸号', '体力号', '备用号', '旧号', '活动号'] },
-  { name: '星铁清体力', en: 'STAR RAIL STAMINA', accounts: ['星铁', '星铁小号', '模拟宇宙', '忘却之庭', '备用号', '旧号', '活动号'] },
-  { name: '绝区零一条龙', en: 'ZZZ ONE-DRAGON', accounts: ['主号', '小号', '活动号', '式舆防卫', '备用号', '旧号', '双开号'] },
-  { name: 'MaaEnd 每日', en: 'MAAEND DAILY', accounts: ['博士', '博士 B', '基建号', '剿灭号', '备用号', '旧号', '活动号'] },
+  { name: 'BGI 每日', en: 'BETTERGI DAILY', exe: 'BetterGI.exe', hue: 205, accounts: ['主号', '小号', '测试号', '活动号', '备用号', '双开号', '旧号'] },
+  { name: '鸣潮日常', en: 'WUTHERING DAILY', exe: 'ok-ww.exe', hue: 170, accounts: ['鸣潮主号', '鸣潮小号', '声骸号', '体力号', '备用号', '旧号', '活动号'] },
+  { name: '星铁清体力', en: 'STAR RAIL STAMINA', exe: 'March7th Assistant.exe', hue: 330, accounts: ['星铁', '星铁小号', '模拟宇宙', '忘却之庭', '备用号', '旧号', '活动号'] },
+  { name: '绝区零一条龙', en: 'ZZZ ONE-DRAGON', exe: 'OneDragon.exe', hue: 45, accounts: ['主号', '小号', '活动号', '式舆防卫', '备用号', '旧号', '双开号'] },
+  { name: 'MaaEnd 每日', en: 'MAAEND DAILY', exe: 'MaaEnd.exe', hue: 265, accounts: ['博士', '博士 B', '基建号', '剿灭号', '备用号', '旧号', '活动号'] },
 ]
 const records = []
 COLUMNS.forEach((col, lane) => {
@@ -311,6 +311,45 @@ function drawLabel(index) {
   labelTexture.needsUpdate = true
 }
 
+// ── 程序图标唱片：录像带内部的双环换成一张圆盘，中央印启动程序的图标 ──
+// 演示里图标是画出来的占位；Qt 版从脚本配置的 exe 里取真实图标（256×256）。
+const iconCache = new Map()
+function programIcon(lane) {
+  if (iconCache.has(lane)) return iconCache.get(lane)
+  const col = COLUMNS[lane], c = document.createElement('canvas'); c.width = c.height = 256
+  const g = c.getContext('2d'), grad = g.createLinearGradient(0, 0, 256, 256)
+  grad.addColorStop(0, `hsl(${col.hue} 62% 58%)`); grad.addColorStop(1, `hsl(${col.hue + 25} 58% 34%)`)
+  g.fillStyle = grad; g.beginPath(); g.roundRect(20, 20, 216, 216, 48); g.fill()
+  g.fillStyle = 'rgba(255,255,255,.92)'; g.font = `bold 120px ${F}`; g.textAlign = 'center'; g.textBaseline = 'middle'
+  g.fillText(col.exe[0].toUpperCase(), 128, 136)
+  iconCache.set(lane, c); return c
+}
+const discCanvas = document.createElement('canvas'); discCanvas.width = discCanvas.height = 1024
+const discTexture = new THREE.CanvasTexture(discCanvas)
+discTexture.colorSpace = THREE.SRGBColorSpace
+discTexture.anisotropy = renderer.capabilities.getMaxAnisotropy()
+function drawDisc(index) {
+  const r = records[index], col = COLUMNS[r.lane], g = discCanvas.getContext('2d')
+  g.clearRect(0, 0, 1024, 1024)
+  g.save(); g.beginPath(); g.arc(512, 512, 508, 0, Math.PI * 2); g.clip()
+  const bg = g.createRadialGradient(512, 430, 60, 512, 512, 520)
+  bg.addColorStop(0, `hsl(${col.hue} 18% 86%)`); bg.addColorStop(1, `hsl(${col.hue} 12% 70%)`)
+  g.fillStyle = bg; g.fillRect(0, 0, 1024, 1024)
+  // 放大的图标作底纹，中央再放一枚清晰的图标
+  g.globalAlpha = .16; g.drawImage(programIcon(r.lane), 112, 112, 800, 800); g.globalAlpha = 1
+  g.drawImage(programIcon(r.lane), 352, 300, 320, 320)
+  g.fillStyle = 'rgba(30,30,26,.82)'; g.textAlign = 'center'
+  g.font = `bold 54px ${F}`; g.fillText(col.exe, 512, 720)
+  g.font = `28px ${F}`; g.fillStyle = 'rgba(30,30,26,.55)'; g.fillText(r.kind === '账号' ? r.title + ' · ' + col.name : col.name, 512, 772)
+  g.font = `22px ${F}`; g.fillText('© AUTO-MAS · SCRIPT CUSTODY', 512, 900)
+  g.restore()
+  // 外圈与内孔
+  g.lineWidth = 16; g.strokeStyle = 'rgba(205,203,198,.95)'; g.beginPath(); g.arc(512, 512, 500, 0, Math.PI * 2); g.stroke()
+  g.lineWidth = 3; g.strokeStyle = 'rgba(40,40,36,.25)'; g.beginPath(); g.arc(512, 512, 470, 0, Math.PI * 2); g.stroke()
+  discTexture.needsUpdate = true
+}
+const RING_PARTS = ['Optical_Edges', 'Internal_Ceramic', 'Subsurface_Optics', 'Amber_Optical_Inlay', 'Optical_Film', 'Optical_Film_Edge']
+
 // ── 模型：阵列用实例化的外壳 / 边 / 紧固件 / 索引 / 漫射层，选中的那一份用完整材质 ──
 const model = new THREE.Group()
 const instances = []
@@ -338,6 +377,7 @@ async function load() {
     const optics = { Optical_Glass_Body: ['#929894', .38, .27], Optical_Glass_Roof: ['#929b94', .34, .42], Optical_Glass_Edge: ['#edf0e7', .19, .9], Optical_Bridge_Glass: ['#a0aca2', .32, .36] }[name]
     if (optics) { mat.color.set(optics[0]); mat.roughness = optics[1]; mat.transparent = true; mat.opacity = optics[2]; mat.transmission = 0; mat.depthWrite = false }
     if (name === 'Carbon_Ink') continue
+    if (RING_PARTS.includes(name)) continue      // 双环换成图标唱片
     const sel = new THREE.Mesh(geom, mat)
     sel.userData.surface = name
     sel.castShadow = name === 'Optical_Diffuser'
@@ -372,6 +412,13 @@ async function load() {
   labelMesh = new THREE.Mesh(new THREE.PlaneGeometry(0.99, 0.46), new THREE.MeshBasicMaterial({ map: labelTexture, toneMapped: false, transparent: true, depthWrite: false }))
   labelMesh.position.set(-1.36, 3.04, 0.255)
   model.add(labelMesh)
+  // 图标唱片：位于背板与磨砂盖板之间，与原双环同一位置
+  const discMat = new THREE.MeshStandardMaterial({ map: discTexture, roughness: 0.55, metalness: 0.02, alphaTest: 0.5, side: THREE.DoubleSide })
+  const disc = new THREE.Mesh(new THREE.CircleGeometry(1.32, 128), discMat)
+  disc.position.set(0.22, 1.86, 0.12)
+  disc.userData.surface = 'Cover_Disc'
+  palettes.set('Cover_Disc', { high: discMat })
+  model.add(disc)
   scene.add(model)
 }
 // 选中档案的外观：外壳、边等在阵列材质与完整材质之间插值；内部结构随抬起渐显
@@ -441,6 +488,7 @@ function select(navigation) {
   lift.value = 0; lift.velocity = 0
   pulses.push({ ...selectedCell, time: clock }); pulses = pulses.slice(-6)
   drawLabel(selected)
+  drawDisc(selected)
   updateText(navigation.direction || 1)
   wake()
 }
@@ -602,7 +650,7 @@ function renderDetail() {
   <div class="detail-kicker"><span>FILE ${r.id}</span><span>${r.clearance}</span></div>
   <h2>${r.en}</h2><div class="detail-title-cn">${r.title}<span>${r.category}</span></div>
   <div class="detail-rule"></div>
-  <dl class="metadata"><div><dt>SCRIPT / 所属脚本</dt><dd>${r.category}</dd></div><div><dt>LAST RUN / 上次代理</dt><dd>${r.last}</dd></div><div><dt>REMAINED / 剩余天数</dt><dd>${r.remained}</dd></div><div><dt>STATUS / 状态</dt><dd><i></i>${r.clearance === 'DISABLED' ? '已停用' : '启用 · 可代理'}</dd></div></dl>
+  <dl class="metadata"><div><dt>PROGRAM / 启动程序</dt><dd>${COLUMNS[r.lane].exe}</dd></div><div><dt>LAST RUN / 上次代理</dt><dd>${r.last}</dd></div><div><dt>REMAINED / 剩余天数</dt><dd>${r.remained}</dd></div><div><dt>STATUS / 状态</dt><dd><i></i>${r.clearance === 'DISABLED' ? '已停用' : '启用 · 可代理'}</dd></div></dl>
   <div class="detail-tabs" role="tablist"><button type="button" class="${tab === 'overview' ? 'active' : ''}" data-tab="overview">01 <span>概述</span></button><button type="button" class="${tab === 'notes' ? 'active' : ''}" data-tab="notes">02 <span>运行记录</span></button><button type="button" class="${tab === 'history' ? 'active' : ''}" data-tab="history">03 <span>访问日志</span></button><i class="tab-indicator"></i></div>
   <div id="tab-panel" class="tab-panel">${panel(r)}</div>
   <div class="detail-actions"><button type="button" class="solid-button">＋ SAVE CONFIG<span>保存配置</span></button><button type="button" class="export-button">RUN <span>↗</span></button></div>
@@ -700,6 +748,7 @@ renderer.domElement.addEventListener('click', e => {
 setInterval(() => { $('clock').textContent = new Date().toLocaleTimeString('zh-CN', { hour12: false }) }, 1000)
 await load()
 drawLabel(selected)
+drawDisc(selected)
 updateText(1)
 container.classList.add('on')
 $('loading').classList.add('done')
