@@ -38,6 +38,39 @@ def is_installed() -> bool:
     return (_pyside_dir() / "qml" / "QtQuick3D").is_dir()
 
 
+_preloaded: list = []
+
+
+def preload_libraries_async() -> None:
+    """增强挡位：启动时在后台线程预先映射 Qt Quick 3D 的 DLL（含 QML 插件与 glTF 导入器）。
+
+    之后界面真正用到 3D 时，加载插件不再在主线程上读盘、重定位，后台预加载的卡顿明显变小。
+    只在已选增强挡位时调用：其它挡位不加载这些 DLL，延后删除才不会被占用。
+    """
+
+    if sys.platform != "win32" or not is_installed():
+        return
+    import ctypes
+    import threading
+
+    base = _pyside_dir()
+    files = sorted(base.glob("Qt6Quick3D*.dll"))
+    files += [p for p in (base / "qml" / "QtQuick3D").rglob("*.dll")
+              if not any(x in p.parts for x in ("Xr", "SpatialAudio", "Particles3D", "ParticleEffects", "Effects"))]
+    files += sorted((base / "plugins" / "assetimporters").glob("*.dll"))
+    skip = ("Xr", "SpatialAudio", "Particle", "Effects", "IblBaker")
+    files = [p for p in files if not any(s in p.name for s in skip)]
+
+    def run() -> None:
+        for path in files:
+            try:
+                _preloaded.append(ctypes.WinDLL(str(path)))
+            except OSError:
+                pass
+
+    threading.Thread(target=run, name="preload-quick3d", daemon=True).start()
+
+
 def saved_motion() -> str:
     """上次选择的动态效果挡位（没有记录时为标准）。"""
 

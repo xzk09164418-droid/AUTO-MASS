@@ -6,7 +6,7 @@ void MAIN()
 {
     vec3 col = uColor;
     if (uGradient > 0.5)
-        col *= mix(vec3(0.72, 0.64, 0.55), vec3(1.0, 0.98, 0.94), smoothstep(0.1, 1.0, vPanel));
+        col *= mix(vec3(0.40, 0.30, 0.20), vec3(1.0, 0.98, 0.94), smoothstep(0.1, 1.0, vPanel));
     BASE_COLOR = vec4(col, 1.0);
     ROUGHNESS = uRoughness;
     METALNESS = uMetalness;

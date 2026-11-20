@@ -5,7 +5,7 @@
 import sys
 from pathlib import Path
 repo = Path(sys.argv[1]); out = Path(sys.argv[2]); sec = sys.argv[3] if len(sys.argv) > 3 else "2"
-sys.argv = [sys.argv[0], "--skip-boot", "--no-backend", "--section", sec, "--size", "1920x1061", "--theme", "light"]
+sys.argv = [sys.argv[0], "--skip-boot", "--no-backend", "--section", sec, "--size", "1920x1061", "--theme", "light", "--motion", "standard"]
 sys.path.insert(0, str(repo / "qt"))
 import main as qtmain
 from PySide6.QtQml import QQmlApplicationEngine as _E

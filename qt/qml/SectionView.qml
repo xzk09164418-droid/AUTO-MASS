@@ -507,6 +507,7 @@ FocusScope {
     // ── 左下：录像带串 + 访问等级 ───────────────────────────────────────────
     CassetteChain {
         id: chain
+        objectName: "chain"
         visible: !view.arrayMode
         x: 0
         y: 440

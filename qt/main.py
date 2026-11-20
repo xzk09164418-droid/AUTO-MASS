@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
@@ -22,7 +23,7 @@ QT_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(QT_DIR))
 
 from automas_qt.backend import BackendSupervisor  # noqa: E402
-from automas_qt.enhanced import EnhancedComponent, saved_motion  # noqa: E402
+from automas_qt.enhanced import EnhancedComponent, preload_libraries_async, saved_motion  # noqa: E402
 from automas_qt.exeicon import ExeIconProvider  # noqa: E402
 
 
@@ -48,6 +49,15 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
+    motion = args.motion or saved_motion()
+    # 增强挡位：后台线程先把 3D 相关 DLL 映射进来，之后预加载 3D 阵列时主线程不再为读盘卡顿
+    if motion == "enhanced":
+        preload_libraries_async()
+    # 渲染管线缓存：编译好的着色器管线存盘，下次启动直接复用（3D 阵列首帧不再现编译）
+    cache = QT_DIR.parent / "config" / "QtPipelineCache.bin"
+    os.environ.setdefault("QSG_RHI_PIPELINE_CACHE_SAVE", str(cache))
+    if cache.exists():
+        os.environ.setdefault("QSG_RHI_PIPELINE_CACHE_LOAD", str(cache))
     # 显式要求垂直同步：交换链按显示器刷新节拍呈现，避免圆环等大幅运动时撕裂
     fmt = QSurfaceFormat.defaultFormat()
     fmt.setSwapInterval(1)
@@ -78,7 +88,7 @@ def main() -> int:
             "initialSection": args.section,
             "returnAfter": args.return_after,
             "themeMode": args.theme,
-            "motionMode": args.motion or saved_motion(),
+            "motionMode": motion,
             "enhanced": enhanced,
         }
     )

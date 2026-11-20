@@ -116,6 +116,15 @@ Item {
         snapCamera = true
         rebuild()
     }
+    // 后台预渲染：把镜头放到阵列取景位置画一帧（否则镜头朝向空处，阵列的着色器与管线不会被编译），
+    // 再让选中的那盒以半透明渐显状态画一帧，切换时的渐显管线也提前就绪
+    function prime() {
+        reset(0)
+        step(0.016)
+        primeBlend.restart()
+    }
+    Timer { id: primeBlend; interval: 300; onTriggered: if (!root.active && root.blendParts.length) { root.applyAppearance(0.5); primeRestore.restart() } }
+    Timer { id: primeRestore; interval: 300; onTriggered: { root.appearance = -1; root.applyAppearance(1) } }
     function flyIn() { fly = 0; flyDir = 1; running = true }
     function flyOut() { if (fly > 1.3) fly = 1.3; flyDir = -1; detailOpen = false; running = true }
 
@@ -170,9 +179,10 @@ Item {
             antialiasingMode: SceneEnvironment.MSAA
             antialiasingQuality: SceneEnvironment.VeryHigh
             tonemapMode: SceneEnvironment.TonemapModeAces
-            exposure: 1.0
+            exposure: 1.05
             // 环境光照：演示基线的 RoomEnvironment（强度 0.48）+ 半球光，烘成一张 HDR（qt/tools/make_room_env.py）
-            probeExposure: 2.0
+            // Qt 的透射采样比 three.js 清晰（不按粗糙度模糊），透出的内层更深：环境光略提、透射降到 0.3，与演示截图逐区对齐
+            probeExposure: 1.3
             lightProbe: Texture { source: Qt.resolvedUrl("../assets3d/room-env.hdr"); mappingMode: Texture.LightProbe }
             fog: Fog {
                 enabled: true
@@ -199,7 +209,7 @@ Item {
         DirectionalLight {
             id: key
             color: "#fff7ed"
-            brightness: 0.8 / Math.PI
+            brightness: 1.4 / Math.PI
             position: Qt.vector3d(-6, 14, -5)
             castsShadow: true
             shadowMapQuality: Light.ShadowMapQualityVeryHigh
@@ -232,14 +242,15 @@ Item {
                 id: arrayLoader
                 source: Qt.resolvedUrl("../assets3d/archive-cassette.glb")
                 instancing: InstanceList { id: instances }
-                onStatusChanged: if (status === RuntimeLoader.Success) root.prepare(arrayLoader, true)
+                onStatusChanged: if (status === RuntimeLoader.Success) { root.prepare(arrayLoader, true); parseGap.start() }
             }
             // 选中的那一盒：完整材质、档案标签、程序图标唱片
             Node {
                 id: selected
                 RuntimeLoader {
                     id: selectedLoader
-                    source: Qt.resolvedUrl("../assets3d/archive-cassette.glb")
+                    // 分步加载：阵列解析完、隔一小段再解析这一份，避免一次占住主线程太久
+                    source: root.arrayParsed && root.allowSelected ? Qt.resolvedUrl("../assets3d/archive-cassette.glb") : ""
                     onStatusChanged: if (status === RuntimeLoader.Success) root.prepare(selectedLoader, false)
                 }
                 Model {
@@ -308,13 +319,14 @@ Item {
     }
     PartMaterial {
         id: matShell
-        uColor: root.lin("#fff7ed"); uRoughness: 0.28; uTransmission: 0.78; uThickness: 0.12
+        uColor: root.lin("#fff7ed"); uRoughness: 0.28; uTransmission: 0.3; uThickness: 0.12
         uAttenuation: root.lin("#eee6df"); uAttenuationDistance: 2; uClearcoat: 0.3; uClearcoatRoughness: 0.25; uGradient: 1
     }
-    PartMaterial { id: matEdges; uColor: root.lin("#fff5e9"); uRoughness: 0.38; uMetalness: 0.02 }
-    PartMaterial { id: matDiffuser; uColor: root.lin("#806447"); uRoughness: 0.7 }
-    PartMaterial { id: matIndex; uColor: root.lin("#e4d6c5"); uRoughness: 0.52; uMetalness: 0.05 }
-    PartMaterial { id: matFasteners; uColor: Qt.vector3d(0.58, 0.6, 0.61); uRoughness: 0.19; uMetalness: 0.82 }
+    // 其余部件不透光：用不写透射的着色器，才会画进屏幕纹理、透过磨砂外壳显出来
+    PartMaterial { id: matEdges; fragmentShader: "shaders/arraypart_opaque.frag"; uColor: root.lin("#fff5e9"); uRoughness: 0.38; uMetalness: 0.02 }
+    PartMaterial { id: matDiffuser; fragmentShader: "shaders/arraypart_opaque.frag"; uColor: root.lin("#806447"); uRoughness: 0.7 }
+    PartMaterial { id: matIndex; fragmentShader: "shaders/arraypart_opaque.frag"; uColor: root.lin("#e4d6c5"); uRoughness: 0.52; uMetalness: 0.05 }
+    PartMaterial { id: matFasteners; fragmentShader: "shaders/arraypart_opaque.frag"; uColor: Qt.vector3d(0.58, 0.6, 0.61); uRoughness: 0.19; uMetalness: 0.82 }
     readonly property var arrayMaterials: ({ Frosted_Polymer: matShell, Ivory_Edges: matEdges, Optical_Diffuser: matDiffuser, Index_Inlay: matIndex, Titanium_Fasteners: matFasteners })
 
     // 部件按材质顺序识别（与 glTF 材质表一一对应）
@@ -323,6 +335,9 @@ Item {
         "Titanium_Fasteners", "Moulded_Lettering", "Champagne_Index"]
     readonly property var ringParts: ["Optical_Edges", "Internal_Ceramic", "Subsurface_Optics", "Amber_Optical_Inlay", "Optical_Film", "Optical_Film_Edge"]
     property var frostedMaterial: null
+    property bool arrayParsed: false
+    property bool allowSelected: true       // 后台预加载时由宿主分步放行
+    Timer { id: parseGap; interval: 250; onTriggered: root.arrayParsed = true }
     // 选中的那盒：抬起过程中外壳等从阵列外观过渡到完整外观，其余内部结构渐显（同演示 applyAppearance）
     property var blendParts: []
     property var fadeParts: []
@@ -344,12 +359,14 @@ Item {
             const mat = m.materials[0]
             m.castsShadows = name === "Optical_Diffuser"
             m.receivesShadows = true
+            m.pickable = true                   // 选中的那盒也要能点中，否则点击会穿到后面的录像带上
             // 模型自带的竖排浮雕字是原作品牌（RHINE LAB），不使用
             if (name === "Carbon_Ink" || name === "Moulded_Lettering") { m.visible = false; continue }
             if (isArray) {
                 const am = arrayMaterials[name]
                 if (!am) { m.visible = false; continue }
                 m.pickable = true
+                m.objectName = "arrayPart"          // 拾取时区分阵列实例与选中的那盒（后者的 instanceIndex 也是 0）
                 m.materials = [am]
                 continue
             }
@@ -359,13 +376,14 @@ Item {
             if (name === "Ivory_Edges") { mat.roughness = 0.31; mat.transmissionFactor = 0.65; mat.thicknessFactor = 0.04 }
             if (name === "Optical_Diffuser") { mat.transmissionFactor = 0; mat.roughness = 0.7 }
             const high = { Frosted_Polymer: "#fffdfa", Ivory_Edges: "#f0e7df", Optical_Diffuser: "#e2dad4" }[name]
-            const low = { Frosted_Polymer: ["#fff7ed", 0.28, 0.78], Ivory_Edges: ["#fff5e9", 0.38, 0], Optical_Diffuser: ["#806447", 0.7, 0], Index_Inlay: ["#e4d6c5", 0.52, 0], Titanium_Fasteners: null }[name]
+            const low = { Frosted_Polymer: ["#fff7ed", 0.28, 0.3], Ivory_Edges: ["#fff5e9", 0.38, 0], Optical_Diffuser: ["#806447", 0.7, 0], Index_Inlay: ["#e4d6c5", 0.52, 0], Titanium_Fasteners: null }[name]
             if (low !== undefined) {
                 if (low) blend.push({ mat: mat, low: { c: Qt.color(low[0]), r: low[1], t: low[2] }, high: { c: high ? Qt.color(high) : mat.baseColor, r: mat.roughness, t: mat.transmissionFactor } })
             } else fade.push(m)
         }
         if (!isArray) { blendParts = blend; fadeParts = fade; appearance = -1 }
         running = true
+        if (!active) Qt.callLater(prime)
     }
     function applyAppearance(q) {
         for (const p of blendParts) {
@@ -382,10 +400,14 @@ Item {
         }
     }
 
-    // ── 实例表：当前列左右各 2 列、当前行前 16 行到后 12 行（换档时重建，静态起伏烘入高度供拾取） ──
+    // ── 实例表：与演示基线相同的范围（左右各 3 列、前后各 18 行，约 259 盒）。
+    //    以阵列「当前滑到的位置」为中心，而不是目标格：切换行列时边缘的列 / 行随阵列平移自然移出画面，
+    //    滑过半格后才换下；换档或滑过整格时重建，静态起伏烘入高度供拾取。 ──
     property var entries: []
     property var drawn: []
-    readonly property int maxInstances: 5 * 29
+    readonly property int maxInstances: 7 * 37
+    property int builtLane: -9999
+    property int builtRow: -9999
     Component { id: entryComponent; InstanceListEntry {} }
     Component.onCompleted: {
         const list = []
@@ -394,12 +416,16 @@ Item {
         instances.instances = list
         rebuild()
     }
+    function visualLane() { return Math.round(springs.track.v / columnSpacing) + 2 }
+    function visualRow() { return Math.round(15.5 + (-2.17 - springs.rail.v) / rowSpacing) }
     function rebuild() {
         if (!entries.length) return
         const list = []
         let i = 0
-        for (let l = cellLane - 2; l <= cellLane + 2; l++) {
-            for (let r = cellRow - 16; r <= cellRow + 12; r++) {
+        const vl = visualLane(), vr = visualRow()
+        builtLane = vl; builtRow = vr
+        for (let l = vl - 3; l <= vl + 3; l++) {
+            for (let r = vr - 18; r <= vr + 18; r++) {
                 if (l === cellLane && r === cellRow) continue
                 const st = settlingWave(r - cellRow, 26.56) * columnStrength(l, cellLane)
                 const e = entries[i++]
@@ -477,6 +503,7 @@ Item {
             frostedMaterial.roughness = 0.21 + (0.025 - 0.21) * c
         }
         uShoulder = S.shoulder.v; uFocus = S.focus.v; uDetail = detail
+        if (visualLane() !== builtLane || visualRow() !== builtRow) rebuild()
         const trackX = S.track.v, rail = S.rail.v
         arrayRoot.position = Qt.vector3d(-trackX, 0, rail)
         const q = ease(S.lift.v / 0.4)
@@ -540,7 +567,7 @@ Item {
         function cellAt(x, y) {
             const r = view.pick(x, y)
             if (!r.objectHit) return null
-            if (r.instanceIndex >= 0 && r.instanceIndex < root.drawn.length) return root.drawn[r.instanceIndex]
+            if (r.objectHit.objectName === "arrayPart") return r.instanceIndex >= 0 && r.instanceIndex < root.drawn.length ? root.drawn[r.instanceIndex] : null
             return { lane: root.cellLane, row: root.cellRow }
         }
         onPositionChanged: mouse => {
