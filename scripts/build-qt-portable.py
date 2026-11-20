@@ -155,6 +155,8 @@ def main():
             common + options + [f"/out:{target / output}"] + [str(p) for p in sources],
             check=True,
         )
+    # Existing startup/force-restart integrations use this legacy filename.
+    shutil.copy2(target / "AUTO-MASS.exe", target / "AUTO-MAS.exe")
     manifest = {
         "sourceCommit": subprocess.check_output(
             ["git", "-C", str(root), "rev-parse", "HEAD"]
