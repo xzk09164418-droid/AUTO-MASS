@@ -95,7 +95,10 @@ Item {
                         height: 170
                         opacity: (cas.real ? 0.75 + 0.25 * cas.p.focus : 0.5) * cas.fade
                         Rectangle { anchors.fill: parent; color: "transparent"; border.width: 1.5; border.color: cas.hot ? Theme.accent : Theme.dark ? "#6d7b80" : "#9e9a90"; radius: 7 }
+                        readonly property string iconPath: cas.real && root.items[cas.k] && root.items[cas.k].icon ? root.items[cas.k].icon : ""
+                        IconDisc { visible: parent.iconPath !== ""; x: 20; y: 30; width: 100; height: 100; path: parent.iconPath }
                         Rectangle {
+                            visible: parent.iconPath === ""
                             x: 24; y: 34
                             width: 92; height: 92
                             color: Theme.dark ? "#11181b" : "#2a2b2a"

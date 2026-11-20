@@ -81,7 +81,9 @@ function general(uid, c, ur, i) {
         return [d.Info.Name, B(SD.tog(d.Info.Status), "Info.Status", null, usave), rd === -1 || rd === undefined ? "永久" : rd + " 天",
                 B(SD.sel(["独立", "共享", "原生"], idx(["independent", "shared", "native"], d.Info.Base)), "Info.Base", ["independent", "shared", "native"], usave), last]
     })
-    return { name: I.Name || "未命名脚本", en: "GENERAL · " + String(i + 1).padStart(2, "0"), live: true, uid: uid,
+    // icon：启动程序路径，录像带上显示该程序的图标唱片
+    return { name: I.Name || "未命名脚本", en: "GENERAL · " + String(i + 1).padStart(2, "0"), live: true, uid: uid, icon: S.ScriptPath || "",
+        accounts: ur.index.map(function (u) { return (ur.data[u.uid] && ur.data[u.uid].Info.Name) || "账号" }),
         ops: {
             "删除脚本": { confirm: "将删除脚本「" + I.Name + "」及其全部账号。", path: "/api/scripts/delete", body: { scriptId: uid }, reload: true },
             "添加账号": { path: "/api/scripts/user/add", body: { scriptId: uid }, reload: true, done: "已添加账号" },

@@ -204,7 +204,11 @@ Item {
                         model: [Qt.point(15, 15), Qt.point(245, 15), Qt.point(15, 155), Qt.point(245, 155)]
                         Rectangle { required property point modelData; x: modelData.x - 2.5; y: modelData.y - 2.5; width: 5; height: 5; radius: 2.5; color: Qt.rgba(0.16, 0.16, 0.14, 0.5) }
                     }
+                    // 有启动程序时显示程序图标唱片，否则显示档案章
+                    readonly property string iconPath: cas.real && chain.items[cas.k] && chain.items[cas.k].icon ? chain.items[cas.k].icon : ""
+                    IconDisc { visible: parent.iconPath !== ""; x: 20; y: 30; width: 100; height: 100; path: parent.iconPath }
                     Emblem {
+                        visible: parent.iconPath === ""
                         x: 34; y: 44
                         width: 72; height: 72
                         ink: Theme.dark ? "#e0e3dc" : "#ffffff"

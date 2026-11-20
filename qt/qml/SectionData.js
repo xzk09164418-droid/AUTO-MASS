@@ -41,7 +41,7 @@ function general(name, en, c, users, live) {
     var api = "POST /api/scripts/update"
     var I = c.Info, S = c.Script, G = c.Game, R = c.Run
     var gameType = idx(["Emulator", "Client", "URL"], G.Type, 1)
-    return { name: name, en: en, live: !!live, tabs: [
+    return { name: name, en: en, live: !!live, icon: c.Script.ScriptPath || "", accounts: users.map(function (u) { return u.name }), tabs: [
         { name: "程序", api: api, blocks: [
             kv("SCRIPT", [["脚本名称", inp(I.Name), "Info.Name"], ["根目录", path(I.RootPath), "Info.RootPath"], ["启动程序", path(S.ScriptPath), "Script.ScriptPath"], ["启动参数", inp(S.Arguments, true), "Script.Arguments"], ["配置路径", path(S.ConfigPath), "Script.ConfigPath"], ["路径类型", seg(["文件", "文件夹"], idx(["File", "Folder"], S.ConfigPathMode)), "Script.ConfigPathMode"], ["回写配置", seg(["从不", "成功时", "失败时", "总是"], idx(["Never", "Success", "Failure", "Always"], S.UpdateConfigMode)), "Script.UpdateConfigMode"]]),
             kv("PROCESS", [["追踪进程", tog(S.IfTrackProcess), "Script.IfTrackProcess"], ["进程名", inp(S.TrackProcessName, true), "Script.TrackProcessName"], ["清理范围", seg(["跨会话强力", "仅本轮", "当前会话"], idx(["Force", "Tracked", "Session"], S.TaskKillMode)), "Script.TaskKillMode"]])

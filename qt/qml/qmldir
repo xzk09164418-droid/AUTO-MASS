@@ -9,6 +9,7 @@ SectionView 1.0 SectionView.qml
 ArchivePanel 1.0 ArchivePanel.qml
 CassetteChain 1.0 CassetteChain.qml
 Emblem 1.0 Emblem.qml
+IconDisc 1.0 IconDisc.qml
 RollText 1.0 RollText.qml
 RollDigits 1.0 RollDigits.qml
 BackendPanel 1.0 BackendPanel.qml

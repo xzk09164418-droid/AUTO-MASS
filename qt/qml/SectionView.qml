@@ -19,6 +19,11 @@ FocusScope {
     // 已接入后端的部门用实时数据，其余仍是演示数据（逐步接入）
     property var api: null                  // BackendSupervisor（后端就绪时）
     property var enhanced: null             // EnhancedComponent
+    // 增强挡位 + 已装 3D 组件 + 托管管理：以多列档案阵列取代标准版式
+    readonly property bool arrayMode: Theme.motion === "enhanced" && Theme.enhancedAvailable && !!d && d.key === "scripts"
+    readonly property var arrayItem: arrayLoader.status === Loader.Ready ? arrayLoader.item : null
+    readonly property bool arrayDetail: !!arrayItem && arrayItem.detailOpen
+    readonly property var arrayColumns: arrayMode ? items.map(it => ({ name: it.name, en: it.en, icon: it.icon || "", accounts: it.accounts || [] })) : []
     onApiChanged: if (opened && d) fetchLive(d.key)
     property var live: ({})                 // 部门 key → 条目
     property string liveState: ""           // loading / ok / error
@@ -271,6 +276,19 @@ FocusScope {
         if (!opened) return
         const k = event.key
         if (modal.shown) { if (k === Qt.Key_Escape) modal.close(); event.accepted = true; return }
+        if (arrayItem) {
+            // 阵列：方向键切列 / 翻档，回车读取，ESC 先退出读取再返回索引
+            if (k === Qt.Key_Escape) { if (arrayItem.detailOpen) arrayItem.close(); else close(); event.accepted = true; return }
+            if (!arrayItem.detailOpen) {
+                if (k === Qt.Key_Down) arrayItem.nav("row", 1)
+                else if (k === Qt.Key_Up) arrayItem.nav("row", -1)
+                else if (k === Qt.Key_Right) arrayItem.nav("lane", 1)
+                else if (k === Qt.Key_Left) arrayItem.nav("lane", -1)
+                else if (k === Qt.Key_Return || k === Qt.Key_Enter) arrayItem.open()
+                event.accepted = true
+                return
+            }
+        }
         if (k === Qt.Key_Escape) { close(); event.accepted = true }
         else if (k === Qt.Key_Down || k === Qt.Key_Right) { select(target + 1); event.accepted = true }
         else if (k === Qt.Key_Up || k === Qt.Key_Left) { select(target - 1); event.accepted = true }
@@ -283,7 +301,10 @@ FocusScope {
     WheelHandler {
         enabled: view.opened
         acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
-        onWheel: event => view.select(view.target + (event.angleDelta.y < 0 ? 1 : -1))
+        onWheel: event => {
+            if (view.arrayItem) { if (!view.arrayItem.detailOpen) view.arrayItem.nav("row", event.angleDelta.y < 0 ? 1 : -1); return }
+            view.select(view.target + (event.angleDelta.y < 0 ? 1 : -1))
+        }
     }
     HoverHandler {
         enabled: view.opened
@@ -333,6 +354,7 @@ FocusScope {
     // ── 上方：标志剪影（半调网点），切换条目时转动 ─────────────────────────
     Item {
         id: hero
+        visible: !view.arrayMode
         x: 690
         y: -60 + 30 * (1 - view.reveal)
         width: 380
@@ -396,6 +418,7 @@ FocusScope {
     // ── 左侧黑色部门卡 ───────────────────────────────────────────────────
     Item {
         id: sec
+        visible: !view.arrayMode
         x: 248
         y: 300
         width: 410
@@ -450,9 +473,32 @@ FocusScope {
         }
     }
 
+    // ── 增强挡位：多列档案阵列（Qt Quick 3D，按需加载） ──────────────────
+    Loader {
+        id: arrayLoader
+        anchors.fill: parent
+        z: 1
+        active: view.arrayMode && view.opened
+        opacity: view.reveal
+        source: active ? Qt.resolvedUrl("ArchiveArray3D.qml") : ""
+        onLoaded: { if (view.enhanced) view.enhanced.markLoaded(); item.columns = Qt.binding(() => view.arrayColumns); item.cellLane = 2 + view.target }
+        Connections {
+            target: arrayLoader.item
+            // 读取：右侧档案卡切到对应脚本；选的是账号行时直接停在「账号」页
+            function onOpened(lane, row) {
+                view.select(lane)
+                const pages = SD.pages(view.items[lane] || {})
+                const k = pages.findIndex(p => p.name === "账号")
+                panel.tab = row > 0 && k >= 0 ? k : 0
+            }
+            function onMoved(lane, row) { if (lane !== view.target) view.select(lane) }
+        }
+    }
+
     // ── 左下：录像带串 + 访问等级 ───────────────────────────────────────────
     CassetteChain {
         id: chain
+        visible: !view.arrayMode
         x: 0
         y: 440
         width: 900
@@ -462,6 +508,7 @@ FocusScope {
         onPicked: k => view.select(k)
     }
     Row {
+        visible: !view.arrayMode
         x: 0
         y: 956
         z: 4
@@ -501,6 +548,7 @@ FocusScope {
     // ── 右侧：分页点、档案卡、铭牌 ───────────────────────────────────────
     Row {
         id: pager
+        visible: !view.arrayMode
         x: 1150
         y: 58
         z: 5
@@ -554,6 +602,7 @@ FocusScope {
 
     Item {
         id: glass
+        visible: !view.arrayMode || view.arrayDetail
         x: 1150
         y: 92
         z: 5
@@ -602,6 +651,7 @@ FocusScope {
 
     Item {
         id: plate
+        visible: !view.arrayMode
         x: 1150
         y: 910
         z: 5

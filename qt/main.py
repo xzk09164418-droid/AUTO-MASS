@@ -23,6 +23,7 @@ sys.path.insert(0, str(QT_DIR))
 
 from automas_qt.backend import BackendSupervisor  # noqa: E402
 from automas_qt.enhanced import EnhancedComponent, cleanup_pending_removal  # noqa: E402
+from automas_qt.exeicon import ExeIconProvider  # noqa: E402
 
 
 def parse_args() -> argparse.Namespace:
@@ -65,6 +66,8 @@ def main() -> int:
     backend = BackendSupervisor()
     enhanced = EnhancedComponent()
     engine = QQmlApplicationEngine()
+    # 录像带上的程序图标：image://exeicon/<路径>
+    engine.addImageProvider("exeicon", ExeIconProvider())
     engine.warnings.connect(
         lambda warnings: [print(w.toString(), file=sys.stderr, flush=True) for w in warnings]
     )

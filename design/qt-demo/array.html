@@ -376,7 +376,7 @@ async function load() {
     if (name === 'Optical_Edges') { mat.transmission = 0; mat.color.set('#d4c7be'); mat.roughness = 0.26; mat.metalness = 0.08 }
     const optics = { Optical_Glass_Body: ['#929894', .38, .27], Optical_Glass_Roof: ['#929b94', .34, .42], Optical_Glass_Edge: ['#edf0e7', .19, .9], Optical_Bridge_Glass: ['#a0aca2', .32, .36] }[name]
     if (optics) { mat.color.set(optics[0]); mat.roughness = optics[1]; mat.transparent = true; mat.opacity = optics[2]; mat.transmission = 0; mat.depthWrite = false }
-    if (name === 'Carbon_Ink') continue
+    if (name === 'Carbon_Ink' || name === 'Moulded_Lettering') continue      // 竖排浮雕字是原作品牌，不使用
     if (RING_PARTS.includes(name)) continue      // 双环换成图标唱片
     const sel = new THREE.Mesh(geom, mat)
     sel.userData.surface = name
