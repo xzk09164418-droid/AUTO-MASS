@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls.Basic as C
+import QtQuick.Effects
 import "."
 import "SectionData.js" as SD
 
@@ -14,6 +15,7 @@ Item {
     property int itemIndex: 0
     property int tab: 0
     signal toast(string text)
+    signal confirmDelete(string name, string api)
 
     readonly property var pages: item ? SD.pages(item) : []
     readonly property var page: pages.length ? pages[Math.min(tab, pages.length - 1)] : null
@@ -30,15 +32,31 @@ Item {
     property string queueName: SD.TASKS[0]
     property var statOverride: ({})
 
+    property var lastItem: null
+    property real dec: 1            // 解密进度 0→1（借鉴 RhineLabUI 的同步解密）
+    property real tabFade: 1
+    property int tickets: 0         // 遮挡条依次退开的序号
+    function ticket() { return tickets++ }
+    function startDec() {
+        if (Theme.richMotion) decAnim.restart()
+        else { decAnim.stop(); dec = 1 }
+    }
+    NumberAnimation { id: decAnim; target: panel; property: "dec"; from: 0; to: 1; duration: 1500; easing.type: Easing.Linear }
+    NumberAnimation { id: tabFadeAnim; target: panel; property: "tabFade"; from: 0; to: 1; duration: 150 }
+
+    // 换条目：淡出后重新解密；换页签：只换正文与操作并 150ms 淡入
     function refresh() {
         if (!page) return
-        if (shown === null) { apply(); return }
-        swapOut.restart()
+        if (shown === null) { lastItem = item; apply(); startDec(); return }
+        if (item !== lastItem) { lastItem = item; swapOut.restart(); return }
+        apply()
+        if (Theme.richMotion) tabFadeAnim.restart()
     }
     function apply() {
         runTimer.stop()
         runState = "idle"; runPct = 0; runTitle = "待命"; runText = "选择任务后开始执行"; statOverride = ({})
         excl = item && item.exclusive ? item.exclusive : ""
+        tickets = 0
         shown = page
         content.opacity = 1
         content.y = 0
@@ -51,14 +69,14 @@ Item {
             NumberAnimation { target: content; property: "opacity"; to: 0; duration: 140 }
             NumberAnimation { target: content; property: "y"; to: -10; duration: 140; easing.type: Easing.InCubic }
         }
-        ScriptAction { script: panel.apply() }
+        ScriptAction { script: { panel.apply(); panel.startDec() } }
     }
 
     function act(name) {
         const api = shown ? shown.api : ""
         if (name === "开始执行") startRun()
         else if (name === "停止" || name === "停止任务") { runTimer.stop(); runState = "idle"; runPct = 0; runTitle = "已停止"; runText = "队列已手动停止"; toast("队列已停止 · POST /api/dispatch/stop") }
-        else if (/删除/.test(name)) toast("演示：删除前会二次确认")
+        else if (/删除/.test(name)) confirmDelete(item ? item.name : "", api)
         else if (/保存/.test(name)) toast("已保存 · " + api)
         else toast("演示：" + name + " · " + api)
     }
@@ -200,7 +218,18 @@ Item {
     component Seg: Row {
         id: sg
         property var spec
-        property int cur: spec.v
+        readonly property var motions: ["reduced", "standard", "enhanced"]
+        property int cur: spec.k === "motion" ? Math.max(0, motions.indexOf(Theme.motion)) : spec.v
+        // 动态效果挡位：直接改 Theme.motion；增强挡位需要另行安装的 3D 组件
+        onCurChanged: if (spec.k === "motion" && motions[cur] !== Theme.motion) {
+            if (cur === 2 && !Theme.enhancedAvailable) {
+                panel.toast("未安装 3D 增强组件：安装时勾选「增强视觉效果」后可用")
+                cur = Math.max(0, motions.indexOf(Theme.motion))
+                return
+            }
+            Theme.motion = motions[cur]
+            panel.toast("动态效果：" + spec.opts[cur])
+        }
         Repeater {
             model: sg.spec.opts
             Rectangle {
@@ -314,6 +343,22 @@ Item {
         Text { id: tagText; anchors.centerIn: parent; text: parent.spec.t; color: parent.spec.kind === "run" ? Theme.paper : parent.tint; font.family: Theme.font; font.pixelSize: 12; font.weight: Font.Bold; font.letterSpacing: 1.4 }
     }
 
+    // 正文遮挡条：解密时按序号依次向右退开
+    component Redact: Rectangle {
+        property int idx: 0
+        Component.onCompleted: idx = Math.min(24, panel.ticket())
+        readonly property real t: Math.max(0, Math.min(1, (panel.dec * 1500 - 640 - idx * 22) / 420))
+        readonly property real k: 1 - (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2)
+        visible: panel.dec < 1 && k > 0
+        x: 0
+        anchors.verticalCenter: parent.verticalCenter
+        width: parent.width * 0.7
+        height: Math.max(8, Math.min(16, parent.height * 0.36))
+        color: Theme.ink
+        z: 10
+        transform: Scale { origin.x: width; xScale: k }
+    }
+
     // 单个控件：按 spec.c 选择；字符串直接排字
     component Ctl: Loader {
         id: ctl
@@ -416,6 +461,7 @@ Item {
                     anchors.verticalCenter: parent.verticalCenter
                     value: kvRow.modelData[1]
                 }
+                Item { x: 154; width: parent.width - 158; height: parent.height; Redact {} }
                 Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: Theme.hair; opacity: 0.7 }
             }
         }
@@ -436,7 +482,18 @@ Item {
                     Text { required property string modelData; width: tb.colW; height: 34; verticalAlignment: Text.AlignVCenter; leftPadding: 6; text: modelData; color: Theme.muted; font.family: Theme.font; font.pixelSize: 12; font.weight: Font.Bold; font.letterSpacing: 2 }
                 }
             }
-            Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 2; color: Theme.ink }
+            Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: Theme.hair }
+            // 下划线 180ms 移到当前页签
+            Rectangle {
+                readonly property Item on: tabRep.count > panel.tab ? tabRep.itemAt(panel.tab) : null
+                anchors.bottom: parent.bottom
+                x: on ? on.x : 0
+                width: on ? on.width - 14 : 0
+                height: 2
+                color: Theme.ink
+                Behavior on x { enabled: Theme.richMotion; NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+                Behavior on width { enabled: Theme.richMotion; NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+            }
         }
         Repeater {
             model: tb.b.rows
@@ -458,6 +515,7 @@ Item {
                             width: tb.colW
                             height: tr.height
                             Cell { x: 6; width: parent.width - 12; anchors.verticalCenter: parent.verticalCenter; value: parent.modelData }
+                            Item { x: 6; width: parent.width - 12; height: parent.height; Redact {} }
                         }
                     }
                 }
@@ -483,6 +541,7 @@ Item {
                     color: Theme.ink; font.family: Theme.font; font.pixelSize: 32; font.weight: Font.Light
                 }
                 Text { x: 14; y: 48; text: modelData[0]; color: Theme.muted; font.family: Theme.font; font.pixelSize: 12; font.letterSpacing: 2.4 }
+                Item { x: 14; y: 8; width: 90; height: 38; Redact {} }
             }
         }
     }
@@ -611,15 +670,16 @@ Item {
             Row {
                 spacing: 2
                 Repeater {
+                    id: tabRep
                     model: panel.pages.length > 1 ? panel.pages : []
                     Rectangle {
                         id: tabBtn
                         required property var modelData
                         required property int index
                         readonly property bool on: panel.tab === index
-                        width: tabRow.implicitWidth + 32
+                        width: tabRow.implicitWidth + 28
                         height: 38
-                        color: on ? Theme.ink : "transparent"
+                        color: "transparent"
                         activeFocusOnTab: true
                         Accessible.role: Accessible.PageTab
                         Accessible.name: modelData.name
@@ -630,8 +690,8 @@ Item {
                             id: tabRow
                             anchors.centerIn: parent
                             spacing: 7
-                            Text { anchors.baseline: tabName.baseline; text: String(tabBtn.index + 1).padStart(2, "0"); color: tabBtn.on ? Theme.accent : Theme.hair; font.family: Theme.font; font.pixelSize: 10; font.weight: Font.Bold }
-                            Text { id: tabName; text: tabBtn.modelData.name; color: tabBtn.on ? Theme.paper : tabMouse.containsMouse ? Theme.ink : Theme.muted; font.family: Theme.font; font.pixelSize: 15; font.weight: Font.DemiBold; font.letterSpacing: 1.2 }
+                            Text { anchors.baseline: tabName.baseline; text: String(tabBtn.index + 1).padStart(2, "0"); color: tabBtn.on ? Theme.accent : Theme.hair; font.family: Theme.font; font.pixelSize: 10; font.weight: Font.Bold; Behavior on color { ColorAnimation { duration: 180 } } }
+                            Text { id: tabName; text: tabBtn.modelData.name; color: tabBtn.on || tabMouse.containsMouse ? Theme.ink : Theme.muted; font.family: Theme.font; font.pixelSize: 15; font.weight: Font.DemiBold; font.letterSpacing: 1.2; Behavior on color { ColorAnimation { duration: 180 } } }
                         }
                         MouseArea { id: tabMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: panel.tab = tabBtn.index }
                     }
@@ -643,6 +703,7 @@ Item {
         // 数据块：逐块错开显现
         Column {
             id: body
+            opacity: panel.tabFade
             y: tabBar.y + tabBar.height + 16
             width: parent.width
             spacing: 16
@@ -687,6 +748,7 @@ Item {
 
         // 操作
         Item {
+            opacity: panel.tabFade
             anchors.bottom: parent.bottom
             width: parent.width
             height: 56
@@ -710,4 +772,70 @@ Item {
     }
 
     readonly property real bodyBottom: body.y + body.implicitHeight
+
+    // ── 解密层：对角线合拢 → 保持 → 收束；磨砂自上而下退去（只在解密的 1.5 秒内存在） ──
+    Item {
+        id: decLayer
+        anchors.fill: parent
+        visible: panel.dec < 1
+        z: 20
+        function ease(t) { t = Math.max(0, Math.min(1, t)); return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2 }
+        readonly property real clearP: panel.dec < 0.45 ? 0 : ease((panel.dec - 0.45) / 0.55)
+
+        ShaderEffectSource {
+            id: contentSrc
+            sourceItem: content
+            live: decLayer.visible
+            hideSource: false
+            visible: false
+            width: content.width
+            height: content.height
+        }
+        Item {
+            id: frostComp
+            anchors.fill: parent
+            visible: false
+            layer.enabled: decLayer.visible
+            Rectangle { anchors.fill: parent; color: Theme.paper; opacity: 0.95 }
+            MultiEffect { anchors.fill: parent; source: contentSrc; blurEnabled: true; blur: 0.8; blurMax: 32; opacity: 0.8 }
+        }
+        Item {
+            id: maskItem
+            anchors.fill: parent
+            visible: false
+            layer.enabled: decLayer.visible
+            Rectangle {
+                width: parent.width
+                height: parent.height * 2.24
+                y: decLayer.clearP * parent.height * 1.24 - parent.height * 0.24
+                gradient: Gradient {
+                    GradientStop { position: 0; color: "transparent" }
+                    GradientStop { position: 0.107; color: "black" }
+                    GradientStop { position: 1; color: "black" }
+                }
+            }
+        }
+        MultiEffect {
+            anchors.fill: parent
+            source: frostComp
+            maskEnabled: true
+            maskSource: maskItem
+            maskThresholdMin: 0
+            maskSpreadAtMin: 1
+        }
+
+        Item {
+            id: diag
+            anchors.centerIn: parent
+            width: Math.hypot(parent.width, parent.height)
+            height: 3
+            rotation: Math.atan2(parent.height, parent.width) * 180 / Math.PI
+            readonly property real half: width / 2
+            readonly property real g: decLayer.ease(panel.dec / 0.32)
+            readonly property real s: decLayer.ease((panel.dec - 0.55) / 0.25)
+            opacity: panel.dec < 0.78 ? 1 : Math.max(0, 1 - (panel.dec - 0.78) / 0.22)
+            Rectangle { x: diag.half * diag.s; width: Math.max(0, diag.half * (diag.g - diag.s)); height: 3; color: Theme.ink }
+            Rectangle { x: diag.width - diag.half * diag.g; width: Math.max(0, diag.half * (diag.g - diag.s)); height: 3; color: Theme.ink }
+        }
+    }
 }

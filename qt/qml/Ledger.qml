@@ -13,6 +13,10 @@ Item {
     signal hoveredIndex(int index)
 
     height: 56
+    // 编号滚动方向跟随切换方向
+    property int dir: 1
+    property int prev: current
+    onCurrentChanged: { dir = current >= prev ? 1 : -1; prev = current }
 
     readonly property var statusText: ({
         "": "OFFLINE PREVIEW",
@@ -82,11 +86,16 @@ Item {
             }
         }
 
-        LedgerText {
+        RollText {
             anchors.verticalCenter: parent.verticalCenter
             readonly property var d: ledger.departments[ledger.current]
             text: d ? "X-0" + d.n + "  " + d.zh : ""
+            dir: ledger.dir
             color: Theme.ink
+            font.family: Theme.font
+            font.pixelSize: 12
+            font.weight: Font.DemiBold
+            font.letterSpacing: 2.4
         }
     }
 
@@ -106,14 +115,19 @@ Item {
             }
             LedgerText { text: ledger.statusText[ledger.backendStatus] || ledger.backendStatus.toUpperCase() }
         }
-        LedgerText {
+        RollDigits {
             id: clock
             anchors.verticalCenter: parent.verticalCenter
             text: Qt.formatTime(new Date(), "HH:mm:ss")
+            color: Theme.muted
+            font.family: Theme.font
+            font.pixelSize: 12
+            font.weight: Font.DemiBold
+            font.letterSpacing: 2.4
             Timer {
                 interval: 1000
                 repeat: true
-                running: ledger.visible
+                running: ledger.visible && ledger.opacity > 0
                 onTriggered: clock.text = Qt.formatTime(new Date(), "HH:mm:ss")
             }
         }

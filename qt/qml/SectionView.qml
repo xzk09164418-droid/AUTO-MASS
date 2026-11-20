@@ -64,11 +64,12 @@ FocusScope {
         if (!items.length) return
         const next = Math.max(0, Math.min(items.length - 1, k))
         if (next === target) return
+        dir = next > target ? 1 : -1
         target = next
         panel.tab = 0
         chain.target = next
-        plateSwap.restart()
     }
+    property int dir: 1
 
     Timer { id: chainDelay; interval: 260; onTriggered: chain.open(view.items, view.d.n) }
     NumberAnimation { id: revealAnim; target: view; property: "reveal"; to: 1; duration: 700; easing.type: Easing.OutCubic }
@@ -77,6 +78,7 @@ FocusScope {
     Keys.onPressed: event => {
         if (!opened) return
         const k = event.key
+        if (modal.shown) { if (k === Qt.Key_Escape) modal.close(); event.accepted = true; return }
         if (k === Qt.Key_Escape) { close(); event.accepted = true }
         else if (k === Qt.Key_Down || k === Qt.Key_Right) { select(target + 1); event.accepted = true }
         else if (k === Qt.Key_Up || k === Qt.Key_Left) { select(target - 1); event.accepted = true }
@@ -183,11 +185,13 @@ FocusScope {
             }
             Connections { target: Theme; function onDarkChanged() { heroCanvas.requestPaint() } }
         }
-        Text {
+        RollDigits {
             id: heroNum
             x: 250
             y: 330
             text: String(view.target + 1).padStart(2, "0")
+            dir: view.dir
+            live: view.landed
             color: "transparent"
             style: Text.Outline
             styleColor: Qt.rgba(Theme.ink.r, Theme.ink.g, Theme.ink.b, 0.16)
@@ -342,6 +346,7 @@ FocusScope {
         }
         ArchivePanel {
             id: panel
+            objectName: "archivePanel"
             x: 30
             y: 20
             width: parent.width - 60
@@ -350,6 +355,7 @@ FocusScope {
             item: view.item
             itemIndex: view.target
             onToast: text => toast.show(text)
+            onConfirmDelete: (name, api) => modal.open(name, api)
         }
     }
 
@@ -362,12 +368,6 @@ FocusScope {
         height: 100
         opacity: view.reveal
         transform: Translate { x: 30 * (1 - view.reveal) }
-        property real swap: 1
-        SequentialAnimation {
-            id: plateSwap
-            PropertyAction { target: plate; property: "swap"; value: 0 }
-            NumberAnimation { target: plate; property: "swap"; to: 1; duration: 350; easing.type: Easing.OutCubic }
-        }
         Rectangle {
             width: 116
             height: 64
@@ -379,13 +379,13 @@ FocusScope {
                 Text { anchors.horizontalCenter: parent.horizontalCenter; text: "AUTO-MAS"; color: Theme.blockText; font.family: Theme.font; font.pixelSize: 6; font.weight: Font.Bold; font.letterSpacing: 1.8 }
             }
         }
+        // 铭牌文字滚动更新（借鉴 RhineLabUI）；刚进入时直接显示
         Column {
             x: 132
-            y: -4 + 10 * (1 - plate.swap)
+            y: -4
             width: parent.width - 132
-            opacity: plate.swap
-            Text { width: parent.width; elide: Text.ElideRight; text: view.d ? view.d.code.replace("\n", " ") + " / " + view.d.zh : ""; color: Theme.ink; font.family: Theme.font; font.pixelSize: 14; font.letterSpacing: 0.6 }
-            Text { width: parent.width; elide: Text.ElideRight; text: view.item ? view.item.name : ""; color: Theme.ink; font.family: Theme.font; font.pixelSize: 34; font.weight: Font.Bold; font.letterSpacing: 0.7 }
+            RollText { text: view.d ? view.d.code.replace("\n", " ") + " / " + view.d.zh : ""; dir: view.dir; live: view.landed; color: Theme.ink; font.family: Theme.font; font.pixelSize: 14; font.letterSpacing: 0.6 }
+            RollText { text: view.item ? view.item.name : ""; dir: view.dir; live: view.landed; color: Theme.ink; font.family: Theme.font; font.pixelSize: 34; font.weight: Font.Bold; font.letterSpacing: 0.7 }
         }
         Rectangle {
             x: 116
@@ -396,10 +396,10 @@ FocusScope {
         }
         Row {
             x: 132
-            y: 72 + 10 * (1 - plate.swap)
-            opacity: plate.swap
-            Text { text: view.d ? view.d.n + "-" + String(view.target + 1).padStart(2, "0") : ""; color: Theme.ink; font.family: Theme.font; font.pixelSize: 13; font.weight: Font.Bold; font.letterSpacing: 0.8 }
-            Text { text: view.item ? "  ·  " + view.item.en : ""; color: Theme.ink; font.family: Theme.font; font.pixelSize: 13; font.letterSpacing: 0.8 }
+            y: 72
+            RollDigits { text: view.d ? view.d.n + "-" + String(view.target + 1).padStart(2, "0") : ""; dir: view.dir; live: view.landed; color: Theme.ink; font.family: Theme.font; font.pixelSize: 13; font.weight: Font.Bold; font.letterSpacing: 0.8 }
+            Text { text: "  ·  "; color: Theme.ink; font.family: Theme.font; font.pixelSize: 13 }
+            RollText { text: view.item ? view.item.en : ""; dir: view.dir; live: view.landed; color: Theme.ink; font.family: Theme.font; font.pixelSize: 13; font.letterSpacing: 0.8 }
         }
     }
 
@@ -445,6 +445,109 @@ FocusScope {
             font.letterSpacing: 3.6
         }
         MouseArea { id: backMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: view.close() }
+    }
+
+    // ── 确认弹窗：300ms 入场（位移 12px）、200ms 退出（位移 8px）；Esc 只关弹窗 ──
+    Item {
+        id: modal
+        objectName: "confirmModal"
+        anchors.fill: parent
+        z: 60
+        property bool shown: false
+        property real p: 0
+        property string api: ""
+        visible: p > 0
+        function open(name, a) {
+            api = a
+            mText.text = "将删除「" + name + "」。此操作会写入后端，删除后无法撤销。"
+            shown = true
+            outAnim.stop()
+            inAnim.restart()
+            cancelBtn.forceActiveFocus()
+        }
+        function close(done) {
+            if (!shown) return
+            shown = false
+            inAnim.stop()
+            outAnim.done = done || null
+            outAnim.restart()
+            view.forceActiveFocus()
+        }
+        NumberAnimation { id: inAnim; target: modal; property: "p"; to: 1; duration: Theme.richMotion ? 300 : 0; easing.type: Easing.OutCubic }
+        NumberAnimation {
+            id: outAnim
+            property var done: null
+            target: modal; property: "p"; to: 0; duration: Theme.richMotion ? 200 : 0; easing.type: Easing.InCubic
+            onFinished: if (done) { const f = done; done = null; f() }
+        }
+        Rectangle {
+            anchors.fill: parent
+            color: Theme.dark ? Qt.rgba(0.04, 0.07, 0.08, 0.55) : Qt.rgba(0.9, 0.89, 0.87, 0.6)
+            opacity: modal.p
+            MouseArea { anchors.fill: parent; enabled: modal.shown; onClicked: modal.close() }
+        }
+        Rectangle {
+            id: mBox
+            width: 560
+            height: mCol.implicitHeight + 64
+            anchors.centerIn: parent
+            anchors.verticalCenterOffset: modal.shown ? 12 * (1 - modal.p) : 8 * (1 - modal.p)
+            opacity: modal.p
+            color: Theme.paper
+            border.width: 1
+            border.color: Theme.hair
+            MouseArea { anchors.fill: parent }
+            Column {
+                id: mCol
+                x: 40; y: 34
+                width: parent.width - 80
+                spacing: 0
+                Item {
+                    width: parent.width; height: 16
+                    Text { text: "AUTO-MAS / CONFIRM"; color: Theme.muted; font.family: Theme.font; font.pixelSize: 12; font.weight: Font.Bold; font.letterSpacing: 2.4 }
+                    Text { anchors.right: parent.right; text: modal.api; color: Theme.muted; font.family: "Consolas"; font.pixelSize: 12 }
+                }
+                Item { width: 1; height: 18 }
+                Text { text: "确认删除"; color: Theme.ink; font.family: Theme.font; font.pixelSize: 30; font.weight: Font.Bold; font.letterSpacing: 1.2 }
+                Item { width: 1; height: 18 }
+                Rectangle { width: parent.width; height: 2; color: Theme.ink }
+                Item { width: 1; height: 20 }
+                Text { id: mText; width: parent.width; wrapMode: Text.Wrap; color: Theme.muted; font.family: Theme.font; font.pixelSize: 15; lineHeight: 1.4 }
+                Item { width: 1; height: 26 }
+                Row {
+                    anchors.right: parent.right
+                    spacing: 12
+                    Repeater {
+                        model: ["取消", "删除"]
+                        Rectangle {
+                            id: mb
+                            required property string modelData
+                            required property int index
+                            readonly property bool danger: index === 1
+                            width: mbText.implicitWidth + 44
+                            height: 40
+                            color: danger ? (mbMouse.containsMouse || activeFocus ? Theme.error : Theme.ink) : "transparent"
+                            border.width: 1.5
+                            border.color: danger ? color : mbMouse.containsMouse || activeFocus ? Theme.accent : Theme.ink
+                            activeFocusOnTab: true
+                            Accessible.role: Accessible.Button
+                            Accessible.name: modelData
+                            Component.onCompleted: if (index === 0) modal.cancelRef = mb
+                            function trigger() {
+                                if (danger) { const a = modal.api; modal.close(() => toast.show("已删除 · " + a)) }
+                                else modal.close()
+                            }
+                            Keys.onReturnPressed: trigger()
+                            Keys.onSpacePressed: trigger()
+                            Text { id: mbText; anchors.centerIn: parent; text: mb.modelData; color: mb.danger ? "#ffffff" : mbMouse.containsMouse || mb.activeFocus ? Theme.accent : Theme.ink; font.family: Theme.font; font.pixelSize: 14; font.weight: Font.Bold; font.letterSpacing: 2 }
+                            MouseArea { id: mbMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: mb.trigger() }
+                        }
+                    }
+                }
+            }
+        }
+        property Item cancelRef: null
+        readonly property Item cancelBtn: cancelRef
     }
 
     // ── 提示条 ─────────────────────────────────────────────────────────

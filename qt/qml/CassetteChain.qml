@@ -15,6 +15,60 @@ Item {
     property real intro: 0
     property real introTarget: 0
     property int hovered: -1
+    onHoveredChanged: poke()
+    onTargetChanged: { poke(); pull(target) }
+
+    // 借鉴 RhineLabUI：停止操作 2.5 秒后渐入呼吸起伏（8 秒与 13 秒周期叠加，相邻错相）
+    property real breath: 0
+    property real breathGoal: 0
+    property real clockT: 0
+    // 呼吸用 15Hz 计时器推进：不占用逐帧动画，只在数值变化时重绘（呼吸缓慢、幅度小，15Hz 看不出台阶）
+    Timer {
+        interval: 66
+        repeat: true
+        running: chain.visible && (chain.breath > 0 || chain.breathGoal > 0)
+        onTriggered: {
+            chain.breath += (chain.breathGoal - chain.breath) * 0.06
+            if (Math.abs(chain.breathGoal - chain.breath) < 0.002) chain.breath = chain.breathGoal
+            chain.clockT += 0.066
+        }
+    }
+    function poke() { breathGoal = 0; idleTimer.restart() }
+    Timer {
+        id: idleTimer
+        interval: 2500
+        running: chain.visible && chain.introTarget === 1 && Theme.richMotion
+        onTriggered: chain.breathGoal = 1
+    }
+
+    // 档案抽出：选中的卡带先抬起、向镜头靠近并转正，再随串归位
+    property int pullK: -1
+    property real pullP: 0
+    function pull(k) {
+        if (!Theme.richMotion || introTarget !== 1) return
+        pullK = k
+        pullAnim.restart()
+    }
+    SequentialAnimation {
+        id: pullAnim
+        NumberAnimation { target: chain; property: "pullP"; from: 0; to: 1; duration: 280; easing.type: Easing.OutCubic }
+        PauseAnimation { duration: 140 }
+        NumberAnimation { target: chain; property: "pullP"; to: 0; duration: 560; easing.type: Easing.InOutCubic }
+    }
+    // 在曲线位置上叠加呼吸、悬停抬起与抽出
+    function placeAt(s, k, lift) {
+        const p = place(s)
+        if (breath > 0)
+            p.y += breath * 0.06 * (0.6 * Math.sin(clockT * Math.PI / 4 + k * 0.7) + 0.4 * Math.sin(clockT * Math.PI / 6.5 + k * 1.3))
+        p.y += lift * 0.22
+        if (k === pullK && pullP > 0) {
+            p.y += 0.5 * pullP
+            p.z += 0.8 * pullP
+            p.ry *= 1 - pullP
+            p.rx *= 1 - 0.6 * pullP
+        }
+        return p
+    }
     signal picked(int k)
 
     readonly property int pad: 3
@@ -31,7 +85,7 @@ Item {
         intro = 0
         introTarget = 1
     }
-    function close() { introTarget = 0 }
+    function close() { introTarget = 0; breathGoal = 0; idleTimer.stop() }
 
     // 曲线：s 为相对选中位置的槽位
     function place(s) {
@@ -42,26 +96,26 @@ Item {
                  rx: -0.18 + 0.1 * e, ry: 0.5 - 0.38 * e, rz: 0.05 - 0.05 * e, sc: 1 + 0.2 * e, focus: e }
     }
 
-    function mul(a, b) {
-        const r = new Array(16)
-        for (let i = 0; i < 4; i++)
-            for (let j = 0; j < 4; j++)
-                r[i * 4 + j] = a[i * 4] * b[j] + a[i * 4 + 1] * b[4 + j] + a[i * 4 + 2] * b[8 + j] + a[i * 4 + 3] * b[12 + j]
-        return r
-    }
-    // 局部像素 (u, v) → 画面坐标的投影矩阵；zoff 为卡带内的前后层（单位）
+    // 局部像素 (u, v) → 画面坐标的投影矩阵；zoff 为卡带内的前后层（单位）。
+    // 展开成闭式计算，不产生中间数组（呼吸时每秒更新 15 次，避免周期性垃圾回收的卡顿）。
     function matrix(p, zoff) {
-        const sx = 2.6 / cw, sy = 1.7 / ch
-        const A = [sx, 0, 0, -1.3, 0, -sy, 0, 0.85, 0, 0, 1, zoff, 0, 0, 0, 1]
-        const S = [p.sc, 0, 0, 0, 0, p.sc, 0, 0, 0, 0, p.sc, 0, 0, 0, 0, 1]
-        const cx = Math.cos(p.rx), sxr = Math.sin(p.rx), cy = Math.cos(p.ry), syr = Math.sin(p.ry), cz = Math.cos(p.rz), szr = Math.sin(p.rz)
-        const Rx = [1, 0, 0, 0, 0, cx, -sxr, 0, 0, sxr, cx, 0, 0, 0, 0, 1]
-        const Ry = [cy, 0, syr, 0, 0, 1, 0, 0, -syr, 0, cy, 0, 0, 0, 0, 1]
-        const Rz = [cz, -szr, 0, 0, szr, cz, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]
-        const T = [1, 0, 0, p.x, 0, 1, 0, p.y, 0, 0, 1, p.z - camZ, 0, 0, 0, 1]
-        const P = [focal, 0, -width / 2, 0, 0, -focal, -height / 2, 0, 0, 0, 0, 0, 0, 0, -1, 0]
-        const m = mul(P, mul(T, mul(Rx, mul(Ry, mul(Rz, mul(S, A))))))
-        return Qt.matrix4x4(m[0], m[1], m[2], m[3], m[4], m[5], m[6], m[7], m[8], m[9], m[10], m[11], m[12], m[13], m[14], m[15])
+        const cxr = Math.cos(p.rx), sxr = Math.sin(p.rx), cyr = Math.cos(p.ry), syr = Math.sin(p.ry), czr = Math.cos(p.rz), szr = Math.sin(p.rz)
+        // R = Rx · Ry · Rz
+        const r00 = cyr * czr, r01 = -cyr * szr, r02 = syr
+        const r10 = cxr * szr + sxr * syr * czr, r11 = cxr * czr - sxr * syr * szr, r12 = -sxr * cyr
+        const r20 = sxr * szr - cxr * syr * czr, r21 = sxr * czr + cxr * syr * szr, r22 = cxr * cyr
+        const ku = p.sc * 2.6 / cw, kv = -p.sc * 1.7 / ch
+        // u、v 方向列向量与原点（相机坐标）
+        const ax = r00 * ku, ay = r10 * ku, az = r20 * ku
+        const bx = r01 * kv, by = r11 * kv, bz = r21 * kv
+        const ox = p.sc * (-1.3 * r00 + 0.85 * r01 + zoff * r02) + p.x
+        const oy = p.sc * (-1.3 * r10 + 0.85 * r11 + zoff * r12) + p.y
+        const oz = p.sc * (-1.3 * r20 + 0.85 * r21 + zoff * r22) + p.z - camZ
+        const f = focal, hx = width / 2, hy = height / 2
+        return Qt.matrix4x4(f * ax - hx * az, f * bx - hx * bz, 0, f * ox - hx * oz,
+                            -f * ay - hy * az, -f * by - hy * bz, 0, -f * oy - hy * oz,
+                            0, 0, 0, 0,
+                            -az, -bz, 0, -oz)
     }
 
     readonly property bool moving: Math.abs(target - cur) > 0 || Math.abs(introTarget - intro) > 0
@@ -84,7 +138,9 @@ Item {
             readonly property int k: index - chain.pad
             readonly property bool real: k >= 0 && k < chain.items.length
             readonly property real s: k - chain.cur + 9 * (1 - chain.intro)
-            readonly property var p: chain.place(s)
+            property real lift: hot ? 1 : 0
+            Behavior on lift { enabled: Theme.richMotion; NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
+            readonly property var p: chain.placeAt(s, k, lift)
             readonly property real fade: Math.max(0, Math.min(1, 1.8 - Math.abs(s) / 4.2)) * Math.min(1, chain.intro * 1.4)
             readonly property bool hot: real && chain.hovered === k
             visible: fade > 0.01

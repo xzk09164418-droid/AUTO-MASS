@@ -6,6 +6,11 @@ QtObject {
     id: theme
 
     property string mode: "system"
+    // 动态效果挡位：reduced 减少（直接替换、无解密 / 呼吸 / 抽出）· standard 标准 · enhanced 增强（预留给 3D 档案）
+    property string motion: "standard"
+    readonly property bool richMotion: motion !== "reduced"
+    // 3D 增强组件（Qt Quick 3D + 档案模型）为可选安装：未安装时不能选增强挡位
+    property bool enhancedAvailable: false
     readonly property bool dark: mode === "dark"
         || (mode === "system" && Qt.styleHints.colorScheme === Qt.ColorScheme.Dark)
 

@@ -24,12 +24,26 @@ sys.path.insert(0, str(QT_DIR))
 from automas_qt.backend import BackendSupervisor  # noqa: E402
 
 
+def enhanced_available() -> bool:
+    """3D 增强组件是否已安装：需要 Qt Quick 3D 模块与档案模型资源。
+
+    增强组件为可选安装；安装时未勾选「增强视觉效果」则不放入（或删除）这些文件，客户端只能用减少 / 标准挡位。
+    """
+    import PySide6
+
+    qml_dir = Path(PySide6.__file__).resolve().parent / "qml" / "QtQuick3D"
+    assets = QT_DIR / "assets3d"
+    return qml_dir.is_dir() and assets.is_dir() and any(assets.glob("*.glb"))
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="AUTO-MAS Qt 客户端")
     parser.add_argument("--skip-boot", action="store_true", help="跳过启动动画")
     parser.add_argument("--no-backend", action="store_true", help="不连接后端，仅预览界面")
     parser.add_argument("--section", type=int, default=0, help="启动后直接进入第 N 个一级界面")
     parser.add_argument("--theme", choices=["system", "light", "dark"], default="system")
+    parser.add_argument("--motion", choices=["reduced", "standard", "enhanced"], default="standard",
+                        help="动态效果挡位：减少 / 标准 / 增强")
     parser.add_argument("--capture", type=Path, help="截图保存路径")
     parser.add_argument("--after", type=int, default=3000, help="截图延时（毫秒）")
     parser.add_argument(
@@ -69,6 +83,8 @@ def main() -> int:
             "initialSection": args.section,
             "returnAfter": args.return_after,
             "themeMode": args.theme,
+            "motionMode": args.motion,
+            "enhancedAvailable": enhanced_available(),
         }
     )
     engine.load(QUrl.fromLocalFile(str(QT_DIR / "qml" / "Main.qml")))

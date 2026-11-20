@@ -13,6 +13,8 @@ Window {
     property int initialSection: 0
     property int returnAfter: 0             // 自检：进入二级界面 N 毫秒后自动返回
     property string themeMode: "system"
+    property string motionMode: "standard"
+    property bool enhancedAvailable: false
     property real simulateLoad: 0           // >0：按真实阶段模拟一次耗时 N 秒的后端启动
     property bool booted: false
 
@@ -61,6 +63,8 @@ Window {
 
     Component.onCompleted: {
         Theme.mode = themeMode
+        Theme.enhancedAvailable = enhancedAvailable
+        Theme.motion = motionMode === "enhanced" && !enhancedAvailable ? "standard" : motionMode
         if (skipBoot) finishBoot()
     }
 
@@ -98,6 +102,7 @@ Window {
         }
 
         SectionView {
+            objectName: "sections"
             id: sections
             anchors.fill: parent
             departments: hub.departments
