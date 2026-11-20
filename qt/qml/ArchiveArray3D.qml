@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick3D
 import QtQuick3D.Helpers
 import QtQuick3D.AssetUtils
+import QtQuick.Effects
 import "."
 
 // 增强挡位：多列档案阵列（以 design/qt-demo/array.html 为基线，按 LBEILC/RhineLabUI 的实现移植，MIT）。
@@ -22,19 +23,22 @@ Item {
     readonly property int laneCount: Math.max(1, columns.length)
     readonly property int lane: wrap(cellLane, laneCount)
     readonly property var column: columns.length ? columns[lane] : null
-    readonly property int rowCount: column ? 1 + (column.accounts ? column.accounts.length : 0) : 1
+    // 调度队列没有「队列配置」那一盒：列内只有队列项
+    readonly property bool hasConfig: !column || column.configRow !== false
+    readonly property int rowCount: Math.max(1, column ? (hasConfig ? 1 : 0) + (column.accounts ? column.accounts.length : 0) : 1)
     readonly property int row: wrap(cellRow - 12, rowCount)
+    readonly property int itemIdx: hasConfig ? row - 1 : row
     property bool detailOpen: false
     readonly property string fileId: (mode === "queue" ? "Q-" : "X-") + String(lane + 1).padStart(2, "0") + String(row).padStart(2, "0")
     property int dir: 1
     // 文案：按部门区分
     readonly property bool isQueue: mode === "queue"
-    readonly property string rowName: row === 0 ? (column ? column.name + (isQueue ? " · 队列配置" : " · 脚本配置") : "")
-        : (column && column.accounts ? column.accounts[row - 1] || "" : "")
+    readonly property string rowName: hasConfig && row === 0 ? (column ? column.name + " · 脚本配置" : "")
+        : (column && column.accounts ? column.accounts[itemIdx] || "（空队列）" : "")
     readonly property string rowIcon: !column ? "" : column.rowIcons ? column.rowIcons[row] || "" : column.icon || ""
     readonly property string labelNo: "NO." + String(lane * 10 + row + 1).padStart(3, "0")
     readonly property string discTitle: rowIcon ? rowIcon.split(/[\\/]/).pop() : "AUTO-MAS"
-    readonly property string discSub: row === 0 ? (column ? column.name : "") : rowName + " · " + (column ? column.name : "")
+    readonly property string discSub: hasConfig && row === 0 ? (column ? column.name : "") : rowName + " · " + (column ? column.name : "")
 
     signal opened(int lane, int row)
     signal closed()
@@ -170,6 +174,25 @@ Item {
     // 进场：阵列在 −28 处、选中的那盒未抬起，随 reveal 一起滑入并抬起；离场：反向，滑到尽头后通知宿主
     function flyIn() { reveal = 0; targetReveal = 1; leaving = false; springs.lift.v = 0; springs.lift.vel = 0; running = true }
     function flyOut() { targetReveal = 0; leaving = true; detailOpen = false; running = true }
+    // 返回索引：画面原样模糊并淡出（索引在下面同时淡入），结束后再静默归位，不播放滑出 / 收回读取
+    property real exitP: 0
+    function blurOut() {
+        if (exitAnim.running) return
+        exitAnim.restart()
+    }
+    layer.enabled: exitP > 0
+    layer.effect: MultiEffect { blurEnabled: true; blur: root.exitP; blurMax: 48; autoPaddingEnabled: false }
+    opacity: 1 - exitP
+    SequentialAnimation {
+        id: exitAnim
+        NumberAnimation { target: root; property: "exitP"; from: 0; to: 1; duration: Theme.richMotion ? 380 : 1; easing.type: Easing.OutCubic }
+        ScriptAction { script: {
+            root.detailOpen = false
+            root.targetReveal = 0; root.reveal = 0; root.leaving = false
+            root.flownOut()
+            root.exitP = 0
+        } }
+    }
 
     function nav(axis, d) {
         if (detailOpen || targetReveal !== 1) return
@@ -822,7 +845,7 @@ Item {
                     Behavior on y { enabled: Theme.richMotion; SequentialAnimation { PauseAnimation { duration: 400 } NumberAnimation { duration: 700; easing.type: Easing.BezierSpline; easing.bezierCurve: root.cssEase } } }
                 }
                 RollText { text: root.rowName; dir: root.dir; color: Theme.ink; font.family: Theme.font; font.pixelSize: 16 }
-                Text { anchors.right: parent.right; text: root.row === 0 ? (root.isQueue ? "QUEUE CONFIG" : "SCRIPT CONFIG") : (root.isQueue ? "QUEUE ITEM" : "ACCOUNT"); color: "#666257"; font.family: Theme.font; font.pixelSize: 11; font.letterSpacing: 1 }
+                Text { anchors.right: parent.right; text: root.hasConfig && root.row === 0 ? "SCRIPT CONFIG" : (root.isQueue ? "QUEUE ITEM" : "ACCOUNT"); color: "#666257"; font.family: Theme.font; font.pixelSize: 11; font.letterSpacing: 1 }
             }
             Item { width: 1; height: 58 }
             Row {
@@ -891,7 +914,7 @@ Item {
         }
         Text {
             x: 505; y: 1080 - 60 - 12
-            text: (root.isQueue ? "←  →  切换队列" : "←  →  切换脚本") + "    ／    ↑  ↓  前后档案    ／    ENTER  读取"
+            text: (root.isQueue ? "←  →  ／  A  D  切换队列" : "←  →  ／  A  D  切换脚本") + "    ／    ↑  ↓  ／  W  S  前后档案    ／    ENTER  读取"
             color: "#858077"; font.family: Theme.font; font.pixelSize: 10; font.letterSpacing: 0.9
         }
     }

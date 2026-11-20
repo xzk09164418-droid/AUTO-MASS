@@ -69,7 +69,7 @@ FocusScope {
     SequentialAnimation {
         id: introAnim
         NumberAnimation { target: hub; property: "intro"; from: 0; to: 1; duration: hub.introMs; easing.type: Easing.Linear }
-        ScriptAction { script: { hub.current = hub.centerIndex; hub.focusCurrent() } }
+        ScriptAction { script: { hub.current = hub.centerIndex; if (!hub.paused) hub.focusCurrent() } }   // 已进入二级界面时不抢焦点
     }
 
     Keys.onPressed: event => {

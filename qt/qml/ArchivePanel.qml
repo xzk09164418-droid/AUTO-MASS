@@ -85,6 +85,8 @@ Item {
         content.y = 0
     }
     onPageChanged: refresh()
+    // 数据块内容在原对象上改动后（如队列项表格换窗口），整页重建
+    function rebuild() { if (page) { apply(); if (Theme.richMotion) tabFadeAnim.restart() } }
 
     SequentialAnimation {
         id: swapOut
@@ -561,7 +563,7 @@ Item {
                 HoverHandler { id: trHover }
                 Row {
                     anchors.fill: parent
-                    Text { width: 44; height: parent.height; verticalAlignment: Text.AlignVCenter; leftPadding: 6; text: String(tr.index + 1).padStart(2, "0"); color: Theme.muted; font.family: Theme.font; font.pixelSize: 14 }
+                    Text { width: 44; height: parent.height; verticalAlignment: Text.AlignVCenter; leftPadding: 6; text: String((tb.b.offset || 0) + tr.index + 1).padStart(2, "0"); color: (tb.b.offset || 0) + tr.index === tb.b.focus ? Theme.accent : Theme.muted; font.family: Theme.font; font.pixelSize: 14 }
                     Repeater {
                         model: tr.modelData.length
                         Item {
@@ -772,6 +774,8 @@ Item {
                     width: body.width
                     spacing: 8
                     opacity: 0
+                    // 说明文字默认不显示（各页不再附解释），只保留标记为 keep 的状态提示
+                    visible: !(blk.modelData.t === "note" && !blk.modelData.keep)
                     transform: Translate { id: blkShift; y: 14 }
                     Component.onCompleted: enter.start()
                     SequentialAnimation {

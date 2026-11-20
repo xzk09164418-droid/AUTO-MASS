@@ -29,7 +29,7 @@ function kv(title, rows) { return { t: "kv", title: title, rows: rows } }
 // weights：各列宽度权重（省略时等分）
 function table(title, cols, rows, weights) { return { t: "table", title: title, cols: cols, rows: rows, weights: weights } }
 function stats(title, rows) { return { t: "stats", title: title, rows: rows } }
-function note(text) { return { t: "note", text: text } }
+function note(text, keep) { return { t: "note", text: text, keep: !!keep } }
 function log(title, lines, tall) { return { t: "log", title: title, lines: lines, tall: !!tall } }
 function banner(o) { o.t = "banner"; return o }
 function list(title, rows) { return { t: "list", title: title, rows: rows } }
@@ -100,7 +100,7 @@ function emulator(o) {
 var SCRIPTS = ["BGI 每日", "鸣潮日常", "星铁清体力", "自定义脚本"]
 function queue(o) {
     return { name: o.name, en: o.en, exclusive: o.cycle ? "cycle" : "time", icon: "",
-        accounts: o.items.map(function (it) { return SCRIPTS[it[0]] }), rowIcons: [""].concat(o.items.map(function () { return "" })), tabs: [
+        accounts: o.items.map(function (it) { return SCRIPTS[it[0]] }), rowIcons: o.items.map(function () { return "" }), configRow: false, tabs: [
         { name: "调度", api: "POST /api/queue/update", blocks: [
             kv("SCHEDULE", [["队列名称", inp(o.name), "Info.Name"], ["定时启动", tog(!o.cycle, "time"), "Info.TimeEnabled"], ["循环队列", tog(!!o.cycle, "cycle"), "Info.CycleEnabled"], ["启动时运行", seg(["从不", "每次", "每日首次"], o.startup || 0), "Info.StartUpMode"], ["完成后", sel(POWER, o.after || 0), "Info.AfterAccomplish"], ["延时执行", num(0, "分钟"), "Info.AfterAccomplishDelay"]]),
             kv("HOOKS", [["运行前脚本", tog(false), "Info.IfScriptBeforeTask"], ["前脚本路径", path(""), "Info.ScriptBeforeTask"], ["运行后脚本", tog(!!o.afterScript), "Info.IfScriptAfterTask"], ["后脚本路径", path(o.afterScript), "Info.ScriptAfterTask"]])

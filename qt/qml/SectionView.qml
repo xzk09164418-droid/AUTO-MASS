@@ -24,7 +24,7 @@ FocusScope {
     property var arrayHostItem: null        // Main.qml 里常驻的 ArchiveArray3D（未加载完时为 null）
     readonly property var arrayItem: arrayMode ? arrayHostItem : null
     readonly property bool arrayDetail: !!arrayItem && arrayItem.detailOpen
-    readonly property var arrayColumns: arrayMode ? items.map(it => ({ name: it.name, en: it.en, icon: it.icon || "", accounts: it.accounts || [], rowIcons: it.rowIcons || null })) : []
+    readonly property var arrayColumns: arrayMode ? items.map(it => ({ name: it.name, en: it.en, icon: it.icon || "", accounts: it.accounts || [], rowIcons: it.rowIcons || null, configRow: it.configRow !== false })) : []
     onApiChanged: if (opened && d) fetchLive(d.key)
     property var live: ({})                 // 部门 key → 条目
     property string liveState: ""           // loading / ok / error
@@ -242,7 +242,7 @@ FocusScope {
         if (arrayMode) {
             // 增强阵列：阵列飞出，索引同时淡入，方块随索引一起出现
             if (hub) hub.hiddenIndex = -1
-            if (arrayItem) arrayItem.flyOut()
+            if (arrayItem) arrayItem.blurOut()
             else finishClose()
             return
         }
@@ -278,8 +278,13 @@ FocusScope {
 
     Keys.onPressed: event => {
         if (!opened) return
-        const k = event.key
+        let k = event.key
         if (modal.shown) { if (k === Qt.Key_Escape) modal.close(); event.accepted = true; return }
+        // WASD 与方向键等价
+        if (k === Qt.Key_W) k = Qt.Key_Up
+        else if (k === Qt.Key_S) k = Qt.Key_Down
+        else if (k === Qt.Key_A) k = Qt.Key_Left
+        else if (k === Qt.Key_D) k = Qt.Key_Right
         if (arrayItem) {
             // 阵列：方向键切列 / 翻档，回车读取，ESC 先退出读取再返回索引
             if (k === Qt.Key_Escape) { if (arrayItem.detailOpen) arrayItem.close(); else close(); event.accepted = true; return }
@@ -327,6 +332,7 @@ FocusScope {
 
     // ── 左上：品牌、竖线、数据库标签 ─────────────────────────────────────
     Rectangle {
+        id: brandLine
         x: 430
         width: 2
         height: 640
@@ -334,7 +340,10 @@ FocusScope {
         transformOrigin: Item.Top
         scale: 1
         opacity: view.reveal > 0 ? 1 : 0
-        transform: Scale { yScale: Math.min(1, view.reveal * 1.3) }
+        // 增强阵列读取录像带时竖线向上收回，不压在录像带上
+        property real keep: view.arrayDetail ? 0 : 1
+        Behavior on keep { enabled: Theme.richMotion; NumberAnimation { duration: 520; easing.type: Easing.OutCubic } }
+        transform: Scale { yScale: Math.min(1, view.reveal * 1.3) * brandLine.keep }
     }
     Column {
         x: 64 - 20 * (1 - view.reveal)
@@ -488,12 +497,28 @@ FocusScope {
         // 读取：右侧档案卡切到对应条目；选的是账号 / 队列项行时直接停在对应分页
         function onOpened(lane, row) {
             view.select(lane)
-            const pages = SD.pages(view.items[lane] || {})
-            const k = pages.findIndex(p => p.name === (view.d && view.d.key === "queue" ? "队列项" : "账号"))
-            panel.tab = row > 0 && k >= 0 ? k : 0
+            const it = view.items[lane] || {}
+            const pages = SD.pages(it)
+            const queue = view.d && view.d.key === "queue"
+            // 调度队列没有「队列配置」那一盒：每一盒都是队列项，表格滚到它附近的 12 项
+            if (queue) view.focusQueueRow(it, row)
+            const k = pages.findIndex(p => p.name === (queue ? "队列项" : "账号"))
+            panel.tab = (queue || row > 0) && k >= 0 ? k : 0
+            if (queue) panel.rebuild()
         }
         function onMoved(lane, row) { if (lane !== view.target) view.select(lane) }
         function onFlownOut() { if (!view.opened) view.finishClose() }
+    }
+    // 队列项表格：以选中的那一项为中心取 12 项（不足时贴边）
+    function focusQueueRow(it, row) {
+        for (const tab of it.tabs || []) for (const b of tab.blocks || []) {
+            if (!b.all) continue
+            const n = b.all.length, size = 12
+            const off = Math.max(0, Math.min(n - size, row - Math.floor(size / 2)))
+            b.offset = off
+            b.focus = row
+            b.rows = b.all.slice(off, off + size)
+        }
     }
     function setupArray() {
         if (!arrayItem || !d) return

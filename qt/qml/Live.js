@@ -138,9 +138,9 @@ function queues(qresp, times, qitems, scriptOpts, scriptPaths) {
         })
         // 3D 阵列：列内各行 = 队列配置 + 各队列项（以所选脚本的启动程序图标作唱片）
         var rowNames = it.index.map(function (t) { var sid = it.data[t.uid].Info.ScriptId; return sid && values.indexOf(sid) >= 0 ? names[values.indexOf(sid)] : "未选择脚本" })
-        var rowIcons = [""].concat(it.index.map(function (t) { return scriptPaths[it.data[t.uid].Info.ScriptId] || "" }))
+        var rowIcons = it.index.map(function (t) { return scriptPaths[it.data[t.uid].Info.ScriptId] || "" })
         return { name: I.Name, en: (I.CycleEnabled ? "QUEUE · CYCLE · " : "QUEUE · ") + String(i + 1).padStart(2, "0"), live: true, uid: qid,
-            icon: "", accounts: rowNames, rowIcons: rowIcons,
+            icon: "", accounts: rowNames, rowIcons: rowIcons, configRow: false,
             exclusive: I.CycleEnabled ? "cycle" : I.TimeEnabled ? "time" : "",
             ops: {
                 "立即运行": { confirm: "将立即运行队列「" + I.Name + "」。", path: "/api/dispatch/start", body: { taskId: qid, mode: I.CycleEnabled ? "CycleRun" : "AutoProxy" }, done: "已开始运行" },
@@ -158,7 +158,7 @@ function queues(qresp, times, qitems, scriptOpts, scriptPaths) {
                 SD.note(I.CycleEnabled ? "循环队列与定时启动互斥：开启循环后，按「队列项」中各脚本自己的周期持续运行。" : "同一队列可设置多个定时；周期为空时该定时不会触发。")
             ], actions: ["保存", "添加定时"] },
             { name: "队列项", api: "POST /api/queue/item/update", blocks: [
-                SD.table("ITEMS", ["脚本", "参与循环", "方式", "时间 / 间隔", "下次运行"], irows.slice(0, 10), [2.4, 1.1, 1.4, 1.3, 1]),
+                (function () { var t = SD.table("ITEMS", ["脚本", "参与循环", "方式", "时间 / 间隔", "下次运行"], irows.slice(0, 12), [2.4, 1.1, 1.4, 1.3, 1]); t.all = irows; t.offset = 0; return t })(),
                 SD.note(irows.length > 10 ? "共 " + irows.length + " 项，这里列出前 10 项。「参与循环」「方式」「间隔」只在循环队列中生效。" : "「参与循环」「方式」「间隔」只在循环队列中生效；间隔可从上次开始或上次结束计时。")
             ], actions: ["保存", "添加脚本"] }
         ] }
@@ -187,7 +187,7 @@ function emulators(eresp, sresp) {
             { name: "设备", api: "POST /api/emulator/operate", blocks: devs ? [
                 SD.table("DEVICES", ["名称", "状态", "ADB 地址", "操作"], rows.slice(0, 9)),
                 SD.stats("SUMMARY", [["实例", String(rows.length)], ["运行中", String(rows.filter(function (r) { return r[1] === OK || r[1] === RUN }).length)], ["类型", I.Type]])
-            ] : [SD.kv("STATUS", [["设备状态", [ERR, "读取失败"]]]), SD.note(sresp && sresp.message ? sresp.message : "无法读取设备状态")],
+            ] : [SD.kv("STATUS", [["设备状态", [ERR, "读取失败"]]]), SD.note(sresp && sresp.message ? sresp.message : "无法读取设备状态", true)],
               actions: ["刷新设备"] },
             { name: "配置", api: save.path, save: save, blocks: [SD.kv("CONFIG", cfg)], actions: ["保存", "删除"] }
         ] }
@@ -283,7 +283,7 @@ function history(resp, filter) {
     var q = { name: "查询", en: "SEARCH", live: true, api: "POST /api/history/search", blocks: [
         SD.kv("FILTER", [["开始日期", { c: "date", v: filter.start, k: "start" }, "start_date"], ["结束日期", { c: "date", v: filter.end, k: "end" }, "end_date"], ["合并方式", { c: "seg", opts: ["按日", "按周", "按月"], v: filter.mode, k: "mode", enum: ["DAILY", "WEEKLY", "MONTHLY"] }, "mode"]]),
         SD.stats("RANGE", [["记录", String(total)], ["成功", String(okN)], ["异常", String(errN)]]),
-        SD.note(dates.length ? "共 " + dates.length + " 个日期，翻到后面的条目查看每天的记录。" : "这个时间范围内没有历史记录。")
+        SD.note(dates.length ? "" : "这个时间范围内没有历史记录。", !dates.length)
     ], ops: { "查询": { query: true } }, actions: ["查询"] }
     return [q].concat(items)
 }
