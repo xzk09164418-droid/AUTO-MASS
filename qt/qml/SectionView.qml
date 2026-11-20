@@ -311,6 +311,8 @@ FocusScope {
         enabled: view.opened
         acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
         onWheel: event => {
+            // 鼠标在档案卡上、且当前页有可滚动的表格（队列项）：滚轮滚表格，不切换条目
+            if (panel.hovered && panel.scrollTable && panel.scrollTable.scroll(event.angleDelta.y < 0 ? 1 : -1)) return
             if (view.arrayItem) { if (!view.arrayItem.detailOpen) view.arrayItem.nav("row", event.angleDelta.y < 0 ? 1 : -1); return }
             view.select(view.target + (event.angleDelta.y < 0 ? 1 : -1))
         }

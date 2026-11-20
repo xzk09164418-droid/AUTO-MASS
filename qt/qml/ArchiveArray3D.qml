@@ -359,8 +359,7 @@ Item {
                     materials: PrincipledMaterial {
                         roughness: 0.55
                         metalness: 0.02
-                        alphaMode: PrincipledMaterial.Mask
-                        alphaCutoff: 0.5
+                        alphaMode: PrincipledMaterial.Blend      // 始终走半透明管线：渐显时只改数值，不换管线
                         cullMode: Material.NoCulling
                         baseColorMap: Texture { sourceItem: discArt }
                     }
@@ -394,8 +393,7 @@ Item {
                     materials: PrincipledMaterial {
                         roughness: 0.55
                         metalness: 0.02
-                        alphaMode: PrincipledMaterial.Mask
-                        alphaCutoff: 0.5
+                        alphaMode: PrincipledMaterial.Blend
                         cullMode: Material.NoCulling
                         baseColorMap: Texture { sourceItem: outDiscArt }
                     }
@@ -506,6 +504,8 @@ Item {
             if (name === "Ivory_Edges") { mat.roughness = 0.31; mat.transmissionFactor = 0.65; mat.thicknessFactor = 0.04 }
             if (name === "Optical_Diffuser") { mat.transmissionFactor = 0; mat.roughness = 0.7 }
             const high = { Frosted_Polymer: "#fffdfa", Ivory_Edges: "#f0e7df", Optical_Diffuser: "#e2dad4" }[name]
+            // 透射只在两个非零值之间插值（0 ↔ 非 0 会让 Qt 换渲染管线，表现为一闪）；边原本不透射的保持不透射
+            if (name === "Ivory_Edges") mat.transmissionFactor = 0
             const low = { Frosted_Polymer: ["#fff7ed", 0.28, 0.3], Ivory_Edges: ["#fff5e9", 0.38, 0], Optical_Diffuser: ["#806447", 0.7, 0], Index_Inlay: ["#e4d6c5", 0.52, 0], Titanium_Fasteners: null }[name]
             if (low !== undefined) {
                 if (low) blend.push({ mat: mat, low: { c: Qt.color(low[0]), r: low[1], t: low[2] }, high: { c: high ? Qt.color(high) : mat.baseColor, r: mat.roughness, t: mat.transmissionFactor } })
@@ -525,12 +525,9 @@ Item {
             p.mat.roughness = a.r + (b.r - a.r) * q
             if (p.mat !== frostedMaterial) p.mat.transmissionFactor = a.t + (b.t - a.t) * q
         }
-        for (const m of fades) {
-            m.visible = q > 0.02
-            const mat = m.materials[0]
-            // 渐显期间半透明；完成后恢复不透明，外壳的透射才能折射出内部结构
-            mat.opacity = q > 0.995 ? 1 : q
-        }
+        // 内部结构保持不透明、一直可见：改不透明度会让它们在不透明 / 半透明两套管线之间切换，切换录像带时一闪；
+        // 它们在磨砂外壳里，抬起前后外观的变化交给外壳本身的过渡
+        for (const m of fades) if (!m.visible) m.visible = true
     }
 
     // ── 实例表：与演示基线相同的范围（左右各 3 列、前后各 18 行，约 259 盒）。

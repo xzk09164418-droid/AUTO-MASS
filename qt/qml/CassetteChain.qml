@@ -147,9 +147,10 @@ Item {
     readonly property real camZ: 12.4
     readonly property int cw: 260           // 卡带设计尺寸（像素），对应 2.6 × 1.7 单位
     readonly property int ch: 170
-    // 画面上的槽位：选中位之前 3 个、之后 5 个（条目少时按循环重复出现，与示意图一致）
-    readonly property int before: 3
-    readonly property int after: 5
+    // 画面上的槽位：前后各留足够多的卡带，让它们一直延伸到窗口外、被窗口边缘遮住，而不是在画面里淡出消失
+    // （条目少时按循环重复出现，与示意图一致）
+    readonly property int before: 6
+    readonly property int after: 8
 
     function open(list, n, t) {
         deptN = n
@@ -217,7 +218,8 @@ Item {
             property real lift: hot ? 1 : 0
             Behavior on lift { enabled: Theme.richMotion; NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
             readonly property var p: chain.placeAt(s, m, lift)
-            readonly property real fade: Math.max(0, Math.min(1, 1.8 - Math.abs(s) / 4.2)) * Math.min(1, chain.intro * 1.4)
+            // 只有入场时整体渐显；不再随离选中位的远近淡出
+            readonly property real fade: Math.min(1, chain.intro * 1.4)
             readonly property bool hot: !chain.sliding && chain.hovered === m
             visible: fade > 0.01
             z: 100 + s * 4

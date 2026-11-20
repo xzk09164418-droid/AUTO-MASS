@@ -86,6 +86,10 @@ Item {
     }
     onPageChanged: refresh()
     // 数据块内容在原对象上改动后（如队列项表格换窗口），整页重建
+    // 当前页里可滚动的表格（没有则为 null）；鼠标是否在档案卡上
+    property Item scrollTable: null
+    readonly property bool hovered: cardHover.hovered
+    HoverHandler { id: cardHover }
     function rebuild() { if (page) { apply(); if (Theme.richMotion) tabFadeAnim.restart() } }
 
     SequentialAnimation {
@@ -524,6 +528,21 @@ Item {
     component TableBlock: Column {
         id: tb
         property var b
+        // 可滚动的长表（队列项）：一次显示 12 行，鼠标在档案卡上时滚轮滚动
+        readonly property int pageRows: 12
+        readonly property bool scrollable: !!b.all && b.all.length > pageRows
+        property int off: b.offset || 0
+        readonly property var rows: b.all ? b.all.slice(off, off + pageRows) : b.rows
+        function scroll(d) {
+            if (!scrollable) return false
+            const next = Math.max(0, Math.min(b.all.length - pageRows, off + d))
+            if (next === off) return true
+            off = next
+            b.offset = off
+            return true
+        }
+        Component.onCompleted: if (scrollable) panel.scrollTable = tb
+        Component.onDestruction: if (panel.scrollTable === tb) panel.scrollTable = null
         readonly property var weights: b.weights && b.weights.length === b.cols.length ? b.weights : b.cols.map(() => 1)
         readonly property real wsum: weights.reduce((a, x) => a + x, 0)
         function colW(i) { return (width - 44) * weights[i] / wsum }
@@ -551,19 +570,33 @@ Item {
                 Behavior on width { enabled: Theme.richMotion; NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
             }
         }
+        Item {
+            width: tb.width
+            height: tb.rows.length * 44
+            // 滚动条：一根橙色矩形，不加边框与衬底
+            Rectangle {
+                visible: tb.scrollable
+                x: tb.width + 6
+                width: 3
+                height: parent.height * tb.pageRows / Math.max(1, tb.b.all ? tb.b.all.length : 1)
+                y: parent.height * tb.off / Math.max(1, tb.b.all ? tb.b.all.length : 1)
+                color: Theme.accent
+                Behavior on y { enabled: Theme.richMotion; NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }
+            }
+        Column {
         Repeater {
-            model: tb.b.rows.length
+            model: tb.rows.length
             Item {
                 id: tr
                 required property int index
-                readonly property var modelData: tb.b.rows[index]
+                readonly property var modelData: tb.rows[index]
                 width: tb.width
                 height: 44
                 Rectangle { anchors.fill: parent; color: Theme.ink; opacity: trHover.hovered ? 0.05 : 0 }
                 HoverHandler { id: trHover }
                 Row {
                     anchors.fill: parent
-                    Text { width: 44; height: parent.height; verticalAlignment: Text.AlignVCenter; leftPadding: 6; text: String((tb.b.offset || 0) + tr.index + 1).padStart(2, "0"); color: (tb.b.offset || 0) + tr.index === tb.b.focus ? Theme.accent : Theme.muted; font.family: Theme.font; font.pixelSize: 14 }
+                    Text { width: 44; height: parent.height; verticalAlignment: Text.AlignVCenter; leftPadding: 6; text: String(tb.off + tr.index + 1).padStart(2, "0"); color: tb.off + tr.index === tb.b.focus ? Theme.accent : Theme.muted; font.family: Theme.font; font.pixelSize: 14 }
                     Repeater {
                         model: tr.modelData.length
                         Item {
@@ -579,6 +612,8 @@ Item {
                 }
                 Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: Theme.hair; opacity: 0.7 }
             }
+        }
+        }
         }
     }
     component StatsBlock: Row {
