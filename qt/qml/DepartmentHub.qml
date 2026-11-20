@@ -14,6 +14,9 @@ FocusScope {
     property int current: centerIndex
     property bool paused: false          // 二级界面打开时暂停视差与漂浮
     property string backendStatus: ""
+    property bool sectioned: false       // 二级界面打开：方块、斜线、标签、底栏淡出
+    property real chrome: sectioned ? 0 : 1
+    Behavior on chrome { NumberAnimation { duration: 280 } }
 
     signal openRequested(int index, rect r)
 
@@ -42,6 +45,8 @@ FocusScope {
         select(i)
         openRequested(i, tileRect(i))
     }
+
+    function tileItem(i) { return tiles.itemAt(i) }
 
     function focusCurrent() {
         tiles.itemAt(current).forceActiveFocus()
@@ -139,7 +144,7 @@ FocusScope {
         color: "transparent"
         border.width: 70
         border.color: Theme.glow
-        opacity: hub.intro
+        opacity: hub.intro * hub.chrome
     }
     Text {
         x: 1500
@@ -150,12 +155,12 @@ FocusScope {
         font.pixelSize: 30
         font.weight: Font.Bold
         font.letterSpacing: 18
-        opacity: hub.intro
+        opacity: hub.intro * hub.chrome
     }
     Column {
         x: 59
         y: 64
-        opacity: 0.32
+        opacity: 0.32 * hub.chrome
         Text { text: "AUTO-MAS"; color: Theme.ink; font.family: Theme.font; font.pixelSize: 41; font.letterSpacing: 2.2; font.weight: Font.Bold }
         Text { text: "SCRIPT CUSTODY INFORMATION"; color: Theme.ink; font.family: Theme.font; font.pixelSize: 14; font.letterSpacing: 1.4; font.weight: Font.DemiBold }
         Text { text: "ANALYSIS OS"; color: Theme.ink; font.family: Theme.font; font.pixelSize: 32; font.letterSpacing: 5.4; font.weight: Font.Bold }
@@ -181,6 +186,7 @@ FocusScope {
         preferredRendererType: Shape.CurveRenderer
         readonly property real p: Math.max(0, Math.min(1, (hub.intro - 0.12) / 0.3))
         readonly property real e: 1 - Math.pow(1 - p, 3)
+        opacity: hub.chrome
         ShapePath {
             strokeColor: Theme.dark ? Theme.hair : "#3a3a36"
             strokeWidth: 1.4
@@ -207,7 +213,7 @@ FocusScope {
             height: modelData.h
             x: modelData.x - width / 2 - hub.mx * dp + Math.sin(hub.clock / 2.6 + index) * dp * 0.15 * hub.floatAmp
             y: modelData.y - height / 2 - hub.my * dp + Math.cos(hub.clock / 3.1 + index * 1.7) * dp * 0.15 * hub.floatAmp
-            opacity: Math.max(0, Math.min(1, (hub.intro - 0.5) / 0.3)) * (1 - modelData.blur * 0.5)
+            opacity: Math.max(0, Math.min(1, (hub.intro - 0.5) / 0.3)) * (1 - modelData.blur * 0.5) * hub.chrome
 
             Rectangle { anchors.fill: parent; color: modelData.kind === "stripe" ? Theme.block : Theme.paper }
             Rectangle {
@@ -251,6 +257,7 @@ FocusScope {
             px: -hub.mx * dp + Math.sin(hub.clock / 2.6 + index) * dp * 0.15 * hub.floatAmp
             py: -hub.my * dp + Math.cos(hub.clock / 3.1 + index * 1.7) * dp * 0.15 * hub.floatAmp
             intro: hub.tileIntro(index)
+            visible: hub.chrome > 0
             current: hub.current === index
             dimmed: true
             onHovered: hub.current = index
@@ -265,7 +272,7 @@ FocusScope {
         x: d.x - width / 2
         y: d.y - d.h / 2 - height - 14
         z: 10
-        opacity: hub.intro >= 1 ? 1 : 0
+        opacity: hub.intro >= 1 && !hub.sectioned ? 1 : 0
         Behavior on x { NumberAnimation { duration: 320; easing.type: Easing.OutCubic } }
         Behavior on y { NumberAnimation { duration: 320; easing.type: Easing.OutCubic } }
         Behavior on opacity { NumberAnimation { duration: 300 } }
@@ -297,7 +304,7 @@ FocusScope {
         departments: hub.departments
         current: hub.current
         backendStatus: hub.backendStatus
-        opacity: hub.intro
+        opacity: hub.intro * hub.chrome
         onPicked: i => hub.open(i)
         onHoveredIndex: i => hub.current = i
     }

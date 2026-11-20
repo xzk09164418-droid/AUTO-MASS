@@ -5,6 +5,9 @@ BootSequence 1.0 BootSequence.qml
 DepartmentHub 1.0 DepartmentHub.qml
 DeptTile 1.0 DeptTile.qml
 Ledger 1.0 Ledger.qml
-SectionHost 1.0 SectionHost.qml
+SectionView 1.0 SectionView.qml
+ArchivePanel 1.0 ArchivePanel.qml
+CassetteChain 1.0 CassetteChain.qml
+Emblem 1.0 Emblem.qml
 BackendPanel 1.0 BackendPanel.qml
 RandomBlocks 1.0 RandomBlocks.qml

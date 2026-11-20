@@ -26,7 +26,7 @@ Item {
     x: d.x - d.w / 2 + px
     y: d.y - d.h / 2 + py
     z: hot ? 5 : 0
-    opacity: intro * (dimmed && !hot ? 0.9 : 1)
+    opacity: intro * (dimmed && !hot ? 0.9 : 1) * (parent && parent.chrome !== undefined ? parent.chrome : 1)
     scale: (0.82 + 0.18 * intro) * (hot ? 1.05 : 1)
     activeFocusOnTab: true
 
@@ -113,23 +113,6 @@ Item {
                     font.weight: Font.Black
                     font.letterSpacing: -tile.d.size * 0.02
                 }
-                // 在最后一行字形中段嵌入自有标志，对应 PV 部门标里的符号
-                // 底板挖掉字形中段，标志像嵌进字里而不是压在字上
-                Rectangle {
-                    visible: index === tile.d.code.split("\n").length - 1
-                    anchors.centerIn: parent
-                    width: tile.d.size * 0.46
-                    height: width
-                    radius: width / 2
-                    color: tile.isBlock ? Theme.block : tile.isCard ? Theme.paper : Theme.bg
-                    Mark {
-                        anchors.centerIn: parent
-                        width: parent.width * 0.86
-                        height: width
-                        ink: tile.textColor
-                        core: Theme.accent
-                    }
-                }
             }
         }
         Item { width: 1; height: 8 }
@@ -153,6 +136,19 @@ Item {
             font.weight: Font.DemiBold
             font.letterSpacing: 4
         }
+    }
+
+    // 右上角的档案章标志（取代原先嵌在字形里的圆环标志）
+    Emblem {
+        visible: tile.isCard || tile.isBlock
+        anchors.right: parent.right
+        anchors.top: parent.top
+        anchors.margins: tile.d.center ? 16 : 10
+        width: tile.d.center ? 30 : 20
+        height: width
+        ink: tile.textColor
+        core: Theme.accent
+        opacity: tile.isCard || tile.isBlock ? 0.9 : 0.75
     }
 
     MouseArea {

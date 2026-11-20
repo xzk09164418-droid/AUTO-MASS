@@ -88,11 +88,12 @@ Window {
             focus: true
             active: root.booted
             paused: sections.busy
+            sectioned: sections.busy
             backendStatus: root.source ? root.source.status : ""
-            onOpenRequested: (i, r) => sections.open(i, r)
+            onOpenRequested: (i, r) => sections.open(i, r, hub.tileItem(i))
         }
 
-        SectionHost {
+        SectionView {
             id: sections
             anchors.fill: parent
             departments: hub.departments
