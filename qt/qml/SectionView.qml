@@ -644,6 +644,8 @@ FocusScope {
             dept: view.d
             item: view.item
             itemIndex: view.target
+            // 后端还在读取本部门数据时，档案卡停在合拢状态；读取完成（或失败）立即揭开
+            loading: view.liveState === "loading"
             onToast: text => toast.show(text)
             onConfirmDelete: (name, api) => modal.open(name, api)
             onLiveAction: name => view.liveAction(name)

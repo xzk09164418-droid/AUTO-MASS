@@ -48,11 +48,20 @@ Item {
     property real tabFade: 1
     property int tickets: 0         // 遮挡条依次退开的序号
     function ticket() { return tickets++ }
+    // 解密服务于加载：先快速合拢（对角线与磨砂罩上，0→0.45），数据还在读取时停在合拢状态等待；
+    // 一旦就绪立即退开（0.45→1，约 0.3 秒），不再按固定 1.5 秒走完
+    property bool loading: false
+    readonly property real holdAt: 0.45
     function startDec() {
-        if (Theme.richMotion) decAnim.restart()
-        else { decAnim.stop(); dec = 1 }
+        decIn.stop(); decOut.stop()
+        if (!Theme.richMotion) { dec = 1; return }
+        dec = 0
+        decIn.restart()
     }
-    NumberAnimation { id: decAnim; target: panel; property: "dec"; from: 0; to: 1; duration: 1500; easing.type: Easing.Linear }
+    function finishDec() { if (!loading && !decIn.running && dec < 1 && !decOut.running) decOut.restart() }
+    onLoadingChanged: finishDec()
+    NumberAnimation { id: decIn; target: panel; property: "dec"; to: panel.holdAt; duration: 160; easing.type: Easing.Linear; onFinished: panel.finishDec() }
+    NumberAnimation { id: decOut; target: panel; property: "dec"; to: 1; duration: 300; easing.type: Easing.Linear }
     NumberAnimation { id: tabFadeAnim; target: panel; property: "tabFade"; from: 0; to: 1; duration: 150 }
 
     // 换条目：淡出后重新解密；换页签：只换正文与操作并 150ms 淡入
@@ -383,7 +392,8 @@ Item {
     component Redact: Rectangle {
         property int idx: 0
         Component.onCompleted: idx = Math.min(24, panel.ticket())
-        readonly property real t: Math.max(0, Math.min(1, (panel.dec * 1500 - 640 - idx * 22) / 420))
+        // 只在揭开阶段（dec 0.45→1）依次退开，跟随加载而不是固定时长
+        readonly property real t: Math.max(0, Math.min(1, ((panel.dec - panel.holdAt) / (1 - panel.holdAt) - idx * 0.02) / 0.5))
         readonly property real k: 1 - (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2)
         visible: panel.dec < 1 && k > 0
         x: 0
@@ -819,7 +829,7 @@ Item {
 
     readonly property real bodyBottom: body.y + body.implicitHeight
 
-    // ── 解密层：对角线合拢 → 保持 → 收束；磨砂自上而下退去（只在解密的 1.5 秒内存在） ──
+    // ── 解密层：对角线合拢 → 保持（等待数据）→ 收束；磨砂自上而下退去 ──
     Item {
         id: decLayer
         anchors.fill: parent
