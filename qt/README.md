@@ -5,7 +5,7 @@ PySide6 + QML 重写的桌面前端，按「莱茵生命」PV 视觉组织。它
 ## 运行
 
 ```bash
-.venv/Scripts/python.exe -m pip install -r qt/requirements.txt
+uv pip install --python .venv/Scripts/python.exe -r qt/requirements.txt
 .venv/Scripts/python.exe qt/main.py
 ```
 

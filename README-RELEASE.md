@@ -1,6 +1,6 @@
-# AUTO-MAS · BetterGI 本地远程桌面重构版 (Release 发行版)
+# AUTO-MASS 浏览器控制台、后台运行与本地远程桌面
 
-本发行版基于 `better-genshin-impact` (BetterGI) 的本地远程桌面（Windows Child Session）功能对 `AUTO-MAS` 进行了深度重构，采用 **Node.js + FastAPI 前后端分离 + C# 原生远程桌面宿主** 架构，仅需运行一次安装脚本即可立即投入使用。
+当前主界面使用 Qt，安装和启动步骤见[项目首页](README.md#从源码运行-qt-界面)。本文介绍 Windows 本地远程桌面宿主、Node.js 浏览器控制台及无界面运行方式。以下“控制台”快捷方式打开浏览器。
 
 ## 1. 快速开始（仅需安装一遍）
 
@@ -43,8 +43,8 @@
 
 ### 方式三：独立脚本控制器 CLI (`remote_script_controller.py`)
 ```bash
-# 直接在本地远程桌面中通过包装器运行单个外部脚本（无日志模式：上限时间内自行退出即判成功）
-python remote_script_controller.py run-script "C:\Scripts\MyTask.exe" --args --daily --hard-timeout 120 --retries 3
+# 直接在本地远程桌面中通过包装器运行单个外部脚本（无日志模式：上限时间内自行退出即判成功；本例最多尝试 3 次，含首次）
+python remote_script_controller.py run-script "C:\Scripts\MyTask.exe" --args=--daily --hard-timeout 120 --retries 3
 
 # 外部程序申请借用本地远程桌面（队列将在相邻子任务间隔自动释放让渡）
 python remote_script_controller.py acquire-desktop --caller "OtherProgram" --wait

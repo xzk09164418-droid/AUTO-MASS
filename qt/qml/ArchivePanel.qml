@@ -21,6 +21,7 @@ Item {
     // 实时条目的按钮与行内操作交给 SectionView 调后端
     signal liveAction(string name)
     signal liveOp(var op)
+    property bool saving: false
     property int edits: 0                   // 控件改动计数（驱动「未保存 N 处」）
     readonly property int unsaved: { edits; return item && item.live ? Live.dirtyCount(item) : 0 }
     signal motionChosen(string motion)      // 用户切换了动态效果挡位（记住选择；离开增强挡位时标记延后删除）
@@ -859,6 +860,7 @@ Item {
                         text: modelData
                         primary: index === 0
                         danger: /删除|停止|注销|卸下/.test(modelData)
+                        enabled: !(panel.saving && modelData === "保存")
                         onClicked: panel.act(modelData)
                     }
                 }

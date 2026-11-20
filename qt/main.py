@@ -65,7 +65,7 @@ def main() -> int:
     fmt.setSamples(4)
     QSurfaceFormat.setDefaultFormat(fmt)
     app = QGuiApplication(sys.argv)
-    app.setApplicationName("AUTO-MAS")
+    app.setApplicationName("AUTO-MASS")
     app.setOrganizationName("AUTO-MAS")
     icon = QT_DIR.parent / "res" / "icons" / "AUTO-MAS.ico"
     if icon.exists():

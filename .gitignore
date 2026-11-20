@@ -91,3 +91,15 @@ tests/**/__pycache__/
 
 # 本地编译的独立后端代理
 /res/BackendAgent/*.exe
+
+# Private local verification, AI sessions, recovery snapshots and compiled helpers
+/.verification/
+/.workbuddy-ai/
+/rdp-architecture-audit-*/
+/rdp-borrow-test-*/
+/frontend/dist-browser/
+/frontend/dist-host/
+/frontend/playwright-report/
+/res/QueueControlToast/*.exe
+/res/QueueControlToast/*.sha256
+/res/ChildSessionHost/*.previous-*.exe

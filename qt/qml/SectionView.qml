@@ -122,15 +122,25 @@ FocusScope {
         }
     }
     // 保存：只提交改过的字段，同一接口的字段合并成一个请求
+    property bool saving: false
     function save(then) {
+        if (saving) return
         const it = item
         if (!it || !it.live) return
         const reqs = Live.collect(it)
         if (!reqs.length) { toast.show("没有需要保存的改动"); if (then) then(); return }
+        const snapshot = []
+        Live.eachSpec(it, spec => {
+            if (spec.dirty && spec.key) snapshot.push({ spec: spec, value: JSON.stringify(Live.valueOf(spec)) })
+        })
+        saving = true
         let i = 0
         const next = () => {
             if (i >= reqs.length) {
-                Live.clearDirty(it)
+                snapshot.forEach(saved => {
+                    if (JSON.stringify(Live.valueOf(saved.spec)) === saved.value) saved.spec.dirty = false
+                })
+                saving = false
                 panel.edits++
                 toast.show("已保存到后端 · " + reqs.length + " 个请求")
                 if (then) then()
@@ -139,7 +149,7 @@ FocusScope {
             const q = reqs[i++]
             call(q.path, q.body, r => {
                 if (r.code === 200) next()
-                else toast.show("保存失败：" + (r.message || q.path))
+                else { saving = false; toast.show("保存失败：" + (r.message || q.path)) }
             })
         }
         next()
@@ -169,7 +179,11 @@ FocusScope {
             if (!taskId) { toast.show("没有可运行的任务"); return }
             modal.ask("开始执行", "将以「" + ({ AutoProxy: "自动代理", ScriptConfig: "设置脚本", CycleRun: "循环运行" })[mode] + "」模式立即开始所选任务，完成后执行「" + SD.POWER[Live.POWER_EN.indexOf(power)] + "」。",
                 "POST /api/dispatch/start", "开始执行", false, () => {
-                    call("/api/dispatch/set/power", { signal: power }, () => {
+                    call("/api/dispatch/set/power", { signal: power }, result => {
+                        if (result.code !== 200) {
+                            toast.show("设置电源动作失败：" + (result.message || "请求失败"))
+                            return
+                        }
                         call("/api/dispatch/start", { taskId: taskId, mode: mode }, r => {
                             if (r.code === 200) { toast.show("已开始执行 · 任务 " + (r.taskId || "").slice(0, 8)); fetchLive(d.key) }
                             else toast.show("开始失败：" + (r.message || ""))
@@ -678,6 +692,7 @@ FocusScope {
             item: view.item
             itemIndex: view.target
             // 后端还在读取本部门数据时，档案卡停在合拢状态；读取完成（或失败）立即揭开
+            saving: view.saving
             loading: view.liveState === "loading"
             onToast: text => toast.show(text)
             onConfirmDelete: (name, api) => modal.open(name, api)

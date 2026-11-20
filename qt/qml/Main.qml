@@ -24,7 +24,7 @@ Window {
     minimumWidth: 960
     minimumHeight: 540
     visible: true
-    title: "AUTO-MAS"
+    title: "AUTO-MASS"
     color: Theme.bg
 
     // 启动进度的数据源：真实后端 / 模拟后端 / 无（离线预览）
