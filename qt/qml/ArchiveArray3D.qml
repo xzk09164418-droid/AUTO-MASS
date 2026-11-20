@@ -32,6 +32,9 @@ Item {
     readonly property string rowName: row === 0 ? (column ? column.name + (isQueue ? " · 队列配置" : " · 脚本配置") : "")
         : (column && column.accounts ? column.accounts[row - 1] || "" : "")
     readonly property string rowIcon: !column ? "" : column.rowIcons ? column.rowIcons[row] || "" : column.icon || ""
+    readonly property string labelNo: "NO." + String(lane * 10 + row + 1).padStart(3, "0")
+    readonly property string discTitle: rowIcon ? rowIcon.split(/[\\/]/).pop() : "AUTO-MAS"
+    readonly property string discSub: row === 0 ? (column ? column.name : "") : rowName + " · " + (column ? column.name : "")
 
     signal opened(int lane, int row)
     signal closed()
@@ -83,9 +86,23 @@ Item {
     property real clarity: 0
     property var hoverCell: null
     property var hoverLifts: ({})
-    // 飞入进度（秒）：0 = 全部在画面外；≥ 1.7 = 全部落位。flyDir 为 1 飞入、-1 飞出、0 静止
-    property real fly: 2
-    property int flyDir: 0
+    // 进出场（同原项目 ArchiveScene.reveal / entryZ）：整列阵列沿 −z 方向平移 28 个单位，从远处的雾里滑入；
+    // 离开时反向滑回。reveal 以选择过渡同样的指数速率（2.8）逼近目标
+    property real reveal: 0
+    property real targetReveal: 0
+    property bool leaving: false
+    readonly property bool uiShown: targetReveal === 1 && !detailOpen
+    // 原项目的「换下的那盒」：换选中时，原来抬起的那盒保持完整外观与标签，按自己的弹簧（4.5）落回格位；
+    // 再选回它时接着它当前的高度继续。最新的一盒用完整模型绘制，更早的用实例 + 着色器抬起
+    property var outgoing: []
+    property vector4d out0: Qt.vector4d(0, 0, 0, 0)
+    property vector4d out1: Qt.vector4d(0, 0, 0, 0)
+    property vector4d out2: Qt.vector4d(0, 0, 0, 0)
+    property vector4d out3: Qt.vector4d(0, 0, 0, 0)
+    property string outNo: ""
+    property string outIcon: ""
+    property string outTitle: ""
+    property string outSub: ""
 
     // 着色器 uniform
     property real uShoulder: 12
@@ -110,6 +127,9 @@ Item {
         S.rail.v = -2.17 - (cellRow - 15.5) * rowSpacing; S.rail.vel = 0
         pulses = []
         updatePulses()
+        outgoing = []
+        outgoingNode.visible = false
+        out0 = out1 = out2 = out3 = Qt.vector4d(0, 0, 0, 0)
         detail = 0; clarity = 0; idleGain = 0
         hoverCell = null; hoverLifts = ({})
         lastInteraction = clock
@@ -118,40 +138,84 @@ Item {
     }
     // 后台预渲染：把镜头放到阵列取景位置画一帧（否则镜头朝向空处，阵列的着色器与管线不会被编译），
     // 再让选中的那盒以半透明渐显状态画一帧，切换时的渐显管线也提前就绪
+    // （预渲染时阵列放在原位：进场偏移 28 时它在长焦镜头的视野外，什么都不会画，管线也不会编译）
     function prime() {
         reset(0)
+        reveal = 1
         step(0.016)
         primeBlend.restart()
     }
-    Timer { id: primeBlend; interval: 300; onTriggered: if (!root.active && root.blendParts.length) { root.applyAppearance(0.5); primeRestore.restart() } }
-    Timer { id: primeRestore; interval: 300; onTriggered: { root.appearance = -1; root.applyAppearance(1) } }
-    function flyIn() { fly = 0; flyDir = 1; running = true }
-    function flyOut() { if (fly > 1.7) fly = 1.7; flyDir = -1; detailOpen = false; running = true }
+    Timer {
+        id: primeBlend; interval: 300
+        onTriggered: {
+            if (root.active || !root.blendParts.length) return
+            root.applyAppearance(0.5)
+            // 换下的那盒也以半透明状态画一帧
+            if (root.outBlendParts.length) {
+                outgoingNode.position = selected.position.plus(Qt.vector3d(0, 0, root.rowSpacing))
+                outgoingNode.visible = true
+                root.applyAppearance(0.5, root.outBlendParts, root.outFadeParts)
+            }
+            primeRestore.restart()
+        }
+    }
+    Timer {
+        id: primeRestore; interval: 300
+        onTriggered: {
+            root.appearance = -1; root.applyAppearance(1)
+            root.outAppearance = -1
+            outgoingNode.visible = false
+        }
+    }
+    // 进场：阵列在 −28 处、选中的那盒未抬起，随 reveal 一起滑入并抬起；离场：反向，滑到尽头后通知宿主
+    function flyIn() { reveal = 0; targetReveal = 1; leaving = false; springs.lift.v = 0; springs.lift.vel = 0; running = true }
+    function flyOut() { targetReveal = 0; leaving = true; detailOpen = false; running = true }
 
     function nav(axis, d) {
-        if (detailOpen || flyDir !== 0) return
+        if (detailOpen || targetReveal !== 1) return
         lastInteraction = clock
         dir = d
-        if (axis === "row") cellRow += d
+        let l = cellLane, r = cellRow
+        if (axis === "row") r += d
         else {
             const m = Object.assign({}, laneMemory)
             m[wrap(cellLane, laneCount)] = cellRow
             laneMemory = m
-            cellLane += d
-            const r = laneMemory[wrap(cellLane, laneCount)]
-            if (r !== undefined) cellRow = r
+            l += d
+            const mr = laneMemory[wrap(l, laneCount)]
+            if (mr !== undefined) r = mr
         }
-        changed()
+        moveTo(l, r)
     }
     function goCell(l, r) {
-        if (detailOpen || flyDir !== 0) return
+        if (detailOpen || targetReveal !== 1) return
         dir = l > cellLane || (l === cellLane && r > cellRow) ? 1 : -1
         lastInteraction = clock
+        moveTo(l, r)
+    }
+    // 换选中（同原项目 ArchiveScene.select）：原来抬起的那盒转为「换下的那盒」自行落回；
+    // 新格若正是某盒换下的、还没落回的，就接着它的高度继续
+    function moveTo(l, r) {
+        if (l === cellLane && r === cellRow) return
+        const S = springs
+        const list = outgoing.slice()
+        if (S.lift.v > 0.0001 && Theme.richMotion) {
+            for (const o of list) o.model = false
+            list.push({ lane: cellLane, row: cellRow, lift: { v: S.lift.v, vel: S.lift.vel }, model: true })
+            outNo = labelNo
+            outIcon = rowIcon
+            outTitle = discTitle
+            outSub = discSub
+            while (list.length > 4) list.shift()
+        }
         cellLane = l; cellRow = r
+        const i = list.findIndex(o => o.lane === l && o.row === r)
+        if (i >= 0) { S.lift.v = list[i].lift.v; S.lift.vel = list[i].lift.vel; list.splice(i, 1) }
+        else { S.lift.v = 0; S.lift.vel = 0 }
+        outgoing = list
         changed()
     }
     function changed() {
-        springs.lift.v = 0; springs.lift.vel = 0
         const p = pulses.slice(-5); p.push({ lane: cellLane, row: cellRow, time: clock }); pulses = p
         updatePulses()
         rebuild()
@@ -166,7 +230,7 @@ Item {
         }
         pulseVecs = v
     }
-    function open() { if (detailOpen || flyDir !== 0) return; detailOpen = true; running = true; opened(lane, row) }
+    function open() { if (detailOpen || targetReveal !== 1) return; detailOpen = true; running = true; opened(lane, row) }
     function close() { if (!detailOpen) return; detailOpen = false; running = true; closed() }
 
     // ── 3D 场景 ────────────────────────────────────────────────────────────
@@ -242,7 +306,7 @@ Item {
                 id: arrayLoader
                 source: Qt.resolvedUrl("../assets3d/archive-cassette.glb")
                 instancing: InstanceList { id: instances }
-                onStatusChanged: if (status === RuntimeLoader.Success) { root.prepare(arrayLoader, true); parseGap.start() }
+                onStatusChanged: if (status === RuntimeLoader.Success) { root.prepare(arrayLoader, "array"); parseGap.start() }
             }
             // 选中的那一盒：完整材质、档案标签、程序图标唱片
             Node {
@@ -251,7 +315,7 @@ Item {
                     id: selectedLoader
                     // 分步加载：阵列解析完、隔一小段再解析这一份，避免一次占住主线程太久
                     source: root.arrayParsed && root.allowSelected ? Qt.resolvedUrl("../assets3d/archive-cassette.glb") : ""
-                    onStatusChanged: if (status === RuntimeLoader.Success) root.prepare(selectedLoader, false)
+                    onStatusChanged: if (status === RuntimeLoader.Success) { root.prepare(selectedLoader, "selected"); outGap.start() }
                 }
                 Model {
                     id: labelPlate
@@ -276,6 +340,41 @@ Item {
                         alphaCutoff: 0.5
                         cullMode: Material.NoCulling
                         baseColorMap: Texture { sourceItem: discArt }
+                    }
+                }
+            }
+            // 换下的那一盒：与选中的那盒同样的模型、标签与唱片，落回格位后隐藏
+            Node {
+                id: outgoingNode
+                visible: false
+                RuntimeLoader {
+                    id: outgoingLoader
+                    source: root.selectedParsed && root.allowSelected ? Qt.resolvedUrl("../assets3d/archive-cassette.glb") : ""
+                    onStatusChanged: if (status === RuntimeLoader.Success) root.prepare(outgoingLoader, "outgoing")
+                }
+                Model {
+                    id: outLabelPlate
+                    source: "#Rectangle"
+                    position: Qt.vector3d(-1.36, 3.04, 0.255)
+                    scale: Qt.vector3d(0.0099, 0.0046, 1)
+                    materials: PrincipledMaterial {
+                        lighting: PrincipledMaterial.NoLighting
+                        alphaMode: PrincipledMaterial.Blend
+                        baseColorMap: Texture { sourceItem: outLabelArt }
+                    }
+                }
+                Model {
+                    id: outDisc
+                    source: "#Rectangle"
+                    position: Qt.vector3d(0.22, 1.86, 0.12)
+                    scale: Qt.vector3d(0.0264, 0.0264, 1)
+                    materials: PrincipledMaterial {
+                        roughness: 0.55
+                        metalness: 0.02
+                        alphaMode: PrincipledMaterial.Mask
+                        alphaCutoff: 0.5
+                        cullMode: Material.NoCulling
+                        baseColorMap: Texture { sourceItem: outDiscArt }
                     }
                 }
             }
@@ -304,9 +403,10 @@ Item {
         property real uIdle: root.idleGain
         property real uPulseGain: root.pulseGain
         property real uDetail: root.uDetail
-        property real uFly: root.fly
-        property real uCellLane: root.cellLane
-        property real uCellRow: root.cellRow
+        property vector4d uOut0: root.out0
+        property vector4d uOut1: root.out1
+        property vector4d uOut2: root.out2
+        property vector4d uOut3: root.out3
         property vector4d uPulse0: root.pulseVecs[0]
         property vector4d uPulse1: root.pulseVecs[1]
         property vector4d uPulse2: root.pulseVecs[2]
@@ -338,11 +438,17 @@ Item {
     property bool arrayParsed: false
     property bool allowSelected: true       // 后台预加载时由宿主分步放行
     Timer { id: parseGap; interval: 250; onTriggered: root.arrayParsed = true }
+    property bool selectedParsed: false
+    Timer { id: outGap; interval: 250; onTriggered: root.selectedParsed = true }
+    property var outBlendParts: []
+    property var outFadeParts: []
+    property real outAppearance: -1
     // 选中的那盒：抬起过程中外壳等从阵列外观过渡到完整外观，其余内部结构渐显（同演示 applyAppearance）
     property var blendParts: []
     property var fadeParts: []
     property real appearance: -1
-    function prepare(loader, isArray) {
+    function prepare(loader, kind) {
+        const isArray = kind === "array"
         const materials = [], models = []
         function walk(n) {
             for (let i = 0; i < n.children.length; i++) {
@@ -360,6 +466,7 @@ Item {
             m.castsShadows = name === "Optical_Diffuser"
             m.receivesShadows = true
             m.pickable = true                   // 选中的那盒也要能点中，否则点击会穿到后面的录像带上
+            if (kind === "outgoing") m.objectName = "outgoingPart"
             // 模型自带的竖排浮雕字是原作品牌（RHINE LAB），不使用
             if (name === "Carbon_Ink" || name === "Moulded_Lettering") { m.visible = false; continue }
             if (isArray) {
@@ -371,7 +478,7 @@ Item {
                 continue
             }
             if (ringParts.indexOf(name) >= 0) { m.visible = false; continue }      // 双环换成图标唱片
-            if (name === "Frosted_Polymer") { mat.transmissionFactor = 0.9; mat.thicknessFactor = 0.12; mat.roughness = 0.21; mat.indexOfRefraction = 1.46; mat.attenuationColor = "#eee6df"; mat.attenuationDistance = 2; root.frostedMaterial = mat }
+            if (name === "Frosted_Polymer") { mat.transmissionFactor = 0.9; mat.thicknessFactor = 0.12; mat.roughness = 0.21; mat.indexOfRefraction = 1.46; mat.attenuationColor = "#eee6df"; mat.attenuationDistance = 2; if (kind === "selected") root.frostedMaterial = mat }
             if (name === "Printed_Label") mat.baseColor = "#eae5dc"
             if (name === "Ivory_Edges") { mat.roughness = 0.31; mat.transmissionFactor = 0.65; mat.thicknessFactor = 0.04 }
             if (name === "Optical_Diffuser") { mat.transmissionFactor = 0; mat.roughness = 0.7 }
@@ -381,18 +488,21 @@ Item {
                 if (low) blend.push({ mat: mat, low: { c: Qt.color(low[0]), r: low[1], t: low[2] }, high: { c: high ? Qt.color(high) : mat.baseColor, r: mat.roughness, t: mat.transmissionFactor } })
             } else fade.push(m)
         }
-        if (!isArray) { blendParts = blend; fadeParts = fade; appearance = -1 }
+        if (kind === "selected") { blendParts = blend; fadeParts = fade; appearance = -1 }
+        if (kind === "outgoing") { outBlendParts = blend; outFadeParts = fade; outAppearance = -1 }
         running = true
         if (!active) Qt.callLater(prime)
     }
-    function applyAppearance(q) {
-        for (const p of blendParts) {
+    function applyAppearance(q, parts, fades) {
+        parts = parts || blendParts
+        fades = fades || fadeParts
+        for (const p of parts) {
             const a = p.low, b = p.high
             p.mat.baseColor = Qt.rgba(a.c.r + (b.c.r - a.c.r) * q, a.c.g + (b.c.g - a.c.g) * q, a.c.b + (b.c.b - a.c.b) * q, 1)
             p.mat.roughness = a.r + (b.r - a.r) * q
             if (p.mat !== frostedMaterial) p.mat.transmissionFactor = a.t + (b.t - a.t) * q
         }
-        for (const m of fadeParts) {
+        for (const m of fades) {
             m.visible = q > 0.02
             const mat = m.materials[0]
             // 渐显期间半透明；完成后恢复不透明，外壳的透射才能折射出内部结构
@@ -472,6 +582,30 @@ Item {
         while (hv.length < 3) hv.push(Qt.vector4d(0, 0, 0, 0))
         hover0 = hv[0]; hover1 = hv[1]; hover2 = hv[2]
     }
+    // 换下的盒：各自按 4.5 的弹簧落回；最新一盒用完整模型（外观随高度从完整过渡回阵列），其余由着色器抬起
+    function stepOutgoing(dt, t) {
+        if (!outgoing.length) { if (outgoingNode.visible) outgoingNode.visible = false; return }
+        const list = outgoing.filter(o => { damp(o.lift, 0, Theme.richMotion ? 4.5 : 35, dt); return o.lift.v >= 0.0001 })
+        const slots = []
+        let modelEntry = null
+        for (const o of list) {
+            if (o.model && outBlendParts.length) { modelEntry = o; slots.push(Qt.vector4d(o.lane, o.row, 0, 1)) }
+            else slots.push(Qt.vector4d(o.lane, o.row, o.lift.v, 0))
+        }
+        while (slots.length < 4) slots.push(Qt.vector4d(0, 0, 0, 0))
+        out0 = slots[0]; out1 = slots[1]; out2 = slots[2]; out3 = slots[3]
+        if (list.length !== outgoing.length) outgoing = list
+        outgoingNode.visible = !!modelEntry
+        if (!modelEntry) return
+        const o = modelEntry
+        const q = ease(o.lift.v / 0.4)
+        const hv = hoverLifts[o.lane + ":" + o.row] || 0
+        outgoingNode.position = Qt.vector3d((o.lane - 2) * columnSpacing, -4.6 + field(o.row, o.lane, t) + o.lift.v + hv, (o.row - 15.5) * rowSpacing)
+        outgoingNode.eulerRotation.x = (field(o.row + 0.5, o.lane, t) - field(o.row - 0.5, o.lane, t)) * 0.024 * (1 - detail) * (1 - q) * 57.2958
+        if (Math.abs(q - outAppearance) > 0.002) { outAppearance = q; applyAppearance(q, outBlendParts, outFadeParts) }
+        outDisc.opacity = q
+        outLabelPlate.opacity = q
+    }
     function step(dt) {
         clock += dt
         const t = clock
@@ -482,15 +616,17 @@ Item {
         damp(S.track, chosenX, 3.7, dt)
         damp(S.rail, -2.17 - chosenZ, 3.7, dt)
         if (pulses.length && t - pulses[0].time > 3.2) { pulses = pulses.filter(p => t - p.time < 3.2); updatePulses() }
-        const idle = Theme.richMotion && !detailOpen && detail < 0.01 && t - lastInteraction > 2.5
+        const idle = Theme.richMotion && targetReveal > 0 && !detailOpen && detail < 0.01 && t - lastInteraction > 2.5
         idleGain += ((idle ? 1 : 0) - idleGain) * (1 - Math.exp(-dt * (idle ? 0.8 : 4)))
         pulseGain += ((detailOpen ? 0 : 1) - pulseGain) * (1 - Math.exp(-dt * 8))
-        // 飞入 / 飞出
-        if (flyDir > 0) { fly += dt; if (fly >= 1.7) { fly = 2; flyDir = 0 } }
-        else if (flyDir < 0) { fly -= dt * 1.8; if (fly <= 0) { fly = 0; flyDir = 0; flownOut() } }
+        // 进出场：reveal 指数逼近目标（同原项目 selectionTransition 的 2.8）
+        reveal += (targetReveal - reveal) * (1 - Math.exp(-dt * (Theme.richMotion ? 2.8 : 35)))
+        if (Math.abs(targetReveal - reveal) < 0.0005) reveal = targetReveal
+        if (leaving && reveal < 0.03) { leaving = false; flownOut() }
+        const entryZ = -28 * (1 - reveal)
         // 悬停抬起（最多三格同时在变化；没有悬停时跳过，不产生临时对象）
         if (hoverCell || Object.keys(hoverLifts).length) stepHover(dt)
-        damp(S.lift, detailOpen ? inspectionLift : 0.4, Theme.richMotion ? 4.2 : 35, dt)
+        damp(S.lift, detailOpen ? inspectionLift : 0.4 * targetReveal, Theme.richMotion ? 4.2 : 35, dt)
         const camTarget = detailOpen ? ease((S.lift.v - 0.8) / 2.4) : ease((S.lift.v - 0.4) / (inspectionLift - 0.4))
         detail += (camTarget - detail) * (1 - Math.exp(-dt * (Theme.richMotion ? 2.8 : 35)))
         const clearTarget = detailOpen && detail > 0.78 && S.lift.v > 3.3
@@ -505,14 +641,13 @@ Item {
         uShoulder = S.shoulder.v; uFocus = S.focus.v; uDetail = detail
         if (visualLane() !== builtLane || visualRow() !== builtRow) rebuild()
         const trackX = S.track.v, rail = S.rail.v
-        arrayRoot.position = Qt.vector3d(-trackX, 0, rail)
+        arrayRoot.position = Qt.vector3d(-trackX, 0, rail + entryZ)
+        stepOutgoing(dt, t)
         const q = ease(S.lift.v / 0.4)
         if (Math.abs(q - appearance) > 0.002) { appearance = q; applyAppearance(q) }
         const hover = hoverLifts[cellLane + ":" + cellRow] || 0
-        // 与着色器里的飞入同一条路径：沿长边从右上方斜向滑入
-        const fp = Math.max(0, Math.min(1, fly / 0.9)), fe = 1 - Math.pow(1 - fp, 3)
-        const selY = -4.6 + field(cellRow, cellLane, t) + S.lift.v + hover + 1.5 * (1 - fe)
-        selected.position = Qt.vector3d(chosenX + 26 * (1 - fe), selY, chosenZ)
+        const selY = -4.6 + field(cellRow, cellLane, t) + S.lift.v + hover
+        selected.position = Qt.vector3d(chosenX, selY, chosenZ)
         selected.eulerRotation.x = (field(cellRow + 0.5, cellLane, t) - field(cellRow - 0.5, cellLane, t)) * 0.024 * (1 - detail) * (1 - q) * 57.2958
         disc.opacity = q
         labelPlate.opacity = q
@@ -524,7 +659,7 @@ Item {
         const right = Qt.vector3d(0, 1, 0).crossProduct(d).normalized()
         const up = d.crossProduct(right).normalized()
         const pixelScale = 1080 / span
-        let detailAim = Qt.vector3d(chosenX - trackX, selY, chosenZ + rail).plus(Qt.vector3d(0, 1.85, 0))
+        let detailAim = Qt.vector3d(chosenX - trackX, selY, chosenZ + rail + entryZ).plus(Qt.vector3d(0, 1.85, 0))
         detailAim = detailAim.plus(right.times((0.5 - 550 / 1920) * 1920 / pixelScale)).plus(up.times((560 / 1080 - 0.5) * 1080 / pixelScale))
         const arrayAim = Qt.vector3d(-1.091, -0.045, 0.481)
         const aim = arrayAim.times(1 - detail).plus(detailAim.times(detail))
@@ -542,7 +677,8 @@ Item {
         focusDistance = rendered
 
         const moving = Math.abs(S.lift.vel) > 1e-4 || Math.abs(detail - camTarget) > 1e-3 || pulses.length > 0 || Math.abs(S.rail.vel) > 1e-4
-            || Math.abs(S.track.vel) > 1e-4 || Math.abs(S.shoulder.vel) > 1e-4 || Object.keys(hoverLifts).length > 0 || flyDir !== 0
+            || Math.abs(S.track.vel) > 1e-4 || Math.abs(S.shoulder.vel) > 1e-4 || Object.keys(hoverLifts).length > 0
+            || reveal !== targetReveal || outgoing.length > 0
             || (clearTarget ? clarity < 1 : clarity > 0) || camera.position.minus(camPos).length() > 0.01
         // 空闲呼吸按显示器刷新率逐帧推进（画面优先；每帧只有少量 uniform，CPU 开销很小）
         return moving || idleGain > 0.001 || idle
@@ -564,11 +700,12 @@ Item {
     MouseArea {
         anchors.fill: parent
         hoverEnabled: true
-        enabled: !root.detailOpen && root.flyDir === 0
+        enabled: !root.detailOpen && root.targetReveal === 1
         function cellAt(x, y) {
             const r = view.pick(x, y)
             if (!r.objectHit) return null
             if (r.objectHit.objectName === "arrayPart") return r.instanceIndex >= 0 && r.instanceIndex < root.drawn.length ? root.drawn[r.instanceIndex] : null
+            if (r.objectHit.objectName === "outgoingPart") { const o = root.outgoing.find(x => x.model); return o ? { lane: o.lane, row: o.row } : null }
             return { lane: root.cellLane, row: root.cellRow }
         }
         onPositionChanged: mouse => {
@@ -587,64 +724,69 @@ Item {
         }
     }
 
-    // ── 贴图来源：档案标签与图标唱片（离屏渲染） ──────────────────────────
+    // ── 贴图来源：档案标签与图标唱片（离屏渲染；选中的那盒与换下的那盒各一份） ──
+    component LabelArt: Rectangle {
+        property string no: ""
+        width: 1024; height: 440
+        color: "#e6e2d9"
+        Rectangle { x: 12; y: 12; width: 1000; height: 6; color: "#171713" }
+        Rectangle { x: 12; y: 419; width: 1000; height: 3; color: "#171713" }
+        Text { x: 22; y: 30; text: "AUTO-MAS"; color: "#171713"; font.family: Theme.font; font.pixelSize: 81; font.bold: true }
+        Text { x: 25; y: 140; text: root.isQueue ? "QUEUE DISPATCH" : "SCRIPT CUSTODY"; color: "#878476"; font.family: Theme.font; font.pixelSize: 32 }
+        Text { x: 22; y: 230; text: parent.no; color: "#171713"; font.family: Theme.font; font.pixelSize: 130; font.bold: true }
+        Rectangle { x: 782; y: 32; width: 221; height: 39; color: "#171713"; Text { x: 27; anchors.verticalCenter: parent.verticalCenter; text: "A M / S C"; color: "#eee9de"; font.family: Theme.font; font.pixelSize: 24 } }
+        Text { x: 830; y: 84; text: "INFO"; color: "#171713"; font.family: Theme.font; font.pixelSize: 64; font.bold: true }
+        Emblem { x: 820; y: 250; width: 92; height: 92; ink: "#171713"; core: Theme.accent; lineWidth: 2.6 }
+        Mark { x: 915; y: 254; width: 84; height: 84; ink: "#171713" }
+    }
+    component DiscArt: Item {
+        property string icon: ""
+        property string title: ""
+        property string sub: ""
+        width: 512; height: 512
+        IconDisc { anchors.fill: parent; path: parent.icon || "AUTO-MAS" }     // 无启动程序时由图标提供器给出档案章占位
+        Column {
+            anchors.horizontalCenter: parent.horizontalCenter
+            y: 352
+            spacing: 4
+            Text { anchors.horizontalCenter: parent.horizontalCenter; text: parent.parent.title; color: Qt.rgba(0.12, 0.12, 0.1, 0.82); font.family: Theme.font; font.pixelSize: 26; font.bold: true }
+            Text { anchors.horizontalCenter: parent.horizontalCenter; text: parent.parent.sub; color: Qt.rgba(0.12, 0.12, 0.1, 0.55); font.family: Theme.font; font.pixelSize: 15 }
+        }
+    }
     Item {
         x: -4000
         width: 1024
-        height: 440
-        Rectangle {
-            id: labelArt
-            width: 1024; height: 440
-            color: "#e6e2d9"
-            Rectangle { x: 12; y: 12; width: 1000; height: 6; color: "#171713" }
-            Rectangle { x: 12; y: 419; width: 1000; height: 3; color: "#171713" }
-            Text { x: 22; y: 30; text: "AUTO-MAS"; color: "#171713"; font.family: Theme.font; font.pixelSize: 81; font.bold: true }
-            Text { x: 25; y: 140; text: root.isQueue ? "QUEUE DISPATCH" : "SCRIPT CUSTODY"; color: "#878476"; font.family: Theme.font; font.pixelSize: 32 }
-            Text { x: 22; y: 230; text: "NO." + String(root.lane * 10 + root.row + 1).padStart(3, "0"); color: "#171713"; font.family: Theme.font; font.pixelSize: 130; font.bold: true }
-            Rectangle { x: 782; y: 32; width: 221; height: 39; color: "#171713"; Text { x: 27; anchors.verticalCenter: parent.verticalCenter; text: "A M / S C"; color: "#eee9de"; font.family: Theme.font; font.pixelSize: 24 } }
-            Text { x: 830; y: 84; text: "INFO"; color: "#171713"; font.family: Theme.font; font.pixelSize: 64; font.bold: true }
-            Emblem { x: 820; y: 250; width: 92; height: 92; ink: "#171713"; core: Theme.accent; lineWidth: 2.6 }
-            Mark { x: 915; y: 254; width: 84; height: 84; ink: "#171713" }
-        }
+        height: 1000
+        LabelArt { id: labelArt; no: root.labelNo }
+        LabelArt { id: outLabelArt; y: 500; no: root.outNo }
     }
     Item {
-        x: -4000
-        y: 600
+        x: -6000
         width: 512
-        height: 512
-        Item {
-            id: discArt
-            width: 512; height: 512
-            IconDisc { anchors.fill: parent; path: root.rowIcon || "AUTO-MAS" }     // 无启动程序时由图标提供器给出档案章占位
-            Column {
-                anchors.horizontalCenter: parent.horizontalCenter
-                y: 352
-                spacing: 4
-                Text {
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    text: root.rowIcon ? root.rowIcon.split(/[\\/]/).pop() : "AUTO-MAS"
-                    color: Qt.rgba(0.12, 0.12, 0.1, 0.82); font.family: Theme.font; font.pixelSize: 26; font.bold: true
-                }
-                Text {
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    text: root.row === 0 ? (root.column ? root.column.name : "") : root.rowName + " · " + (root.column ? root.column.name : "")
-                    color: Qt.rgba(0.12, 0.12, 0.1, 0.55); font.family: Theme.font; font.pixelSize: 15
-                }
-            }
-        }
+        height: 1100
+        DiscArt { id: discArt; icon: root.rowIcon; title: root.discTitle; sub: root.discSub }
+        DiscArt { id: outDiscArt; y: 560; icon: root.outIcon; title: root.outTitle; sub: root.outSub }
     }
 
     // ── 界面（原项目的档案选择版式） ──────────────────────────────────────
+    // 动效时序取自原项目 style.css：整层 .archive-ui 0.8 秒淡入、延迟 0.3 秒；
+    // 眉题 0.7 秒淡入；分隔线自右向左展开 1.3 秒（cubic-bezier(0.22, 1, 0.36, 1)）；
+    // 摘要行 0.7 秒淡入并上移 8px、读取行 0.7 秒淡入，二者延迟 0.4 秒。离开 / 进入读取时按同样的时长反向
+    readonly property var cssEase: [0.25, 0.1, 0.25, 1, 1, 1]
+    readonly property var outExpo: [0.22, 1, 0.36, 1, 1, 1]
     Item {
         anchors.fill: parent
-        opacity: (root.detailOpen ? 0 : 1) * Math.max(0, Math.min(1, (root.fly - 0.5) / 0.6))
+        opacity: root.uiShown ? 1 : 0
         visible: opacity > 0
+        Behavior on opacity { enabled: Theme.richMotion; SequentialAnimation { PauseAnimation { duration: 300 } NumberAnimation { duration: 800; easing.type: Easing.BezierSpline; easing.bezierCurve: root.cssEase } } }
 
         Column {
             x: 970; y: 471
             spacing: 0
             Row {
                 spacing: 16
+                opacity: root.uiShown ? 1 : 0
+                Behavior on opacity { enabled: Theme.richMotion; NumberAnimation { duration: 700; easing.type: Easing.BezierSpline; easing.bezierCurve: root.cssEase } }
                 Text { text: "INTERNAL DATABASE"; color: "#77756d"; font.family: Theme.font; font.pixelSize: 12; font.letterSpacing: 1.3 }
                 Text { text: "／"; color: "#77756d"; font.family: Theme.font; font.pixelSize: 12 }
                 RollText { text: root.column ? root.column.name : ""; dir: root.dir; color: "#77756d"; font.family: Theme.font; font.pixelSize: 12; font.letterSpacing: 1.3 }
@@ -660,12 +802,25 @@ Item {
             Item { width: 1; height: 55 }
             Item {
                 width: 950; height: 1
-                Rectangle { x: 57; width: parent.width - 57; height: 1; color: "#504b41" }
-                Rectangle { x: -4; y: -3; width: 6; height: 6; color: "#282a24" }
+                Rectangle {
+                    x: 57; width: parent.width - 57; height: 1; color: "#504b41"
+                    transform: Scale {
+                        origin.x: 950 - 57
+                        xScale: root.uiShown ? 1 : 0
+                        Behavior on xScale { enabled: Theme.richMotion; NumberAnimation { duration: 1300; easing.type: Easing.BezierSpline; easing.bezierCurve: root.outExpo } }
+                    }
+                }
+                Rectangle { x: -4; y: -3; width: 6; height: 6; color: "#282a24"; opacity: root.uiShown ? 1 : 0 }
             }
             Item { width: 1; height: 22 }
             Item {
                 x: 58; width: 652; height: 22
+                opacity: root.uiShown ? 1 : 0
+                Behavior on opacity { enabled: Theme.richMotion; SequentialAnimation { PauseAnimation { duration: 400 } NumberAnimation { duration: 700; easing.type: Easing.BezierSpline; easing.bezierCurve: root.cssEase } } }
+                transform: Translate {
+                    y: root.uiShown ? 0 : 8
+                    Behavior on y { enabled: Theme.richMotion; SequentialAnimation { PauseAnimation { duration: 400 } NumberAnimation { duration: 700; easing.type: Easing.BezierSpline; easing.bezierCurve: root.cssEase } } }
+                }
                 RollText { text: root.rowName; dir: root.dir; color: Theme.ink; font.family: Theme.font; font.pixelSize: 16 }
                 Text { anchors.right: parent.right; text: root.row === 0 ? (root.isQueue ? "QUEUE CONFIG" : "SCRIPT CONFIG") : (root.isQueue ? "QUEUE ITEM" : "ACCOUNT"); color: "#666257"; font.family: Theme.font; font.pixelSize: 11; font.letterSpacing: 1 }
             }
@@ -673,6 +828,8 @@ Item {
             Row {
                 x: 58
                 spacing: 70
+                opacity: root.uiShown ? 1 : 0
+                Behavior on opacity { enabled: Theme.richMotion; SequentialAnimation { PauseAnimation { duration: 400 } NumberAnimation { duration: 700; easing.type: Easing.BezierSpline; easing.bezierCurve: root.cssEase } } }
                 Text { text: "ACCESS FILE"; color: Theme.ink; font.family: Theme.font; font.pixelSize: 14; font.letterSpacing: 1 }
                 Text { text: "→"; color: Theme.ink; font.pixelSize: 24; anchors.verticalCenter: parent.verticalCenter }
                 MouseArea { x: -10; y: -10; width: 260; height: 50; cursorShape: Qt.PointingHandCursor; onClicked: root.open() }
