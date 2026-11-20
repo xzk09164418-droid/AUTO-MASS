@@ -4,149 +4,557 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>AUTO-MAS 多列档案阵列演示</title>
+<!--
+  多列档案阵列：按 LBEILC/RhineLabUI（MIT，见 assets/RhineLabUI-LICENSE.txt）的实现移植——
+  档案盒模型、阵列间距、长焦镜头、光照 / 雾 / 阴影 / 景深、选中抬起、扩散波浪、空闲呼吸、
+  列与行的阻尼轨道和界面版式均与原项目一致；品牌、档案标签与数据换成 AUTO-MAS 自己的内容，
+  不使用原项目中《明日方舟》相关的标志、名称与原片素材。
+-->
 <link rel="stylesheet" href="../../frontend/public/fonts/misans/misans.css" />
-<script type="importmap">{ "imports": { "three": "/frontend/node_modules/three/build/three.module.js" } }</script>
+<script type="importmap">{ "imports": { "three": "/frontend/node_modules/three/build/three.module.js", "three/addons/": "/frontend/node_modules/three/examples/jsm/" } }</script>
 <style>
-:root {
-  --bg: #e6e3df; --ink: #0b0c0b; --paper: #f6f4f1; --muted: #77756d; --hair: #aaa59a; --accent: #e8701f;
-  --font: 'AUTO-MAS MiSans', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
-}
+:root { font-family: "AUTO-MAS MiSans", "MiSans", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif; color: #080a08; background: #e8e5e1; font-synthesis: none; }
 * { box-sizing: border-box; }
-html, body { margin: 0; height: 100%; background: var(--bg); overflow: hidden; font-family: var(--font); color: var(--ink); }
+html, body { margin: 0; height: 100%; overflow: hidden; background: #eae5e1; }
+button { border: 0; color: inherit; background: none; cursor: pointer; padding: 0; font: inherit; }
+button:focus-visible { outline: 1px solid #9b7247; outline-offset: 4px; }
 #viewport { position: fixed; inset: 0; overflow: clip; }
-#stage { position: absolute; left: 50%; top: 50%; width: 1920px; height: 1080px; overflow: clip; background: radial-gradient(ellipse at 60% 45%, #f1efeb 0, var(--bg) 70%); }
-#gl { position: absolute; inset: 0; width: 1920px; height: 1080px; }
-/* 右侧浅色遮罩：保证信息区可读（随抽出淡出） */
-.veil { position: absolute; inset: 0; z-index: 1; pointer-events: none; background: linear-gradient(90deg, rgba(230,227,223,0) 44%, rgba(234,231,227,.78) 58%, rgba(234,231,227,.9) 100%), linear-gradient(0deg, rgba(234,231,227,.85) 0, rgba(234,231,227,0) 22%); transition: opacity .4s; }
-#stage.detail .veil { opacity: .35; }
-.ui { position: absolute; z-index: 5; }
-/* 滚动文字（与主演示相同的做法） */
-.roll { display: inline-block; position: relative; overflow: hidden; vertical-align: bottom; white-space: nowrap; transition: width .46s cubic-bezier(.2,.8,.2,1); }
+#stage { position: absolute; left: 50%; top: 50%; width: 1920px; height: 1080px; overflow: clip; background: #eae5e1; }
+.three-scene { position: absolute; inset: 0; opacity: 0; transition: opacity .45s; }
+.three-scene.on { opacity: 1; }
+.three-scene canvas { display: block; width: 100%; height: 100%; }
+.scene-atmosphere { position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(180deg, #eae5e1 0%, rgba(234,229,225,.82) 11%, transparent 40%), linear-gradient(0deg, rgba(234,229,225,.94) 0%, transparent 19%), radial-gradient(ellipse at 48% 48%, transparent 35%, rgba(234,229,225,.38) 85%); }
+/* 品牌 */
+.brand { position: absolute; left: 59px; top: 114px; z-index: 5; line-height: 1; user-select: none; width: 270px; white-space: nowrap; }
+.brand h1 { font-size: 44px; letter-spacing: 2.324px; line-height: 48px; margin: 0; font-weight: 750; }
+.brand > div { font-size: 19px; line-height: 23px; letter-spacing: .587px; font-weight: 600; }
+.brand p { margin: 0; font-size: 35px; line-height: 40px; display: flex; gap: 38px; letter-spacing: 1.2px; }
+.brand p b { font-weight: 750; letter-spacing: 3px; }
+.powered { position: absolute; right: 59px; bottom: 108px; font-size: 19px; z-index: 5; display: flex; align-items: center; gap: 5px; line-height: 24px; }
+.powered b { font-weight: 750; }
+.powered i { height: 6px; width: 25px; background: #090a08; display: inline-block; margin-left: 11px; }
+.system-nav { position: absolute; right: 59px; top: 124px; z-index: 6; display: flex; align-items: center; gap: 43px; }
+.system-nav button { font-size: 14px; line-height: 1; min-height: 28px; letter-spacing: .7px; display: flex; align-items: center; gap: 12px; }
+.system-nav button:hover { color: #9b7247; }
+.nav-glyph { position: relative; width: 23px; height: 23px; display: block; font-size: 0; }
+.nav-glyph::before { content: ''; position: absolute; width: 60%; height: 60%; left: 30%; top: 8%; border: 2px solid currentColor; border-radius: 50%; }
+.nav-glyph::after { content: ''; position: absolute; width: 42%; height: 2px; left: 9%; top: 82%; background: currentColor; transform: rotate(-45deg); transform-origin: left center; }
+.key { font-size: 11px; border: 1px solid #a6a49c; display: inline-flex; justify-content: center; align-items: center; min-width: 19px; height: 21px; opacity: .6; margin-left: 6px; }
+.settings-glyph { font-size: 27px; }
+/* 档案选择 */
+.archive-ui { position: absolute; inset: 0; z-index: 4; pointer-events: none; transition: opacity .8s .3s; }
+.archive-ui button { pointer-events: auto; }
+[data-mode="detail"] .archive-ui { opacity: 0; transition-delay: 0s; }
+[data-mode="detail"] .archive-ui button { pointer-events: none; }
+.archive-callout { position: absolute; left: 970px; top: 471px; width: 950px; }
+.eyebrow { font-size: 12px; letter-spacing: 1.3px; margin-bottom: 22px; color: #77756d; }
+.eyebrow > span { margin-left: 16px; }
+.file-title { font-size: 28px; font-weight: 750; display: flex; gap: 10px; align-items: center; letter-spacing: .2px; }
+.file-open { opacity: .5; font-size: 20px; transition: transform .3s, opacity .3s; }
+.file-title:hover .file-open { opacity: 1; transform: translate(3px, -3px); }
+.callout-rule { height: 1px; background: #504b41; margin-left: 57px; margin-top: 55px; position: relative; }
+.callout-rule i { position: absolute; left: -61px; top: -3px; width: 6px; height: 6px; background: #282a24; }
+.file-summary { margin-left: 58px; margin-top: 22px; width: 652px; display: flex; align-items: center; justify-content: space-between; font-size: 16px; }
+.file-summary > span:last-child { font-size: 11px; letter-spacing: 1px; color: #666257; }
+.read-file { display: flex; align-items: center; gap: 70px; margin-left: 58px; margin-top: 58px; font-size: 14px; letter-spacing: 1px; }
+.read-file > span { font-size: 24px; transition: transform .3s; }
+.read-file:hover > span { transform: translateX(9px); }
+.hover-label { position: absolute; left: 60px; bottom: 264px; font-size: 13px; color: #6f675b; letter-spacing: 1px; }
+.archive-counter { position: absolute; bottom: 115px; left: 60px; }
+.tiny-label { font-size: 11px; letter-spacing: 1.7px; }
+.archive-counter > div { font-size: 58px; line-height: 1.1; margin-top: 16px; display: flex; gap: 21px; align-items: baseline; }
+.archive-counter i { font-style: normal; font-weight: 300; font-size: 32px; color: #8f8a80; }
+.count-total { font-size: 22px; color: #726f67; }
+.archive-navigation { position: absolute; left: 504px; bottom: 131px; display: flex; align-items: center; gap: 33px; }
+.archive-navigation > button { width: 46px; height: 46px; font-size: 28px; transition: background .3s; }
+.archive-navigation > button:hover, .column-navigation button:hover { background: #e4d5c1; }
+.file-ticks { display: flex; align-items: center; gap: 12px; }
+.file-ticks button { width: 14px; height: 40px; position: relative; }
+.file-ticks button::before { content: ''; position: absolute; left: 6px; top: 14px; width: 2px; height: 12px; background: #aaa59a; transition: height .4s, background .4s, top .4s; }
+.file-ticks button.selected::before { height: 33px; top: 3px; background: #24261f; }
+.file-ticks button:hover::before { height: 24px; top: 8px; background: #a27849; }
+.column-navigation { position: absolute; left: 1005px; bottom: 131px; display: flex; align-items: center; gap: 24px; }
+.column-navigation button { width: 46px; height: 46px; font-size: 24px; }
+.column-navigation > div { display: grid; gap: 7px; min-width: 140px; }
+.column-navigation > div > span { font-size: 10px; letter-spacing: 1.2px; color: #726f67; }
+.column-navigation strong { font-size: 15px; font-weight: 400; }
+.archive-hint { position: absolute; bottom: 60px; left: 505px; color: #858077; font-size: 10px; letter-spacing: .9px; }
+.archive-hint > span { margin: 0 12px; }
+.archive-hint kbd { font: inherit; }
+.system-footer { position: absolute; bottom: 35px; left: 59px; right: 59px; font-size: 10px; letter-spacing: .9px; display: flex; gap: 44px; color: #78776e; z-index: 5; }
+.system-footer > span { display: flex; align-items: center; gap: 10px; }
+.status-light { width: 5px; height: 5px; background: #777b60; display: inline-block; }
+.system-footer > span:nth-child(2) { margin-left: auto; }
+.system-footer i { font-style: normal; margin: 0 5px; }
+.system-footer button { font-size: 10px; letter-spacing: 1px; }
+/* 档案详情 */
+.detail-ui { position: absolute; inset: 0; pointer-events: none; z-index: 4; }
+.detail-ui[hidden] { display: none; }
+.back-button { position: absolute; left: 59px; top: 289px; pointer-events: auto; display: flex; align-items: center; gap: 20px; font-size: 24px; }
+.back-button span { font-size: 12px; letter-spacing: 1px; }
+.back-button small { font-size: 10px; margin-left: 18px; color: #88877f; border: 1px solid #b8b3a9; padding: 4px; }
+.back-button:hover { color: #946b3c; }
+.object-caption { position: absolute; left: 60px; bottom: 235px; }
+.object-caption > span { font-size: 37px; letter-spacing: -1px; }
+.object-caption > div { font-size: 10px; letter-spacing: 1.8px; margin-top: 7px; color: #76736a; }
+.object-caption > small { font-size: 10px; letter-spacing: 1px; display: block; margin-top: 34px; color: #817b70; }
+.detail-content { position: absolute; left: 1154px; top: 289px; width: 636px; pointer-events: auto; opacity: 0; }
+.detail-kicker { display: flex; justify-content: space-between; align-items: center; font-size: 11px; letter-spacing: 1.4px; }
+.detail-kicker span:last-child { font-size: 9px; color: #77756b; }
+.detail-content h2 { font-size: 40px; line-height: 1.12; letter-spacing: -1.3px; margin: 30px 0 13px; max-width: 620px; }
+.detail-title-cn { font-size: 23px; display: flex; align-items: center; gap: 23px; }
+.detail-title-cn > span { font-size: 11px; color: #77756a; letter-spacing: 1px; }
+.detail-rule { height: 2px; background: #20221d; margin-top: 28px; }
+.metadata { display: grid; grid-template-columns: 1fr 1fr; gap: 25px 42px; margin: 28px 0 34px; }
+.metadata dt { font-size: 9px; letter-spacing: .7px; color: #807b70; }
+.metadata dd { margin: 8px 0 0; font-size: 14px; }
+.metadata dd i { display: inline-block; width: 5px; height: 5px; background: #8b8f75; margin-right: 8px; vertical-align: middle; }
+.detail-tabs { position: relative; display: flex; gap: 34px; border-bottom: 1px solid #bdb8ad; }
+.detail-tabs button { font-size: 10px; color: #989184; position: relative; padding: 0 0 14px; }
+.detail-tabs button span { font-size: 13px; margin-left: 8px; }
+.detail-tabs button.active { color: #191c16; }
+.tab-indicator { position: absolute; bottom: -1px; left: 0; width: 1px; height: 2px; background: #25281e; transform-origin: left center; pointer-events: none; transition: transform 180ms cubic-bezier(.22,1,.36,1); }
+.tab-panel { height: 189px; padding-top: 22px; overflow: hidden; }
+.tab-panel.fade { animation: tabIn 150ms ease-out; }
+@keyframes tabIn { from { opacity: 0; } to { opacity: 1; } }
+.panel-label { font-size: 9px; letter-spacing: 1px; color: #888074; }
+.tab-panel p { font-size: 15px; line-height: 1.95; margin: 14px 0 0; color: #5a584e; text-align: justify; }
+.research-notes { margin: 12px 0 0; padding: 0; list-style: none; }
+.research-notes li { display: flex; gap: 14px; font-size: 13px; line-height: 1.7; margin: 8px 0; color: #5a584e; }
+.research-notes li span { font-size: 10px; color: #a38e72; line-height: 22px; }
+.log-row { display: flex; justify-content: space-between; margin-top: 21px; font-size: 10px; gap: 12px; }
+.log-row b { font-size: 9px; font-weight: 400; color: #7a8163; }
+.detail-actions { display: flex; justify-content: space-between; margin-top: 19px; align-items: center; gap: 30px; }
+.solid-button { background: #252820; color: #f0eee5; height: 46px; flex: 1; font-size: 11px; letter-spacing: 1px; text-align: left; padding: 0 18px; display: flex; align-items: center; justify-content: space-between; transition: background .2s; }
+.solid-button > span { font-size: 11px; color: #bcbfb1; }
+.solid-button:hover { background: #4b4a3b; }
+.export-button { font-size: 11px; letter-spacing: 1px; width: 105px; display: flex; align-items: center; justify-content: space-between; min-height: 46px; }
+.export-button span { font-size: 23px; line-height: 1; }
+.detail-footnote { display: flex; justify-content: space-between; font-size: 8px; letter-spacing: .6px; color: #9a9487; margin-top: 16px; }
+/* 滚动文字（对应原项目的 Rolling Number：460ms，上滚，轻微模糊） */
+.roll { display: inline-block; position: relative; overflow: hidden; vertical-align: bottom; white-space: nowrap; transition: width .46s cubic-bezier(.22,1,.36,1); }
 .roll > span { display: inline-block; }
 .roll > span.out { position: absolute; left: 0; top: 0; }
-.brand { left: 80px; top: 96px; line-height: 1.05; }
-.brand b { display: block; font-size: 52px; letter-spacing: .02em; }
-.brand i { display: block; font-style: normal; font-weight: 700; font-size: 20px; letter-spacing: .02em; }
-.brand span { display: block; font-size: 46px; letter-spacing: .08em; }
-.brand span em { font-style: normal; font-weight: 700; margin-left: 14px; }
-.top-r { right: 80px; top: 108px; display: flex; gap: 40px; align-items: center; font-size: 15px; font-weight: 600; letter-spacing: .08em; }
-.top-r kbd { font: 600 11px var(--font); border: 1px solid var(--hair); padding: 1px 6px; margin-left: 10px; color: var(--muted); }
-/* 右侧档案信息（参考 RhineLabUI 的 FILE NUMBER 区） */
-.info { left: 1010px; top: 470px; width: 900px; }
-.info .path { font-size: 12px; font-weight: 600; letter-spacing: .14em; color: var(--muted); }
-.info .path b { margin: 0 18px; font-weight: 400; }
-.info h1 { margin: 22px 0 0; font-size: 38px; font-weight: 700; letter-spacing: .02em; }
-.info .rule { position: relative; margin-top: 46px; height: 1px; background: rgba(11,12,11,.55); }
-.info .rule::before { content: ''; position: absolute; left: -6px; top: -3px; width: 6px; height: 6px; background: var(--ink); }
-.info .row { display: flex; justify-content: space-between; margin: 26px 0 0 48px; font-size: 18px; font-weight: 600; }
-.info .row small { font-size: 11px; letter-spacing: .14em; color: var(--muted); padding-right: 200px; }
-.info .sub { margin: 10px 0 0 48px; font-size: 14px; color: var(--muted); letter-spacing: .04em; }
-.access { margin: 46px 0 0 48px; display: inline-flex; align-items: center; gap: 120px; font: 600 15px var(--font); letter-spacing: .08em; background: none; border: none; padding: 0; cursor: pointer; color: var(--ink); }
-.access i { font-style: normal; font-size: 24px; transition: transform .2s; }
-.access:hover i { transform: translateX(8px); }
-/* 左下：当前列内序号 */
-.sel { left: 80px; top: 880px; }
-.sel small { display: block; font-size: 12px; font-weight: 600; letter-spacing: .14em; margin-bottom: 18px; }
-.sel .num { font-size: 74px; font-weight: 400; line-height: 1; letter-spacing: .02em; }
-.sel .tot { font-size: 30px; color: var(--muted); margin-left: 34px; }
-.sel .tot b { font-weight: 400; margin-right: 16px; }
-/* 底部中：列内刻度与列切换 */
-.ruler { left: 540px; top: 940px; display: flex; align-items: flex-end; gap: 0; }
-.ruler .arrow { font-size: 28px; padding: 0 22px; cursor: pointer; user-select: none; line-height: 1; }
-.ruler .ticks { display: flex; align-items: flex-end; gap: 22px; height: 30px; padding: 0 8px; }
-.ruler .ticks i { width: 2px; height: 12px; background: var(--hair); transition: height .4s cubic-bezier(.2,.8,.2,1), background .4s; }
-.ruler .ticks i.on { height: 30px; background: var(--ink); }
-.col { left: 1010px; top: 915px; display: flex; align-items: center; gap: 40px; }
-.col .arrow { font-size: 26px; cursor: pointer; user-select: none; }
-.col small { display: block; font-size: 10px; font-weight: 600; letter-spacing: .14em; color: var(--muted); }
-.col div { min-width: 220px; font-size: 15px; font-weight: 600; }
-.hint { left: 540px; top: 1006px; font-size: 10px; letter-spacing: .14em; color: var(--muted); }
-.powered { right: 80px; top: 932px; font-size: 20px; letter-spacing: .02em; display: flex; align-items: center; gap: 16px; }
-.powered::after { content: ''; width: 26px; height: 5px; background: var(--ink); }
-.foot { left: 80px; right: 80px; top: 1028px; display: flex; justify-content: space-between; font-size: 10px; font-weight: 600; letter-spacing: .16em; color: var(--muted); }
-/* 抽出后的档案卡（沿用二级界面的玻璃档案卡样式） */
-#card { right: 80px; top: 150px; width: 760px; height: 760px; padding: 34px 40px; background: linear-gradient(135deg, rgba(255,255,255,.82), rgba(246,244,241,.66)); border: 1px solid rgba(11,12,11,.14); box-shadow: 0 30px 60px -40px rgba(20,20,18,.45); backdrop-filter: blur(8px);
-  opacity: 0; transform: translateX(40px); pointer-events: none; transition: opacity .18s, transform .5s cubic-bezier(.2,.8,.2,1); }
-#card.on { opacity: 1; transform: none; pointer-events: auto; transition-delay: .25s; }
-#card .back { font: 600 13px var(--font); letter-spacing: .1em; background: none; border: none; cursor: pointer; padding: 0; display: flex; align-items: center; gap: 14px; }
-#card .back kbd { font: 600 10px var(--font); border: 1px solid var(--hair); padding: 1px 6px; color: var(--muted); }
-#card .meta { margin-top: 34px; font-size: 12px; font-weight: 700; letter-spacing: .2em; color: var(--muted); }
-#card .meta b { color: var(--accent); margin-right: 14px; }
-#card h2 { margin: 14px 0 4px; font-size: 40px; }
-#card .zh { font-size: 18px; }
-#card .line { margin-top: 22px; height: 2px; background: var(--ink); }
-#card .tabs { display: flex; gap: 30px; margin-top: 26px; border-bottom: 1px solid var(--hair); position: relative; }
-#card .tabs button { font: 600 15px var(--font); background: none; border: none; padding: 8px 0 10px; color: var(--muted); cursor: pointer; }
-#card .tabs button b { font-size: 10px; margin-right: 6px; color: var(--hair); }
-#card .tabs button.on { color: var(--ink); } #card .tabs button.on b { color: var(--accent); }
-#card .tabs .ul { position: absolute; bottom: -1px; height: 2px; background: var(--ink); transition: left .18s cubic-bezier(.2,.8,.2,1), width .18s cubic-bezier(.2,.8,.2,1); }
-#card .kv { display: grid; grid-template-columns: 170px 1fr; margin-top: 18px; }
-#card .kv div { padding: 12px 4px; border-bottom: 1px solid rgba(170,165,154,.6); font-size: 15px; }
-#card .kv .k { color: var(--muted); font-size: 14px; }
-#card .acts { position: absolute; left: 40px; bottom: 30px; display: flex; gap: 10px; }
-#card .acts button { font: 700 14px var(--font); letter-spacing: .12em; padding: 10px 22px; border: 1.5px solid var(--ink); background: transparent; cursor: pointer; }
-#card .acts button:first-child { background: var(--ink); color: var(--paper); }
-#stage.detail .info, #stage.detail .col, #stage.detail .ruler, #stage.detail .sel, #stage.detail .hint { opacity: 0; pointer-events: none; }
-.info, .col, .ruler, .sel, .hint { transition: opacity .25s; }
+.loading { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 12px; letter-spacing: 2px; color: #77756d; z-index: 9; background: #eae5e1; transition: opacity .6s; }
+.loading.done { opacity: 0; pointer-events: none; }
 </style>
 </head>
 <body>
-<div id="viewport"><div id="stage">
-  <canvas id="gl" width="1920" height="1080"></canvas>
-  <div class="veil"></div>
-  <div class="ui brand"><b>AUTO-MAS</b><i>SCRIPT CUSTODY INFORMATION</i><span>ANALYSIS<em>OS</em></span></div>
-  <div class="ui top-r"><span>⌕&nbsp; ARCHIVE INDEX<kbd>/</kbd></span><span>+ &nbsp;SAVED&nbsp; 00</span><span>◷</span></div>
-
-  <div class="ui info">
-    <div class="path">INTERNAL DATABASE<b>/</b><span id="i-col"></span></div>
-    <h1>FILE NUMBER: <span id="i-num"></span></h1>
-    <div class="rule"></div>
-    <div class="row"><span id="i-name"></span><small>REFERENCE AREA</small></div>
-    <div class="sub" id="i-sub"></div>
-    <button class="access" id="access" type="button">ACCESS FILE <i>→</i></button>
-  </div>
-
-  <div class="ui sel"><small>ARCHIVE / SELECT</small><span class="num" id="s-num"></span><span class="tot"><b>/</b><span id="s-tot"></span></span></div>
-  <div class="ui ruler"><span class="arrow" id="up">↑</span><span class="ticks" id="ticks"></span><span class="arrow" id="down">↓</span></div>
-  <div class="ui col"><span class="arrow" id="left">←</span><div><small id="c-idx"></small><span id="c-name"></span></div><span class="arrow" id="right">→</span></div>
-  <div class="ui hint">← → 切换脚本列 &nbsp; / &nbsp; ↑ ↓ 或滚轮 前后账号 &nbsp; / &nbsp; ENTER 读取 &nbsp; / &nbsp; ESC 返回</div>
-  <div class="ui powered">POWERED BY <b>AUTO-MAS</b></div>
-  <div class="ui foot"><span>■ &nbsp; SESSION AUTHORIZED</span><span><span id="clock"></span> &nbsp; / &nbsp; REINITIALIZE ↗</span></div>
-
-  <div class="ui" id="card">
-    <button class="back" id="back" type="button">← &nbsp;ARCHIVE OVERVIEW <kbd>ESC</kbd></button>
-    <div class="meta"><b id="d-code"></b><span id="d-path"></span></div>
-    <h2 id="d-name"></h2>
-    <div class="zh" id="d-zh"></div>
-    <div class="line"></div>
-    <div class="tabs" id="d-tabs"><button class="on" type="button"><b>01</b>账号</button><button type="button"><b>02</b>脚本</button><button type="button"><b>03</b>记录</button><i class="ul"></i></div>
-    <div class="kv" id="d-kv"></div>
-    <div class="acts"><button type="button">保存</button><button type="button">立即运行</button></div>
-  </div>
+<div id="viewport"><div id="stage" data-mode="archive">
+  <div id="scene" class="three-scene"></div>
+  <div class="scene-atmosphere"></div>
+  <header class="brand"><h1>AUTO-MAS</h1><div>SCRIPT CUSTODY INFORMATION</div><p><span>ANALYSIS</span> <b>OS</b></p></header>
+  <nav class="system-nav" aria-label="系统导航">
+    <button type="button"><span class="nav-glyph">⌕</span> ARCHIVE INDEX <span class="key">/</span></button>
+    <button type="button">＋ SAVED <span>00</span></button>
+    <button type="button" aria-label="系统设置"><span class="settings-glyph">◷</span></button>
+  </nav>
+  <section class="archive-ui" aria-label="档案选择">
+    <div class="archive-callout">
+      <div class="eyebrow">INTERNAL DATABASE <span>／</span> <span id="archive-category"></span></div>
+      <button class="file-title" type="button" data-action="open">FILE NUMBER: <span id="selected-id"></span><span class="file-open">↗</span></button>
+      <div class="callout-rule"><i></i></div>
+      <div class="file-summary"><span id="selected-title"></span><span id="selected-clearance"></span></div>
+      <button class="read-file" type="button" data-action="open">ACCESS FILE <span>→</span></button>
+    </div>
+    <div id="hover-label" class="hover-label" hidden></div>
+    <div class="archive-counter"><span class="tiny-label">ARCHIVE / SELECT</span><div><span id="selected-number"></span><i>/</i><span class="count-total" id="count-total"></span></div></div>
+    <div class="archive-navigation"><button type="button" data-action="prev" aria-label="上一个档案">↑</button><div id="file-ticks" class="file-ticks"></div><button type="button" data-action="next" aria-label="下一个档案">↓</button></div>
+    <div class="column-navigation"><button type="button" data-action="column-prev" aria-label="上一列">←</button><div><span id="column-number"></span><strong id="column-name"></strong></div><button type="button" data-action="column-next" aria-label="下一列">→</button></div>
+    <div class="archive-hint"><kbd>←</kbd> <kbd>→</kbd> 切换列 <span>／</span> <kbd>↑</kbd> <kbd>↓</kbd> 前后档案 <span>／</span> <kbd>ENTER</kbd> 读取</div>
+  </section>
+  <section id="detail-ui" class="detail-ui" aria-label="档案内容" hidden>
+    <button class="back-button" type="button" data-action="back">← <span>ARCHIVE OVERVIEW</span><small>ESC</small></button>
+    <div class="object-caption"><span id="object-id"></span><div>INTERNAL DATABASE</div><small>托管管理 · 通用脚本</small></div>
+    <article id="detail-content" class="detail-content"></article>
+  </section>
+  <div class="powered">POWERED BY <b>AUTO-MAS</b><i></i></div>
+  <footer class="system-footer"><span><i class="status-light"></i> SESSION AUTHORIZED</span><span>AUTO-MAS <i>／</i> <span id="clock">00:00:00</span></span><button type="button">REINITIALIZE ↗</button></footer>
+  <div id="loading" class="loading">CONNECTING TO INTERNAL DATABASE</div>
 </div></div>
 
 <script type="module">
 import * as THREE from 'three'
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js'
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js'
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js'
+import { BokehPass } from 'three/addons/postprocessing/BokehPass.js'
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js'
 
 const stage = document.getElementById('stage')
+const $ = id => document.getElementById(id)
 const fit = () => { const s = Math.min(innerWidth / 1920, innerHeight / 1080); stage.style.transform = `translate(-50%, -50%) scale(${s})` }
 addEventListener('resize', fit); fit()
 const REDUCE = matchMedia('(prefers-reduced-motion: reduce)').matches
-const $ = id => document.getElementById(id)
 
-// ── 演示数据：列 = 通用脚本，列内 = 该脚本下的账号（第 1 张为脚本本身） ──
-const COLS = [
-  { name: 'BGI 每日', en: 'GENERAL · RDP', accounts: ['主号', '小号', '测试号'] },
-  { name: '鸣潮日常', en: 'GENERAL', accounts: ['鸣潮主号'] },
-  { name: '星铁清体力', en: 'GENERAL', accounts: ['星铁', '星铁小号'] },
-  { name: '绝区零一条龙', en: 'GENERAL', accounts: ['主号', '小号', '活动号'] },
-  { name: 'MaaEnd 每日', en: 'GENERAL', accounts: ['博士'] },
-  { name: '米游社签到', en: 'GENERAL', accounts: ['用户 1', '用户 2'] },
-].map(c => ({ ...c, items: [{ kind: 'script', name: c.name }, ...c.accounts.map(a => ({ kind: 'user', name: a }))] }))
-const C = COLS.length
-const mod = (a, n) => ((a % n) + n) % n
+// ── 数据：五列 = 五个通用脚本；列内 = 脚本配置 + 各账号（演示数据） ──
+const COLUMNS = [
+  { name: 'BGI 每日', en: 'BETTERGI DAILY', accounts: ['主号', '小号', '测试号', '活动号', '备用号', '双开号', '旧号'] },
+  { name: '鸣潮日常', en: 'WUTHERING DAILY', accounts: ['鸣潮主号', '鸣潮小号', '声骸号', '体力号', '备用号', '旧号', '活动号'] },
+  { name: '星铁清体力', en: 'STAR RAIL STAMINA', accounts: ['星铁', '星铁小号', '模拟宇宙', '忘却之庭', '备用号', '旧号', '活动号'] },
+  { name: '绝区零一条龙', en: 'ZZZ ONE-DRAGON', accounts: ['主号', '小号', '活动号', '式舆防卫', '备用号', '旧号', '双开号'] },
+  { name: 'MaaEnd 每日', en: 'MAAEND DAILY', accounts: ['博士', '博士 B', '基建号', '剿灭号', '备用号', '旧号', '活动号'] },
+]
+const records = []
+COLUMNS.forEach((col, lane) => {
+  ;[null, ...col.accounts].forEach((acc, k) => {
+    records.push({
+      id: 'X-' + String(records.length + 1).padStart(3, '0'), lane, k,
+      title: acc || col.name, en: acc ? col.en + ' / ' + String(k).padStart(2, '0') : col.en,
+      category: col.name, kind: acc ? '账号' : '脚本配置',
+      clearance: acc ? (k % 4 === 3 ? 'DISABLED' : 'ACTIVE') : 'SCRIPT CONFIG',
+      last: acc ? ['今天 06:12', '昨天 18:40', '11-18', '—'][k % 4] : '—',
+      remained: acc ? ['永久', '30 天', '12 天', '永久'][k % 4] : '—',
+      base: acc ? ['独立', '共享', '原生', '独立'][k % 4] : '—',
+    })
+  })
+})
+const columnFiles = lane => records.map((r, i) => ({ r, i })).filter(x => x.r.lane === lane).map(x => x.i)
 
-// ── 滚动文字 ──
+// ── 原项目的运动函数（motion.ts） ──
+const smooth = t => { t = Math.max(0, Math.min(1, t)); return t * t * t * (10 + t * (-15 + 6 * t)) }
+const ease = t => { t = Math.max(0, Math.min(1, t)); return t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2 }
+const bell = (x, w) => Math.exp(-0.5 * (x / w) ** 2)
+function settlingWave(distance, time) {
+  const age = time - 25.05 - Math.abs(distance) * 0.065
+  const envelope = Math.max(-0.42, 2.15 - 0.17 * (Math.sqrt(distance * distance + 1) - 1))
+  const rise = smooth(age / 0.62)
+  const ring = age > 0 ? Math.sin(age * 5.1) * Math.exp(-age * 1.3) : 0
+  return envelope * (rise + 0.18 * ring * smooth(age / 0.16))
+}
+function baselineSelectionWave(distance, age) {
+  if (age < 0 || age > 3.2) return 0
+  return 0.8 * smooth(age / 0.2) * Math.exp(-age * 1.15) * Math.cos((distance - age * 8) * 0.58) * bell(distance - age * 8, 3.4)
+}
+const columnStrength = (lane, focus) => 0.25 + 0.75 * bell(lane - focus, 0.55)
+const idleWave = (row, lane, time) => 0.075 * Math.sin((time * Math.PI * 2) / 8 + row * 0.3 - lane * 0.45) + 0.027 * Math.sin((time * Math.PI * 2) / 13 - row * 0.17 + lane * 0.3)
+function damp(s, target, rate, dt) {
+  const delta = s.value - target, impulse = s.velocity + rate * delta, decay = Math.exp(-rate * dt)
+  s.value = target + (delta + impulse * dt) * decay
+  s.velocity = (s.velocity - rate * impulse * dt) * decay
+}
+const INSPECTION_LIFT = 4.05
+const COLUMN_SPACING = 5.2, ROW_SPACING = 0.62
+const wrap = (v, n) => ((v % n) + n) % n
+const fileAtCell = ({ lane, row }) => { const f = columnFiles(wrap(lane, COLUMNS.length)); return f[wrap(row - 12, f.length)] }
+const cellPosition = c => new THREE.Vector3((c.lane - 2) * COLUMN_SPACING, -4.6, (c.row - 15.5) * ROW_SPACING)
+
+// ── 渲染器、灯光、雾、地面（archive-lighting.ts / scene.ts，baseline 配置） ──
+const container = $('scene')
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: 'high-performance' })
+const PR = Math.min(devicePixelRatio, 1.5)
+renderer.setPixelRatio(PR)
+renderer.setSize(1920, 1080, false)
+renderer.shadowMap.enabled = true
+renderer.shadowMap.type = THREE.PCFSoftShadowMap
+renderer.toneMapping = THREE.ACESFilmicToneMapping
+renderer.toneMappingExposure = 1.05
+container.appendChild(renderer.domElement)
+const scene = new THREE.Scene()
+scene.background = new THREE.Color('#eae5e1')
+scene.fog = new THREE.Fog('#eae5e1', 22, 47)
+const pmrem = new THREE.PMREMGenerator(renderer)
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture
+scene.environmentIntensity = 0.48
+scene.add(new THREE.HemisphereLight('#fffaf5', '#b4a18c', 0.65))
+const key = new THREE.DirectionalLight('#fff7ed', 1.4)
+key.position.set(-6, 14, -5)
+const fill = new THREE.DirectionalLight('#ffffff', 0.6)
+fill.position.set(7, 8, -10)
+scene.add(key, fill)
+key.castShadow = true
+Object.assign(key.shadow.camera, { left: -16, right: 16, top: 15, bottom: -15, near: 0.1, far: 45 })
+key.shadow.mapSize.set(2048, 2048)
+key.shadow.normalBias = 0.035
+key.shadow.bias = -0.0003
+key.shadow.radius = 4
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(200, 200), new THREE.MeshStandardMaterial({ color: '#d8c9b9', roughness: 0.95 }))
+floor.rotation.x = -Math.PI / 2
+floor.position.y = -4.63
+floor.receiveShadow = true
+scene.add(floor)
+const camera = new THREE.PerspectiveCamera(6.15, 16 / 9, 5, 300)
+camera.position.set(-62.26, 35.98, 43.28)
+const cameraAim = new THREE.Vector3(-0.5, 1.1, 0.4)
+camera.lookAt(cameraAim)
+const composer = new EffectComposer(renderer)
+composer.setPixelRatio(PR)
+composer.setSize(1920, 1080)
+composer.addPass(new RenderPass(scene, camera))
+const bokeh = new BokehPass(scene, camera, { focus: 25, aperture: 0.0003, maxblur: 0.011 })
+composer.addPass(bokeh)
+composer.addPass(new OutputPass())
+
+// ── 档案标签：版式与原项目相同，内容换成 AUTO-MAS（标志为 AUTO-MAS 档案章 + 圆环标志） ──
+const labelCanvas = document.createElement('canvas')
+labelCanvas.width = 1024; labelCanvas.height = 440
+const labelTexture = new THREE.CanvasTexture(labelCanvas)
+labelTexture.colorSpace = THREE.SRGBColorSpace
+labelTexture.anisotropy = renderer.capabilities.getMaxAnisotropy()
+const labelMark = new Image()
+labelMark.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 92 40" color="#171713"><g fill="none" stroke="currentColor"><path d="M9 2H38V26M26 38H2V9L9 2" stroke-width="2.6"/><path d="M10 31 20 9 30 31M14.5 23H25.5" stroke-width="3.25"/></g><rect x="31" y="31" width="7" height="7" fill="#e8701f"/><g fill="none" stroke="currentColor" stroke-width="2.6"><circle cx="70" cy="20" r="15"/><path d="M58 32 82 8"/></g><circle cx="70" cy="20" r="5" fill="#e8701f"/></svg>')
+const F = '"AUTO-MAS MiSans", MiSans, sans-serif'
+function drawLabel(index) {
+  const c = labelCanvas.getContext('2d')
+  c.fillStyle = '#e6e2d9'; c.fillRect(0, 0, 1024, 440)
+  c.fillStyle = '#171713'; c.fillRect(12, 12, 1000, 6); c.fillRect(12, 419, 1000, 3)
+  c.font = `bold 81px ${F}`; c.fillText('AUTO-MAS', 22, 116)
+  c.font = `32px ${F}`; c.fillStyle = '#878476'; c.fillText('SCRIPT CUSTODY', 25, 174)
+  c.fillStyle = '#171713'; c.font = `bold 130px ${F}`
+  c.fillText('NO.' + String(index + 1).padStart(3, '0'), 22, 360)
+  c.fillRect(782, 32, 221, 39)
+  c.fillStyle = '#eee9de'; c.font = `24px ${F}`; c.fillText('A M / S C', 809, 61)
+  c.fillStyle = '#171713'; c.font = `bold 64px ${F}`; c.fillText('INFO', 830, 143)
+  if (labelMark.complete) c.drawImage(labelMark, 795, 242, 210, 92)
+  labelTexture.needsUpdate = true
+}
+
+// ── 模型：阵列用实例化的外壳 / 边 / 紧固件 / 索引 / 漫射层，选中的那一份用完整材质 ──
+const model = new THREE.Group()
+const instances = []
+const palettes = new Map()
+const MAX = 7 * 40
+let labelMesh = null
+async function load() {
+  await labelMark.decode().catch(() => {})
+  const gltf = await new GLTFLoader().loadAsync('assets/archive-cassette.glb')
+  gltf.scene.updateMatrixWorld(true)
+  const meshes = []
+  gltf.scene.traverse(o => { if (o.isMesh) meshes.push(o) })
+  for (const mesh of meshes) {
+    const geom = mesh.geometry.clone().applyMatrix4(mesh.matrixWorld)
+    const name = mesh.material.name.replace(/\.\d+$/, '')
+    const mat = mesh.material.clone()
+    mat.envMapIntensity = 0.6
+    if (name === 'Frosted_Polymer') { mat.color.set('#fffdfa'); mat.transmission = 0.9; mat.thickness = 0.12; mat.roughness = 0.21; mat.ior = 1.46; mat.attenuationColor = new THREE.Color('#eee6df'); mat.attenuationDistance = 2 }
+    if (name === 'Internal_Ceramic') { mat.color.set('#c7beb6'); mat.roughness = 0.6 }
+    if (name === 'Printed_Label') mat.color.set('#eae5dc')
+    if (name === 'Ivory_Edges') { mat.color.set('#f0e7df'); mat.roughness = 0.31; mat.transmission = 0.65; mat.thickness = 0.04 }
+    if (name === 'Optical_Diffuser') { mat.color.set('#e2dad4'); mat.transmission = 0; mat.roughness = 0.7 }
+    if (name === 'Subsurface_Optics') { mat.color.set('#b9aba1'); mat.roughness = 0.48; mat.metalness = 0.05 }
+    if (name === 'Optical_Edges') { mat.transmission = 0; mat.color.set('#d4c7be'); mat.roughness = 0.26; mat.metalness = 0.08 }
+    const optics = { Optical_Glass_Body: ['#929894', .38, .27], Optical_Glass_Roof: ['#929b94', .34, .42], Optical_Glass_Edge: ['#edf0e7', .19, .9], Optical_Bridge_Glass: ['#a0aca2', .32, .36] }[name]
+    if (optics) { mat.color.set(optics[0]); mat.roughness = optics[1]; mat.transparent = true; mat.opacity = optics[2]; mat.transmission = 0; mat.depthWrite = false }
+    if (name === 'Carbon_Ink') continue
+    const sel = new THREE.Mesh(geom, mat)
+    sel.userData.surface = name
+    sel.castShadow = name === 'Optical_Diffuser'
+    sel.receiveShadow = true
+    model.add(sel)
+    if (!['Frosted_Polymer', 'Ivory_Edges', 'Titanium_Fasteners', 'Index_Inlay', 'Optical_Diffuser'].includes(name)) { palettes.set(name, { high: mat }); continue }
+    const arrayMat = mat.clone()
+    if (name === 'Frosted_Polymer') {
+      arrayMat.transmission = 0.78
+      arrayMat.transparent = false
+      arrayMat.color.set('#fff7ed')
+      arrayMat.onBeforeCompile = shader => {
+        shader.vertexShader = 'varying float vPanelHeight;\n' + shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvPanelHeight = position.y / 3.7;')
+        shader.fragmentShader = 'varying float vPanelHeight;\n' + shader.fragmentShader.replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb *= mix(vec3(0.40, 0.30, 0.20), vec3(1.0, 0.98, 0.94), smoothstep(0.1, 1.0, vPanelHeight));')
+      }
+      arrayMat.roughness = 0.28
+      arrayMat.clearcoat = 0.3
+      arrayMat.clearcoatRoughness = 0.25
+    }
+    if (name === 'Optical_Diffuser') arrayMat.color.set('#806447')
+    if (name === 'Ivory_Edges') { arrayMat.transmission = 0; arrayMat.color.set('#fff5e9'); arrayMat.roughness = 0.38 }
+    if (name === 'Index_Inlay') { arrayMat.color.set('#e4d6c5'); arrayMat.metalness = 0.05 }
+    palettes.set(name, { high: mat, low: arrayMat })
+    const inst = new THREE.InstancedMesh(geom, arrayMat, MAX)
+    inst.instanceMatrix.setUsage(THREE.DynamicDrawUsage)
+    inst.castShadow = name === 'Optical_Diffuser'
+    inst.receiveShadow = true
+    inst.frustumCulled = false
+    instances.push(inst)
+    scene.add(inst)
+  }
+  labelMesh = new THREE.Mesh(new THREE.PlaneGeometry(0.99, 0.46), new THREE.MeshBasicMaterial({ map: labelTexture, toneMapped: false, transparent: true, depthWrite: false }))
+  labelMesh.position.set(-1.36, 3.04, 0.255)
+  model.add(labelMesh)
+  scene.add(model)
+}
+// 选中档案的外观：外壳、边等在阵列材质与完整材质之间插值；内部结构随抬起渐显
+function applyAppearance(q) {
+  for (const child of model.children) {
+    if (child === labelMesh) { child.material.opacity = q; continue }
+    const p = palettes.get(child.userData.surface)
+    if (!p) continue
+    if (!p.low) {
+      const m = child.material
+      if (m.userData.base === undefined) { m.userData.base = m.transparent ? m.opacity : 1; m.userData.baseTransparent = m.transparent }
+      // 渐显期间半透明；抬起完成后恢复为不透明，玻璃的透射才能折射出内部结构
+      const done = q > 0.995
+      const wantTransparent = done ? m.userData.baseTransparent : true
+      if (m.transparent !== wantTransparent) { m.transparent = wantTransparent; m.needsUpdate = true }
+      m.opacity = done ? m.userData.base : m.userData.base * q
+      child.visible = q > 0.02
+      continue
+    }
+    if (!child.userData.mixed) { child.material = p.high.clone(); child.userData.mixed = true }
+    const m = child.material
+    m.color.copy(p.low.color).lerp(p.high.color, q)
+    m.roughness = THREE.MathUtils.lerp(p.low.roughness, p.high.roughness, q)
+    m.transmission = THREE.MathUtils.lerp(p.low.transmission ?? 0, p.high.transmission ?? 0, q)
+  }
+}
+
+// 解密：玻璃从磨砂过渡到清晰，露出内部双环结构（数值取自原项目 CardAppearance.setClarity）
+let clarity = 0
+function applyClarity(c) {
+  for (const child of model.children) {
+    if (child.userData.surface !== 'Frosted_Polymer' || !child.userData.mixed) continue
+    const p = palettes.get('Frosted_Polymer'), m = child.material, q = ease(lift.value / 0.4)
+    const base = k => THREE.MathUtils.lerp(p.low[k] ?? p.high[k], p.high[k], q)
+    m.thickness = THREE.MathUtils.lerp(base('thickness'), 0.018, c)
+    m.transmission = THREE.MathUtils.lerp(base('transmission'), 0.985, c)
+    m.attenuationDistance = THREE.MathUtils.lerp(base('attenuationDistance'), 8, c)
+    m.roughness = THREE.MathUtils.lerp(m.roughness, 0.025, c)
+  }
+}
+
+// ── 状态 ──
+let selected = fileAtCell({ lane: 2, row: 12 })
+let selectedCell = { lane: 2, row: 12 }
+const laneMemory = new Map()          // 每列记住上次的行
+const lift = { value: 0, velocity: 0 }, rail = { value: 0, velocity: 0 }, shoulder = { value: 12, velocity: 0 }
+const laneFocus = { value: 2, velocity: 0 }, columnCamera = { value: 0, velocity: 0 }
+let pulses = [], detail = 0, targetDetail = 0, lastInteraction = 0, idleGain = 0, pulseGain = 1, clock = 0
+let hoverCell = null
+const hoverLifts = new Map()
+const dummy = new THREE.Object3D()
+let drawnCells = []
+const cellKey = c => c.lane + ':' + c.row
+
+function select(navigation) {
+  lastInteraction = clock
+  const prev = { ...selectedCell }
+  if (navigation.axis === 'row') selectedCell = { lane: selectedCell.lane, row: selectedCell.row + navigation.direction }
+  else if (navigation.axis === 'lane') {
+    laneMemory.set(wrap(selectedCell.lane, COLUMNS.length), selectedCell.row)
+    const lane = selectedCell.lane + navigation.direction
+    const remembered = laneMemory.get(wrap(lane, COLUMNS.length))
+    selectedCell = { lane, row: remembered ?? selectedCell.row }
+  } else selectedCell = { ...navigation.cell }
+  if (prev.lane === selectedCell.lane && prev.row === selectedCell.row) return
+  selected = fileAtCell(selectedCell)
+  lift.value = 0; lift.velocity = 0
+  pulses.push({ ...selectedCell, time: clock }); pulses = pulses.slice(-6)
+  drawLabel(selected)
+  updateText(navigation.direction || 1)
+  wake()
+}
+
+// ── 每帧 ──
+const VIEW_SPAN = 7.33, ARRAY_DISTANCE = 140, DETAIL_DISTANCE = 72
+const yaw = THREE.MathUtils.degToRad(59), elevation = THREE.MathUtils.degToRad(19)
+const baseDirection = new THREE.Vector3(-Math.sin(yaw) * Math.cos(elevation), Math.sin(elevation), Math.cos(yaw) * Math.cos(elevation))
+const arrayAim = new THREE.Vector3(-1.091, -0.045, 0.481)
+let last = 0
+function update(time) {
+  const dt = Math.min(0.05, last ? time - last : 0.016)
+  last = time; clock = time
+  const hoverKey = hoverCell ? cellKey(hoverCell) : null
+  if (hoverKey && !hoverLifts.has(hoverKey)) hoverLifts.set(hoverKey, 0)
+  for (const [k, v] of hoverLifts) {
+    const t = k === hoverKey ? 0.28 : 0, n = THREE.MathUtils.lerp(v, t, 1 - Math.exp(-dt * 14))
+    if (t === 0 && n < 0.0001) hoverLifts.delete(k); else hoverLifts.set(k, n)
+  }
+  const hoverLift = c => hoverLifts.get(cellKey(c)) ?? 0
+  const chosen = cellPosition(selectedCell)
+  damp(shoulder, selectedCell.row, 5, dt)
+  damp(laneFocus, selectedCell.lane, 4, dt)
+  damp(columnCamera, chosen.x, 3.7, dt)
+  damp(rail, -2.17 - chosen.z, 3.7, dt)
+  const trackX = columnCamera.value
+  pulses = pulses.filter(p => time - p.time < 3.2)
+  const idle = !REDUCE && !targetDetail && detail < 0.01 && time - lastInteraction > 2.5
+  idleGain = THREE.MathUtils.lerp(idleGain, idle ? 1 : 0, 1 - Math.exp(-dt * (idle ? 0.8 : 4)))
+  pulseGain = THREE.MathUtils.lerp(pulseGain, targetDetail ? 0 : 1, 1 - Math.exp(-dt * 8))
+  const field = (row, lane) => {
+    let ripple = 0
+    if (!REDUCE) for (const p of pulses) ripple += baselineSelectionWave(Math.hypot(row - p.row, (lane - p.lane) * 2.2), time - p.time)
+    return settlingWave(row - shoulder.value, 26.56) * columnStrength(lane, laneFocus.value) + idleWave(row, lane, time) * idleGain + THREE.MathUtils.clamp(ripple, -0.6, 0.6) * pulseGain
+  }
+  damp(lift, targetDetail ? INSPECTION_LIFT : 0.4, REDUCE ? 35 : 4.2, dt)
+  const cameraTarget = targetDetail ? ease((lift.value - 0.8) / 2.4) : ease((lift.value - 0.4) / (INSPECTION_LIFT - 0.4))
+  detail = THREE.MathUtils.lerp(detail, cameraTarget, 1 - Math.exp(-dt * (REDUCE ? 35 : 2.8)))
+  applyAppearance(ease(lift.value / 0.4))
+  // 抬到位、镜头就位后开始解密（约 1.6 秒）；返回阵列时迅速恢复磨砂
+  const clearTarget = targetDetail && detail > 0.78 && lift.value > 3.3 ? 1 : 0
+  clarity += clearTarget ? Math.min(1 - clarity, dt / 1.6) : -Math.min(clarity, dt * 4)
+  applyClarity(ease(clarity))
+  model.position.set(chosen.x - trackX, chosen.y + field(selectedCell.row, selectedCell.lane) + lift.value + hoverLift(selectedCell), chosen.z + rail.value)
+  model.rotation.set((field(selectedCell.row + .5, selectedCell.lane) - field(selectedCell.row - .5, selectedCell.lane)) * 0.024 * (1 - detail) * (1 - ease(lift.value / 0.4)), 0, 0)
+
+  // 镜头：长焦，阵列取景 140 单位外；读取时拉近到 72，档案放到画面左侧
+  const viewDirection = baseDirection.clone().lerp(new THREE.Vector3(-0.277, 0.238, 0.931), detail).normalize()
+  const distance = THREE.MathUtils.lerp(ARRAY_DISTANCE, DETAIL_DISTANCE, detail)
+  const span = VIEW_SPAN + (5.9 - VIEW_SPAN) * detail
+  const right = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), viewDirection).normalize()
+  const up = new THREE.Vector3().crossVectors(viewDirection, right).normalize()
+  const pixelScale = 1080 / span
+  const detailAim = model.position.clone().add(new THREE.Vector3(0, 1.85, 0))
+  detailAim.addScaledVector(right, (0.5 - 550 / 1920) * 1920 / pixelScale)
+  detailAim.addScaledVector(up, (560 / 1080 - 0.5) * 1080 / pixelScale)
+  const aim = arrayAim.clone().lerp(detailAim, detail)
+  const camPos = aim.clone().addScaledVector(viewDirection, distance)
+  const blend = 1 - Math.exp(-dt * 5)
+  camera.position.lerp(camPos, blend)
+  cameraAim.lerp(aim, blend)
+  camera.lookAt(cameraAim)
+  camera.fov = THREE.MathUtils.lerp(camera.fov, THREE.MathUtils.radToDeg(2 * Math.atan(span / (2 * distance))), blend)
+  const rendered = camera.position.distanceTo(cameraAim)
+  scene.fog.near = rendered + THREE.MathUtils.lerp(5, -1, detail)
+  scene.fog.far = rendered + THREE.MathUtils.lerp(25, 12, detail)
+  camera.updateProjectionMatrix()
+  camera.updateMatrixWorld()
+
+  // 阵列实例：当前列左右各 3 列、当前行前后 18 行；数据按周期取模，首尾自然衔接
+  drawnCells = []
+  let i = 0
+  for (let lane = selectedCell.lane - 3; lane <= selectedCell.lane + 3; lane++) {
+    for (let row = selectedCell.row - 18; row <= selectedCell.row + 18; row++) {
+      if (lane === selectedCell.lane && row === selectedCell.row) continue
+      if (i >= MAX) break
+      const c = { lane, row }
+      const x = (lane - 2) * COLUMN_SPACING - trackX
+      const y = -4.6 + field(row, lane) + hoverLift(c)
+      const z = (row - 15.5) * ROW_SPACING + rail.value
+      if (Math.abs(x) > 19 || z < -16 || z > 14) continue
+      const slope = field(row + .5, lane) - field(row - .5, lane)
+      dummy.position.set(x, y, z)
+      dummy.rotation.set(slope * 0.024 * (1 - detail), 0, 0)
+      dummy.updateMatrix()
+      for (const inst of instances) inst.setMatrixAt(i, dummy.matrix)
+      drawnCells.push(c)
+      i++
+    }
+  }
+  for (const inst of instances) { inst.count = i; inst.instanceMatrix.needsUpdate = true }
+  if (instances[0]) instances[0].computeBoundingSphere()
+
+  // 景深焦点跟随选中档案
+  const focal = model.position.clone().add(new THREE.Vector3(0, 2, 0)).applyMatrix4(camera.matrixWorldInverse)
+  bokeh.uniforms.focus.value = -focal.z
+  bokeh.uniforms.aperture.value = THREE.MathUtils.lerp(0.0003, 0.0008, detail)
+  key.shadow.needsUpdate = true
+  composer.render()
+
+  // 详情正文随镜头进度显现
+  $('detail-content').style.opacity = String(THREE.MathUtils.clamp((detail - 0.55) / 0.35, 0, 1))
+  return (clearTarget ? clarity < 1 : clarity > 0) || Math.abs(lift.velocity) > 1e-4 || Math.abs(detail - cameraTarget) > 1e-3 || pulses.length > 0 || Math.abs(rail.velocity) > 1e-4 || Math.abs(columnCamera.velocity) > 1e-4 || hoverLifts.size > 0 || idleGain > 0.001 || idle
+}
+
+// ── 按需绘制（空闲呼吸期间保持逐帧） ──
+let running = false
+function tick(t) {
+  if (update(t / 1000)) requestAnimationFrame(tick)
+  else { running = false; last = 0 }
+}
+function wake() { if (!running) { running = true; requestAnimationFrame(tick) } }
+
+// ── 文字（滚动） ──
 function roll(el, text, dir = 1) {
   text = String(text)
   if (el.dataset.v === text) return
@@ -156,215 +564,152 @@ function roll(el, text, dir = 1) {
   if (first || REDUCE) { el.innerHTML = ''; const n = document.createElement('span'); n.textContent = text; el.appendChild(n); el.style.width = ''; return }
   const w0 = el.offsetWidth, old = [...el.children]
   const n = document.createElement('span'); n.textContent = text; el.appendChild(n)
-  const ease = 'cubic-bezier(.2,.8,.2,1)'
+  const e = 'cubic-bezier(.22,1,.36,1)'
   old.forEach(o => {
     o.classList.add('out'); o.setAttribute('aria-hidden', 'true'); o.getAnimations().forEach(a => a.cancel())
-    o.animate([{ transform: 'none', opacity: 1, filter: 'blur(0)' }, { transform: `translateY(${-100 * dir}%)`, opacity: 0, filter: 'blur(2px)' }], { duration: 460, easing: ease, fill: 'forwards' }).onfinish = () => o.remove()
+    o.animate([{ transform: 'none', opacity: 1, filter: 'blur(0)' }, { transform: `translateY(${-100 * dir}%)`, opacity: 0, filter: 'blur(.2px)' }], { duration: 460, easing: e, fill: 'forwards' }).onfinish = () => o.remove()
     setTimeout(() => o.isConnected && o.remove(), 520)
   })
   const w1 = n.offsetWidth
   el.style.width = w0 + 'px'; void el.offsetWidth; el.style.width = w1 + 'px'
-  n.animate([{ transform: `translateY(${100 * dir}%)`, opacity: 0, filter: 'blur(2px)' }, { transform: 'none', opacity: 1, filter: 'blur(0)' }], { duration: 460, easing: ease })
+  n.animate([{ transform: `translateY(${100 * dir}%)`, opacity: 0, filter: 'blur(.2px)' }, { transform: 'none', opacity: 1, filter: 'blur(0)' }], { duration: 460, easing: e })
 }
-
-// ── Three.js 场景 ──
-const canvas = $('gl')
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, powerPreference: 'low-power' })
-renderer.setClearColor(0x000000, 0)
-renderer.outputColorSpace = THREE.SRGBColorSpace
-const scene = new THREE.Scene()
-scene.fog = new THREE.Fog(0xe6e3df, 14, 30)
-const camera = new THREE.PerspectiveCamera(26, 1920 / 1080, 1, 80)
-scene.add(new THREE.AmbientLight(0xffffff, 1.7))
-const sun = new THREE.DirectionalLight(0xffffff, 1.3); sun.position.set(-8, 14, 4); scene.add(sun)
-
-// 档案板：0.26 厚 × 1.7 高 × 2.6 长，长边沿 z；同一列的档案沿 x 依次排开，列沿 z 向远处排开
-const BOX = new THREE.BoxGeometry(0.26, 1.7, 2.6)
-const FACE = new THREE.PlaneGeometry(2.5, 1.6)
-const EDGE = new THREE.EdgesGeometry(BOX)
-const ROW_GAP = 0.46, COL_GAP = 3.25
-const texCache = new Map()
-function faceTex(ci, ri) {
-  const key = ci + ':' + ri
-  if (texCache.has(key)) return texCache.get(key)
-  const c = document.createElement('canvas'); c.width = 512; c.height = 328
-  const g = c.getContext('2d'), it = COLS[ci].items[ri]
-  g.fillStyle = 'rgba(255,255,255,0.32)'; g.fillRect(12, 12, 488, 304)
-  g.strokeStyle = 'rgba(40,40,36,0.25)'; g.lineWidth = 2; g.strokeRect(12, 12, 488, 304)
-  // 档案章
-  g.fillStyle = it.kind === 'script' ? 'rgba(20,20,18,0.88)' : 'rgba(60,60,56,0.7)'; g.fillRect(40, 90, 140, 140)
-  g.save(); g.translate(55, 105); g.scale(2.75, 2.75); g.strokeStyle = '#fff'; g.lineWidth = 2.6
-  g.stroke(new Path2D('M9 2H38V26M26 38H2V9L9 2')); g.lineWidth = 3.25; g.stroke(new Path2D('M10 31 20 9 30 31M14.5 23H25.5'))
-  g.fillStyle = '#e8701f'; g.fillRect(31, 31, 7, 7); g.restore()
-  g.fillStyle = 'rgba(20,20,18,0.85)'; g.font = '700 26px "AUTO-MAS MiSans", "Microsoft YaHei", sans-serif'
-  g.fillText(`X-002-${String(ci + 1).padStart(2, '0')}${ri ? '·' + String(ri).padStart(2, '0') : ''}`, 210, 130)
-  g.font = '700 34px "AUTO-MAS MiSans", "Microsoft YaHei", sans-serif'
-  g.fillText(it.name.length > 8 ? it.name.slice(0, 8) + '…' : it.name, 210, 182)
-  g.fillStyle = 'rgba(20,20,18,0.45)'; g.fillRect(210, 202, 200, 3)
-  g.font = '600 18px "AUTO-MAS MiSans", "Microsoft YaHei", sans-serif'; g.fillText(it.kind === 'script' ? 'SCRIPT CONFIG' : 'ACCOUNT', 210, 236)
-  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4
-  texCache.set(key, t); return t
-}
-// 只画当前附近的窗口：列 ±2、行 ±9；数据按周期取模，首尾自然衔接成无缝循环
-const WC = 2, WR = 9
-const slots = []
-for (let dc = -WC; dc <= WC; dc++) for (let dr = -WR; dr <= WR; dr++) {
-  const root = new THREE.Group()
-  const body = new THREE.Mesh(BOX, new THREE.MeshStandardMaterial({ color: 0xf1efea, roughness: 0.4, transparent: true, opacity: 0.86 }))
-  const face = new THREE.Mesh(FACE, new THREE.MeshBasicMaterial({ transparent: true }))
-  face.rotation.y = Math.PI / 2; face.position.x = 0.135
-  const edge = new THREE.LineSegments(EDGE, new THREE.LineBasicMaterial({ color: 0x9e9a90, transparent: true, opacity: 0.5 }))
-  root.add(body, face, edge); scene.add(root)
-  slots.push({ dc, dr, root, body, face, edge, lift: 0, key: '' })
-}
-
-// ── 状态：列与列内位置都是连续量，阻尼追随整数目标（目标不取模，越界自然循环） ──
-let colT = 0, colP = 0
-const rowT = COLS.map(() => 0), rowP = COLS.map(() => 0)      // 每列记住自己的选择
-let waveT = 9, waveOrigin = { c: 0, r: 0 }
-let hovered = null, detail = 0, detailT = 0
-const cur = () => mod(colT, C)
-const curRow = () => mod(rowT[cur()], COLS[cur()].items.length)
-
-function layoutSlot(s, t, dt) {
-  const ccont = Math.round(colP) + s.dc                       // 连续列号
-  const ci = mod(ccont, C), col = COLS[ci], n = col.items.length
-  const rp = rowP[ci], rcont = Math.round(rp) + s.dr
-  const ri = mod(rcont, n)
-  const key = ci + ':' + ri
-  if (s.key !== key) { s.face.material.map = faceTex(ci, ri); s.face.material.needsUpdate = true; s.key = key; s.ci = ci; s.ri = ri }
-  const x = (rcont - rp) * ROW_GAP, z = -(ccont - colP) * COL_GAP
-  const selected = ci === cur() && ri === curRow() && Math.abs(ccont - colT) < 0.5 && Math.abs(rcont - rowT[ci]) < 0.5
-  // 选中抬起 0.4；抽出时升到 3.35；悬停 0.28；选择变化时从选中处向外扩散一圈波浪
-  const target = selected ? 0.4 + detail * 2.95 : (hovered === s ? 0.28 : 0)
-  s.lift += (target - s.lift) * Math.min(1, dt * (selected ? 4.2 : 6))
-  const dist = Math.hypot((ccont - colT) * 1.6, rcont - rowT[ci] + (ci === cur() ? 0 : 0))
-  const wave = REDUCE ? 0 : 0.22 * Math.sin(waveT * 9 - dist * 1.25) * Math.exp(-waveT * 2.2) * Math.exp(-dist * 0.28) * (waveT * 9 > dist * 1.25 ? 1 : 0)
-  s.root.position.set(x, s.lift + (selected ? 0 : wave), z)
-  s.root.rotation.y = selected ? -detail * 0.55 : 0
-  const fade = Math.max(0, 1 - Math.max(0, Math.abs(z) - 4) / 5) * Math.max(0, 1 - Math.max(0, Math.abs(x) - 2.6) / 1.8)
-  s.root.visible = fade > 0.02 && (detail < 0.5 || selected || true)
-  const dim = detail > 0 && !selected ? 1 - detail * 0.75 : 1
-  s.body.material.opacity = (selected ? 0.92 : 0.8) * fade * dim
-  s.face.material.opacity = fade * dim
-  s.edge.material.opacity = (selected ? 1 : 0.45) * fade * dim
-  s.edge.material.color.setHex(selected ? 0xe8701f : 0x9e9a90)
-  s.ccont = ccont; s.rcont = rcont
-  return selected
-}
-
-const camBase = new THREE.Vector3(8.6, 6.4, 7.8), look = new THREE.Vector3(0.4, 0.2, -1.2)
-let last = 0, running = false
-function frame(t) {
-  const dt = last ? Math.min(0.05, (t - last) / 1000) : 1 / 60
-  last = t
-  const k = 1 - Math.pow(0.004, dt)
-  colP += (colT - colP) * k
-  COLS.forEach((_, i) => { rowP[i] += (rowT[i] - rowP[i]) * k })
-  detail += (detailT - detail) * (1 - Math.pow(0.02, dt))
-  waveT += dt
-  // 抽出时镜头转向，把档案放到画面左侧
-  camera.position.set(camBase.x - detail * 3.2, camBase.y + detail * 1.2, camBase.z - detail * 1.5)
-  camera.lookAt(look.x - detail * 0.6, look.y + detail * 2.8, look.z + detail * 1.8)
-  for (const s of slots) layoutSlot(s, t, dt)
-  renderer.render(scene, camera)
-  return Math.abs(colT - colP) > 0.001 || rowP.some((p, i) => Math.abs(rowT[i] - p) > 0.001) || Math.abs(detailT - detail) > 0.002 || waveT < 2.5
-}
-// 按需绘制：有运动时逐帧，静止后停下；交互后再保持 1.2 秒，让抬起 / 悬停的余量画完
-let keepAlive = 0
-function tick(t) {
-  const moving = frame(t)
-  if (moving || performance.now() < keepAlive) requestAnimationFrame(tick)
-  else { running = false; last = 0 }
-}
-function wake() { if (!running) { running = true; requestAnimationFrame(tick) } }
-function poke() { keepAlive = performance.now() + 1200; wake() }
-
-// ── 文字区 ──
-let lastDir = 1
 function updateText(dir) {
-  const ci = cur(), col = COLS[ci], ri = curRow(), it = col.items[ri]
-  roll($('i-col'), '托管管理 · ' + col.name, dir)
-  roll($('i-num'), `X-002-${String(ci + 1).padStart(2, '0')}${ri ? '·' + String(ri).padStart(2, '0') : ''}`, dir)
-  roll($('i-name'), it.kind === 'script' ? col.name + ' · 脚本配置' : it.name, dir)
-  roll($('i-sub'), it.kind === 'script' ? `${col.en} · ${col.accounts.length} 个账号` : `所属脚本：${col.name}`, dir)
-  roll($('s-num'), String(ri + 1).padStart(2, '0'), dir)
-  roll($('s-tot'), String(col.items.length).padStart(2, '0'), dir)
-  roll($('c-idx'), `COLUMN ${String(ci + 1).padStart(2, '0')} / ${String(C).padStart(2, '0')}`, dir)
-  roll($('c-name'), col.name, dir)
-  const ticks = $('ticks')
-  while (ticks.children.length < col.items.length) ticks.appendChild(document.createElement('i'))
-  while (ticks.children.length > col.items.length) ticks.lastChild.remove()
-  ;[...ticks.children].forEach((t, i) => t.classList.toggle('on', i === ri))
+  const r = records[selected], lane = wrap(selectedCell.lane, COLUMNS.length), files = columnFiles(lane)
+  roll($('archive-category'), r.category, dir)
+  roll($('selected-id'), r.id, dir)
+  roll($('selected-title'), r.kind === '账号' ? r.title : r.category + ' · 脚本配置', dir)
+  roll($('selected-clearance'), r.clearance, dir)
+  roll($('selected-number'), String(files.indexOf(selected) + 1).padStart(2, '0'), dir)
+  roll($('count-total'), String(files.length).padStart(2, '0'), dir)
+  roll($('column-number'), `COLUMN ${String(lane + 1).padStart(2, '0')} / ${String(COLUMNS.length).padStart(2, '0')}`, dir)
+  roll($('column-name'), COLUMNS[lane].name, dir)
+  $('file-ticks').innerHTML = files.map((f, k) => `<button type="button" class="${f === selected ? 'selected' : ''}" aria-label="${k + 1}" data-k="${k}"></button>`).join('')
 }
-function moveRow(d) { if (detailT) return; rowT[cur()] += d; waveT = 0; updateText(d); poke() }
-function moveCol(d) { if (detailT) return; colT += d; waveT = 0; updateText(d); poke() }
+$('file-ticks').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return
+  const files = columnFiles(wrap(selectedCell.lane, COLUMNS.length))
+  const d = Number(b.dataset.k) - files.indexOf(selected)
+  if (d) select({ cell: { lane: selectedCell.lane, row: selectedCell.row + d } })
+})
 
-// ── 抽出与档案卡 ──
+// ── 详情 ──
+let tab = 'overview'
+function renderDetail() {
+  const r = records[selected]
+  $('object-id').textContent = 'NO.' + String(selected + 1).padStart(3, '0')
+  $('detail-content').innerHTML = `
+  <div class="detail-kicker"><span>FILE ${r.id}</span><span>${r.clearance}</span></div>
+  <h2>${r.en}</h2><div class="detail-title-cn">${r.title}<span>${r.category}</span></div>
+  <div class="detail-rule"></div>
+  <dl class="metadata"><div><dt>SCRIPT / 所属脚本</dt><dd>${r.category}</dd></div><div><dt>LAST RUN / 上次代理</dt><dd>${r.last}</dd></div><div><dt>REMAINED / 剩余天数</dt><dd>${r.remained}</dd></div><div><dt>STATUS / 状态</dt><dd><i></i>${r.clearance === 'DISABLED' ? '已停用' : '启用 · 可代理'}</dd></div></dl>
+  <div class="detail-tabs" role="tablist"><button type="button" class="${tab === 'overview' ? 'active' : ''}" data-tab="overview">01 <span>概述</span></button><button type="button" class="${tab === 'notes' ? 'active' : ''}" data-tab="notes">02 <span>运行记录</span></button><button type="button" class="${tab === 'history' ? 'active' : ''}" data-tab="history">03 <span>访问日志</span></button><i class="tab-indicator"></i></div>
+  <div id="tab-panel" class="tab-panel">${panel(r)}</div>
+  <div class="detail-actions"><button type="button" class="solid-button">＋ SAVE CONFIG<span>保存配置</span></button><button type="button" class="export-button">RUN <span>↗</span></button></div>
+  <div class="detail-footnote"><span>配置来源：${r.base}</span><span>${String(selected + 1).padStart(3, '0')} / ${String(records.length).padStart(3, '0')}</span></div>`
+  moveIndicator()
+}
+function panel(r) {
+  if (tab === 'overview') return `<div class="panel-label">ABSTRACT / 摘要</div><p>${r.kind === '账号' ? `「${r.title}」由脚本「${r.category}」托管，配置来源为${r.base}。每日按队列定时运行，单次运行时限 60 分钟，失败时按重启清单补跑。` : `「${r.category}」的脚本级配置：启动程序、日志判定、游戏启动方式与运行限制。修改后对本脚本下所有使用共享配置的账号生效。`}</p>`
+  if (tab === 'notes') return `<div class="panel-label">RUN RECORDS / 运行记录</div><ul class="research-notes"><li><span>11-20</span>06:12 完成 · 一条龙完成 → Success!</li><li><span>11-19</span>06:10 完成 · 用时 9 分 42 秒</li><li><span>11-18</span>06:15 异常 · 等待游戏窗口超时，已补跑</li></ul>`
+  return `<div class="panel-label">ACCESS LOG / 访问日志</div>${['11-20 06:00', '11-19 18:02', '11-18 06:00'].map(t => `<div class="log-row"><span>${t}</span><span>AUTO-MAS</span><b>READ AUTHORIZED</b></div>`).join('')}`
+}
+function moveIndicator() {
+  const tabs = document.querySelector('.detail-tabs'); if (!tabs) return
+  const on = tabs.querySelector('button.active'), ind = tabs.querySelector('.tab-indicator')
+  ind.style.transform = `translateX(${on.offsetLeft}px) scaleX(${on.offsetWidth})`
+}
+$('detail-content').addEventListener('click', e => {
+  const b = e.target.closest('[data-tab]'); if (!b) return
+  tab = b.dataset.tab
+  document.querySelectorAll('.detail-tabs button').forEach(x => x.classList.toggle('active', x === b))
+  moveIndicator()
+  const p = $('tab-panel'); p.innerHTML = panel(records[selected]); p.classList.remove('fade'); void p.offsetWidth; p.classList.add('fade')
+})
 function openDetail() {
-  const ci = cur(), col = COLS[ci], ri = curRow(), it = col.items[ri]
-  $('d-code').textContent = `X-002-${String(ci + 1).padStart(2, '0')}${ri ? '·' + String(ri).padStart(2, '0') : ''}`
-  $('d-path').textContent = '托管管理 / ' + col.name
-  $('d-name').textContent = it.kind === 'script' ? col.name : it.name
-  $('d-zh').textContent = it.kind === 'script' ? '脚本配置 · ' + col.en : '账号 · 所属脚本 ' + col.name
-  const rows = it.kind === 'script'
-    ? [['启动程序', 'D:\\Tools\\' + col.name + '.exe'], ['成功判定', '日志 · 关键字'], ['单次运行时限', '60 分钟'], ['账号数', col.accounts.length + ' 个']]
-    : [['名称', it.name], ['启用', '开'], ['剩余天数', '永久'], ['配置来源', '独立'], ['上次代理', '今天 06:12']]
-  $('d-kv').innerHTML = rows.map(([k, v]) => `<div class="k">${k}</div><div>${v}</div>`).join('')
-  detailT = 1; stage.classList.add('detail'); $('card').classList.add('on'); moveUl(); poke()
+  if (targetDetail) return
+  targetDetail = 1; tab = 'overview'
+  stage.dataset.mode = 'detail'
+  $('detail-ui').hidden = false
+  renderDetail(); wake()
 }
-function closeDetail() { if (!detailT) return; detailT = 0; stage.classList.remove('detail'); $('card').classList.remove('on'); poke() }
-function moveUl() {
-  const on = $('d-tabs').querySelector('button.on'), ul = $('d-tabs').querySelector('.ul')
-  ul.style.left = on.offsetLeft + 'px'; ul.style.width = on.offsetWidth + 'px'
+function closeDetail() {
+  if (!targetDetail) return
+  targetDetail = 0
+  stage.dataset.mode = 'archive'
+  setTimeout(() => { if (!targetDetail) $('detail-ui').hidden = true }, 600)
+  wake()
 }
-$('d-tabs').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; [...$('d-tabs').querySelectorAll('button')].forEach(x => x.classList.toggle('on', x === b)); moveUl() })
 
 // ── 输入 ──
+const nav = (axis, direction) => { if (targetDetail) return; select({ axis, direction }) }
 addEventListener('keydown', e => {
-  if (e.key === 'ArrowDown') { e.preventDefault(); moveRow(1) }
-  else if (e.key === 'ArrowUp') { e.preventDefault(); moveRow(-1) }
-  else if (e.key === 'ArrowRight') { e.preventDefault(); moveCol(1) }
-  else if (e.key === 'ArrowLeft') { e.preventDefault(); moveCol(-1) }
+  if (e.key === 'ArrowDown') { e.preventDefault(); nav('row', 1) }
+  else if (e.key === 'ArrowUp') { e.preventDefault(); nav('row', -1) }
+  else if (e.key === 'ArrowRight') { e.preventDefault(); nav('lane', 1) }
+  else if (e.key === 'ArrowLeft') { e.preventDefault(); nav('lane', -1) }
   else if (e.key === 'Enter') openDetail()
   else if (e.key === 'Escape') closeDetail()
 })
 let wheelAt = 0
 stage.addEventListener('wheel', e => {
   e.preventDefault()
-  const now = performance.now()
-  if (now - wheelAt < 90) return
-  wheelAt = now
-  if (e.shiftKey || Math.abs(e.deltaX) > Math.abs(e.deltaY)) moveCol((e.deltaX || e.deltaY) > 0 ? 1 : -1)
-  else moveRow(e.deltaY > 0 ? 1 : -1)
+  if (performance.now() - wheelAt < 90) return
+  wheelAt = performance.now()
+  if (Math.abs(e.deltaX) > Math.abs(e.deltaY) || e.shiftKey) nav('lane', (e.deltaX || e.deltaY) > 0 ? 1 : -1)
+  else nav('row', e.deltaY > 0 ? 1 : -1)
 }, { passive: false })
-$('up').onclick = () => moveRow(-1); $('down').onclick = () => moveRow(1)
-$('left').onclick = () => moveCol(-1); $('right').onclick = () => moveCol(1)
-$('access').onclick = openDetail; $('back').onclick = closeDetail
-
-// 点击档案：同列跳到该行，跨列先切列；点已选中的直接读取
+stage.addEventListener('click', e => {
+  const a = e.target.closest('[data-action]'); if (!a) return
+  const act = a.dataset.action
+  if (act === 'prev') nav('row', -1); else if (act === 'next') nav('row', 1)
+  else if (act === 'column-prev') nav('lane', -1); else if (act === 'column-next') nav('lane', 1)
+  else if (act === 'open') openDetail(); else if (act === 'back') closeDetail()
+})
 const ray = new THREE.Raycaster(), ndc = new THREE.Vector2()
-function hit(e) {
-  const r = canvas.getBoundingClientRect()
+function pick(e) {
+  const r = renderer.domElement.getBoundingClientRect()
   ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1)
   ray.setFromCamera(ndc, camera)
-  const h = ray.intersectObjects(slots.filter(s => s.root.visible).map(s => s.body))[0]
-  return h ? slots.find(s => s.body === h.object) : null
+  const hitSel = ray.intersectObject(model, true)[0]
+  const hitArr = instances[0] ? ray.intersectObject(instances[0])[0] : null
+  if (hitSel && (!hitArr || hitSel.distance <= hitArr.distance)) return { ...selectedCell }
+  return hitArr ? drawnCells[hitArr.instanceId] : null
 }
-canvas.addEventListener('pointermove', e => { if (detailT) return; const s = hit(e); if (s !== hovered) { hovered = s; canvas.style.cursor = s ? 'pointer' : 'default'; poke() } })
-canvas.addEventListener('click', e => {
-  if (detailT) return
-  const s = hit(e); if (!s) return
-  const dc = s.ccont - colT, dr = s.rcont - rowT[s.ci]
-  if (dc === 0 && dr === 0) { openDetail(); return }
-  if (dc !== 0) { colT += dc; rowT[s.ci] = s.rcont; waveT = 0; updateText(dc > 0 ? 1 : -1); poke() }
-  else moveRow(dr)
+const same = (a, b) => a && b && a.lane === b.lane && a.row === b.row
+renderer.domElement.addEventListener('pointermove', e => {
+  if (targetDetail) return
+  const c = pick(e)
+  const h = c && !same(c, selectedCell) ? c : null
+  if (!same(h, hoverCell) && (h || hoverCell)) {
+    hoverCell = h
+    renderer.domElement.style.cursor = c ? 'pointer' : 'default'
+    const lab = $('hover-label')
+    if (hoverCell) { const r = records[fileAtCell(hoverCell)]; lab.hidden = false; lab.textContent = `${r.id} / ${r.title}` } else lab.hidden = true
+    lastInteraction = clock
+    wake()
+  }
+})
+renderer.domElement.addEventListener('click', e => {
+  if (targetDetail) return
+  const c = pick(e); if (!c) return
+  if (same(c, selectedCell)) openDetail()
+  else select({ cell: c })
 })
 
 setInterval(() => { $('clock').textContent = new Date().toLocaleTimeString('zh-CN', { hour12: false }) }, 1000)
+await load()
+drawLabel(selected)
 updateText(1)
-poke()
-window.__array = { moveRow, moveCol, openDetail, closeDetail, state: () => ({ col: cur(), row: curRow(), colT, rowT: [...rowT] }) }
+container.classList.add('on')
+$('loading').classList.add('done')
+wake()
+// 停止操作 2.5 秒后进入呼吸：此时唤醒绘制循环（呼吸期间 update 返回 true 保持逐帧）
+setInterval(() => { if (!running && !targetDetail && clock - lastInteraction > 2.4) wake() }, 2000)
+// 测试用：后台页 rAF 暂停时，手动逐帧推进动画
+function advance(sec) { let t = clock || performance.now() / 1000; for (let k = 0; k < Math.round(sec * 60); k++) { t += 1 / 60; update(t) } }
+function snap(w = 480) { const c = document.createElement("canvas"); c.width = w; c.height = Math.round(w * 9 / 16); c.getContext("2d").drawImage(renderer.domElement, 0, 0, c.width, c.height); return c.toDataURL("image/jpeg", 0.8) }
+window.__array = { nav, openDetail, closeDetail, advance, snap, debug: () => ({ cam: camera.position.toArray().map(v => +v.toFixed(2)), aim: cameraAim.toArray().map(v => +v.toFixed(2)), model: model.position.toArray().map(v => +v.toFixed(2)), fov: +camera.fov.toFixed(3), fog: [scene.fog.near, scene.fog.far].map(v => +v.toFixed(1)), visible: model.visible, n: instances[0]?.count }), state: () => ({ selected, selectedCell: { ...selectedCell }, detail, lift: lift.value }) }
 </script>
 </body>
 </html>
