@@ -115,7 +115,8 @@ svg { display: block; }
 .tile.deco { cursor: default; pointer-events: none; }
 .tile-inner { position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
 .code { position: relative; font-weight: 700; line-height: .86; letter-spacing: -.02em; }
-.code .mk { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: .5em; height: .5em; }
+.tile .emb { position: absolute; right: 10px; top: 10px; width: 20px; height: 20px; opacity: .9; }
+.tile .emb.big { right: 16px; top: 16px; width: 30px; height: 30px; }
 .sub { margin-top: 6px; font-size: 11px; font-weight: 600; letter-spacing: .06em; white-space: nowrap; }
 .zh { margin-top: 8px; font-size: 14px; font-weight: 600; letter-spacing: .3em; opacity: .7; }
 .idx { position: absolute; left: 10px; top: 8px; font-size: 12px; font-weight: 600; letter-spacing: .1em; opacity: .55; }
@@ -191,7 +192,7 @@ svg { display: block; }
 #s-hero svg { position: absolute; inset: 0; width: 100%; height: 100%; }
 #s-hero .rot { transform-origin: 380px 600px; transform: rotate(var(--rot, 0deg)); transition: transform .9s cubic-bezier(.2,.8,.2,1); }
 .hero-num { position: absolute; left: 250px; top: 330px; font-size: 150px; font-weight: 700; line-height: 1; letter-spacing: -.04em; color: transparent; -webkit-text-stroke: 2px rgba(11,12,11,.16); transition: transform .5s cubic-bezier(.2,.8,.2,1), opacity .25s; }
-.hero-num.swap { transform: translateY(-30px); opacity: 0; transition: none; }
+
 
 /* 右上条目分页：琥珀点，当前项为 •–o–• */
 #s-pager { position: absolute; left: 1150px; top: 58px; display: flex; align-items: center; gap: 4px; z-index: 5; }
@@ -215,7 +216,7 @@ svg { display: block; }
 #s-plate { position: absolute; left: 1150px; top: 910px; width: 730px; height: 100px; z-index: 5; transform: translateX(30px); }
 #sect.reel-in #s-plate { transform: none; transition: opacity .35s .2s, transform .6s cubic-bezier(.2,.8,.2,1) .2s; }
 #s-plate .logo { position: absolute; left: 0; top: 0; width: 116px; height: 64px; background: var(--ink); color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; }
-#s-plate .logo svg { width: 34px; height: 34px; }
+#s-plate .logo svg { width: 30px; height: 30px; color: #fff; }
 #s-plate .logo span { font-size: 6px; font-weight: 700; letter-spacing: .3em; }
 #s-plate .txt { position: absolute; left: 132px; top: -4px; right: 0; }
 #s-plate .role { font-size: 14px; letter-spacing: .04em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -252,13 +253,47 @@ svg { display: block; }
 #s-panel .log.tall { height: 470px; }
 #s-panel .sp-actions { margin-top: auto; padding-top: 14px; flex-wrap: wrap; gap: 10px; }
 #s-panel .btn { padding: 10px 20px; font-size: 14px; }
+/* ── 借鉴 RhineLabUI ── */
+/* 滚动文字：新内容自下方滚入、旧内容向上滚出并轻微模糊，宽度随之过渡（460ms） */
+.roll { display: inline-block; position: relative; overflow: hidden; vertical-align: bottom; white-space: nowrap; transition: width .46s cubic-bezier(.2,.8,.2,1); }
+.roll > span { display: inline-block; }
+.roll > span.out { position: absolute; left: 0; top: 0; }
+.digits { display: inline-flex; font-variant-numeric: tabular-nums; }
+/* 解密揭示：对角线合拢 → 保持 → 收束；玻璃由磨砂自上而下变清晰；正文遮挡条退开 */
+@property --clear { syntax: '<number>'; inherits: false; initial-value: 1; }
+#s-glass .frost { position: absolute; inset: 0; z-index: 3; pointer-events: none; --clear: 1; backdrop-filter: blur(9px); background: rgba(246,244,241,.28);
+  -webkit-mask-image: linear-gradient(to bottom, transparent calc(var(--clear) * 124% - 24%), #000 calc(var(--clear) * 124%));
+  mask-image: linear-gradient(to bottom, transparent calc(var(--clear) * 124% - 24%), #000 calc(var(--clear) * 124%)); }
+#s-glass .dec { position: absolute; inset: 0; z-index: 4; pointer-events: none; overflow: hidden; }
+#s-glass .dec-bar { position: absolute; left: 50%; top: 50%; width: 1083px; height: 3px; display: flex; transform: translate(-50%, -50%) rotate(47.6deg); opacity: 0; }
+#s-glass .dec-bar i { flex: 1; background: var(--ink); }
+#s-panel.redact .kv > div:not(.k), #s-panel.redact .tbl td:not(.n), #s-panel.redact .stats b, #s-panel.redact .note, #s-panel.redact .lst div, #s-panel.redact .run-line { position: relative; }
+#s-panel.redact .kv > div:not(.k)::after, #s-panel.redact .tbl td:not(.n)::after, #s-panel.redact .stats b::after, #s-panel.redact .note::after, #s-panel.redact .lst div::after, #s-panel.redact .run-line::after {
+  content: ''; position: absolute; left: 4px; right: 30%; top: 30%; bottom: 30%; background: var(--ink); pointer-events: none; transform-origin: right; transition: transform .42s cubic-bezier(.7,0,.2,1) var(--d, 0ms); }
+#s-panel.redact.open .kv > div:not(.k)::after, #s-panel.redact.open .tbl td:not(.n)::after, #s-panel.redact.open .stats b::after, #s-panel.redact.open .note::after, #s-panel.redact.open .lst div::after, #s-panel.redact.open .run-line::after { transform: scaleX(0); }
+/* 确认弹窗：300ms 入场（位移 12px）、200ms 退出（位移 8px），背景磨砂 */
+#modal { position: absolute; inset: 0; z-index: 60; display: none; align-items: center; justify-content: center; background: rgba(230,227,223,.4); backdrop-filter: blur(6px); opacity: 0; transition: opacity .2s; }
+#modal.show { display: flex; }
+#modal.in { opacity: 1; transition-duration: .3s; }
+#modal .box { width: 560px; background: var(--paper); border: 1px solid var(--hair); box-shadow: 0 30px 60px -30px rgba(0,0,0,.35); padding: 34px 40px 30px; transform: translateY(8px); transition: transform .2s cubic-bezier(.4,0,1,1); }
+#modal.in .box { transform: none; transition: transform .3s cubic-bezier(.2,.8,.2,1); }
+#modal.enter .box { transform: translateY(12px); transition: none; }
+#modal .m-meta { font-size: 12px; font-weight: 700; letter-spacing: .2em; color: var(--muted); display: flex; justify-content: space-between; }
+#modal h3 { margin: 18px 0 6px; font-size: 30px; letter-spacing: .04em; }
+#modal p { margin: 0 0 26px; color: var(--muted); line-height: 1.7; }
+#modal .m-rule { height: 2px; background: var(--ink); margin: 18px 0 20px; }
+#modal .m-act { display: flex; gap: 12px; justify-content: flex-end; }
 /* 功能分页：同一条目内按功能拆分，避免单页显示不全 */
-.sp-tabs { display: flex; gap: 2px; margin-top: 14px; border-bottom: 2px solid var(--ink); }
-.sp-tabs button { position: relative; font: 600 15px var(--font); letter-spacing: .08em; color: var(--muted); background: none; border: none; padding: 8px 16px 9px; cursor: pointer; }
-.sp-tabs button b { font: 700 10px var(--font); letter-spacing: .1em; margin-right: 7px; color: var(--hair); }
+.sp-tabs { position: relative; display: flex; gap: 6px; margin-top: 14px; border-bottom: 1px solid var(--hair); }
+.sp-tabs button { position: relative; font: 600 15px var(--font); letter-spacing: .08em; color: var(--muted); background: none; border: none; padding: 8px 14px 10px 0; margin-right: 18px; cursor: pointer; transition: color .18s; }
+.sp-tabs button b { font: 700 10px var(--font); letter-spacing: .1em; margin-right: 7px; color: var(--hair); transition: color .18s; }
 .sp-tabs button:hover { color: var(--ink); }
-.sp-tabs button.on { color: var(--paper); background: var(--ink); }
+.sp-tabs button.on { color: var(--ink); }
 .sp-tabs button.on b { color: var(--accent); }
+.sp-tabs .ul { position: absolute; bottom: -1px; left: 0; height: 2px; background: var(--ink); transition: left .18s cubic-bezier(.2,.8,.2,1), width .18s cubic-bezier(.2,.8,.2,1); }
+.sp-page { display: contents; }
+#s-panel .sp-body.fade, #s-panel .sp-actions.fade { opacity: 0; transition: none; }
+#s-panel .sp-body.fadein, #s-panel .sp-actions.fadein { opacity: 1; transition: opacity .15s ease; }
 .sp-tabs button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 /* 表单控件：与后端配置项一一对应 */
 .inp { flex: 1; min-width: 0; font: 500 15px var(--font); color: var(--ink); background: transparent; border: none; border-bottom: 1.5px solid var(--hair); padding: 4px 2px; }
@@ -397,6 +432,11 @@ svg { display: block; }
 <body>
 <svg width="0" height="0" style="position:absolute">
   <!-- AUTO-MAS 自有标志：细圆环 + 琥珀核心 + 四向刻度 + 斜线 -->
+  <symbol id="emblem" viewBox="0 0 40 40">
+    <path d="M9 2H38V26M26 38H2V9L9 2" fill="none" stroke="currentColor" stroke-width="2.6" />
+    <path d="M10 31 20 9 30 31M14.5 23H25.5" fill="none" stroke="currentColor" stroke-width="3.25" />
+    <rect x="31" y="31" width="7" height="7" fill="#e8701f" />
+  </symbol>
   <symbol id="mark" viewBox="0 0 40 40">
     <circle cx="20" cy="20" r="15" fill="none" stroke="currentColor" stroke-width="3" />
     <circle cx="20" cy="20" r="5" fill="#e8701f" />
@@ -463,12 +503,13 @@ svg { display: block; }
     <div id="r-current" aria-live="polite"></div>
     <div class="s-limit" aria-hidden="true"><i></i><div><b id="s-limit-k"></b><span>[LIMITED ACCESS]</span></div></div>
     <nav id="s-pager" aria-label="条目"></nav>
-    <div id="s-glass"><div id="s-panel"></div></div>
-    <div id="s-plate"><div class="logo"><svg viewBox="0 0 40 40"><use href="#mark" /></svg><span>AUTO-MAS</span></div><div class="txt"><div class="role" id="s-role"></div><div class="name" id="s-name"></div></div><div class="line"></div><div class="detail" id="s-detail"></div></div>
+    <div id="s-glass"><div id="s-panel"></div><div class="frost"></div><div class="dec"><div class="dec-bar"><i></i><i></i></div></div></div>
+    <div id="s-plate"><div class="logo"><svg viewBox="0 0 40 40"><use href="#emblem" /></svg><span>AUTO-MAS</span></div><div class="txt"><div class="role" id="s-role"></div><div class="name" id="s-name"></div></div><div class="line"></div><div class="detail"><b id="s-code"></b> · <span id="s-en"></span></div></div>
     <div id="s-sub" aria-live="polite"></div>
     <div class="s-powered">POWERED BY <b>AUTO-MAS</b></div>
     <div class="s-hint">滚轮 / ↑↓ 切换 · ESC 返回</div>
     <div id="toast" role="status" aria-live="polite"></div>
+    <div id="modal" role="dialog" aria-modal="true" aria-labelledby="m-title"><div class="box"><div class="m-meta"><span>AUTO-MAS / CONFIRM</span><span id="m-api"></span></div><h3 id="m-title">确认删除</h3><div class="m-rule"></div><p id="m-text"></p><div class="m-act"><button class="btn" type="button" id="m-cancel">取消</button><button class="btn pri dng" type="button" id="m-ok">删除</button></div></div></div>
     <button id="s-back" type="button">← RETURN TO INDEX</button>
   </section>
 
@@ -536,6 +577,42 @@ const DECOS = [
 ]
 
 const stage = document.getElementById('stage')
+const REDUCE = matchMedia('(prefers-reduced-motion: reduce)').matches
+// 滚动文字（借鉴 RhineLabUI 的 Rolling Number）：dir 1 向上滚、-1 向下滚；快速连续输入从当前运动接续
+function roll(el, text, dir = 1) {
+  text = String(text)
+  if (el.dataset.v === text) return
+  const first = el.dataset.v === undefined
+  el.dataset.v = text
+  el.classList.add('roll')
+  if (first || REDUCE) { el.innerHTML = ''; const n = document.createElement('span'); n.textContent = text; el.appendChild(n); el.style.width = ''; return }
+  const w0 = el.offsetWidth
+  const old = [...el.children]
+  const n = document.createElement('span')
+  n.textContent = text
+  el.appendChild(n)
+  const ease = 'cubic-bezier(.2,.8,.2,1)'
+  old.forEach(o => {
+    o.classList.add('out')
+    o.setAttribute('aria-hidden', 'true')
+    o.getAnimations().forEach(a => a.cancel())
+    o.animate([{ transform: 'translateY(0)', opacity: 1, filter: 'blur(0)' }, { transform: `translateY(${-100 * dir}%)`, opacity: 0, filter: 'blur(2px)' }], { duration: 460, easing: ease, fill: 'forwards' }).onfinish = () => o.remove()
+    // 后台页动画时间线会暂停：到时仍未结束就直接移除，避免新旧文字叠在一起
+    setTimeout(() => o.isConnected && o.remove(), 520)
+  })
+  const w1 = n.offsetWidth
+  el.style.width = w0 + 'px'
+  void el.offsetWidth
+  el.style.width = w1 + 'px'
+  n.animate([{ transform: `translateY(${100 * dir}%)`, opacity: 0, filter: 'blur(2px)' }, { transform: 'none', opacity: 1, filter: 'blur(0)' }], { duration: 460, easing: ease })
+}
+// 逐位滚动：只滚变化的字符（时钟、编号）
+function rollDigits(el, text, dir = 1) {
+  if (!el.classList.contains('digits')) { el.classList.add('digits'); el.innerHTML = '' }
+  while (el.children.length < text.length) el.appendChild(document.createElement('span'))
+  while (el.children.length > text.length) el.lastChild.remove()
+  ;[...text].forEach((ch, k) => roll(el.children[k], ch, dir))
+}
 const hub = document.getElementById('hub')
 const tilesEl = document.getElementById('tiles')
 const searching = document.getElementById('searching')
@@ -550,12 +627,7 @@ function fit() {
 addEventListener('resize', fit); fit()
 
 function codeHtml(d) {
-  // 在字形中段叠一枚自有标志，对应 PV 部门标里嵌入的符号
-  const lines = d.code.split('\n').map((l, i) => {
-    const mk = i === d.code.split('\n').length - 1 ? '<svg class="mk"><use href="#mark" /></svg>' : ''
-    return `<div class="code" style="font-size:${d.size}px">${l}${mk}</div>`
-  }).join('')
-  return lines
+  return d.code.split('\n').map(l => `<div class="code" style="font-size:${d.size}px">${l}</div>`).join('')
 }
 
 DEPTS.forEach((d, i) => {
@@ -567,6 +639,7 @@ DEPTS.forEach((d, i) => {
   b.innerHTML = `<div class="tile-inner">
     ${d.style !== 'bare' ? `<span class="idx">${d.n}</span>` : ''}
     ${d.accent ? '<span class="accent-block" style="right:-22px;top:-26px"></span>' : ''}
+    ${d.style !== 'bare' ? `<svg class="emb${d.center ? ' big' : ''}" aria-hidden="true"><use href="#emblem" /></svg>` : ''}
     ${codeHtml(d)}
     <div class="sub">${d.sub}</div>
     <div class="zh">${d.zh}</div>
@@ -606,7 +679,9 @@ function focusTile(i) {
   searching.querySelector('span').textContent = i === CENTER && !hub.dataset.touched ? 'SEARCHING' : `ACCESS // ${d.zh}`
   hub.dataset.touched = '1'
   ;[...ruler.children].forEach((r, j) => r.classList.toggle('on', j === i))
-  ledgerLabel.textContent = `X-0${d.n} ${d.zh}`
+  const dir = i >= (ledgerLabel._i ?? i) ? 1 : -1
+  ledgerLabel._i = i
+  roll(ledgerLabel, `X-0${d.n} ${d.zh}`, dir)
 }
 tilesEl.addEventListener('mouseleave', () => { hub.classList.remove('has-focus'); tiles.forEach(t => t.el.classList.remove('focus')) })
 
@@ -898,16 +973,15 @@ function showCurrent(swap) {
   const d = DEPTS[state.open]
   const item = state.items[state.target]
   if (!d || !item) return
-  const fill = () => {
-    $s('s-role').textContent = `${d.code.replace('\n', ' ')} / ${d.zh}`
-    $s('s-name').textContent = item.name
-    $s('s-detail').innerHTML = `<b>${d.n}-${String(state.target + 1).padStart(2, '0')}</b> · ${item.en}`
-    heroNum.textContent = String(state.target + 1).padStart(2, '0')
-    plate.classList.remove('swap'); heroNum.classList.remove('swap')
-  }
-  // 先瞬间置为隐藏态并强制重排，再移除即可重新播放入场过渡（不依赖 rAF，后台页也会更新）
-  if (swap) { plate.classList.add('swap'); heroNum.classList.add('swap'); void plate.offsetWidth }
-  fill()
+  // 铭牌与编号滚动更新（借鉴 RhineLabUI）；首次进入直接显示
+  const dir = state.target >= (state.prevTarget ?? 0) ? 1 : -1
+  state.prevTarget = state.target
+  if (!swap) { ['s-role', 's-name', 's-en'].forEach(id => { delete $s(id).dataset.v }); $s('s-code').classList.remove('digits'); heroNum.classList.remove('digits') }
+  roll($s('s-role'), `${d.code.replace('\n', ' ')} / ${d.zh}`, dir)
+  roll($s('s-name'), item.name, dir)
+  rollDigits($s('s-code'), `${d.n}-${String(state.target + 1).padStart(2, '0')}`, dir)
+  roll($s('s-en'), item.en, dir)
+  rollDigits(heroNum, String(state.target + 1).padStart(2, '0'), dir)
   heroRot.style.setProperty('--rot', state.target * 24 + 'deg')
   ;[...pager.children].forEach((b, k) => { b.classList.toggle('on', k === state.target); b.setAttribute('aria-current', k === state.target ? 'true' : 'false') })
 }
@@ -920,40 +994,124 @@ sect.addEventListener('mousemove', e => {
   sGlass.style.setProperty('--tx', (-ny * 2).toFixed(2) + 'deg')
 })
 
+const sGlassFrost = document.querySelector('#s-glass .frost')
+const decBar = document.querySelector('#s-glass .dec-bar')
+// 解密揭示：对角线两端向中央合拢 → 保持 → 向中央收束并淡出；磨砂边界自上而下退去；正文遮挡条依次退开
+function decrypt() {
+  if (REDUCE) return
+  panel.classList.add('redact')
+  panel.classList.remove('open')
+  ;[...panel.querySelectorAll('.kv > div:not(.k), .tbl td:not(.n), .stats b, .note, .lst div, .run-line')].forEach((el, k) => el.style.setProperty('--d', Math.min(k * 22, 520) + 'ms'))
+  const [l, r] = decBar.children
+  l.getAnimations().forEach(a => a.cancel()); r.getAnimations().forEach(a => a.cancel()); decBar.getAnimations().forEach(a => a.cancel())
+  const T = 1500
+  decBar.animate([{ opacity: 1 }, { opacity: 1, offset: .78 }, { opacity: 0 }], { duration: T, fill: 'forwards' })
+  l.animate([{ clipPath: 'inset(0 100% 0 0)' }, { clipPath: 'inset(0 0 0 0)', offset: .32 }, { clipPath: 'inset(0 0 0 0)', offset: .55 }, { clipPath: 'inset(0 0 0 100%)', offset: .8 }, { clipPath: 'inset(0 0 0 100%)' }], { duration: T, easing: 'cubic-bezier(.6,0,.3,1)', fill: 'forwards' })
+  r.animate([{ clipPath: 'inset(0 0 0 100%)' }, { clipPath: 'inset(0 0 0 0)', offset: .32 }, { clipPath: 'inset(0 0 0 0)', offset: .55 }, { clipPath: 'inset(0 100% 0 0)', offset: .8 }, { clipPath: 'inset(0 100% 0 0)' }], { duration: T, easing: 'cubic-bezier(.6,0,.3,1)', fill: 'forwards' })
+  sGlassFrost.getAnimations().forEach(a => a.cancel())
+  sGlassFrost.style.setProperty('--clear', '0')
+  decBar.style.opacity = ''
+  sGlassFrost.animate([{ '--clear': 0 }, { '--clear': 0, offset: .45 }, { '--clear': 1 }], { duration: T, easing: 'cubic-bezier(.4,0,.2,1)', fill: 'forwards' })
+  later(T * 0.45, () => panel.classList.add('open'))
+  // 收尾：落到最终状态（后台页动画时间线暂停时也不会停在磨砂）
+  later(T + 60, () => {
+    ;[decBar, l, r, sGlassFrost].forEach(el => el.getAnimations().forEach(a => a.cancel()))
+    decBar.style.opacity = '0'
+    sGlassFrost.style.setProperty('--clear', '1')
+  })
+  later(T + 600, () => panel.classList.remove('redact', 'open'))
+}
+
+function pageOf(item) { return item.tabs ? item.tabs[Math.min(state.tab, item.tabs.length - 1)] : { api: item.api, blocks: item.blocks, actions: item.actions } }
+function pageHtml(page) {
+  return {
+    body: page.blocks.map(renderBlock).join(''),
+    actions: page.actions.map((a, i) => `<button class="btn${i === 0 ? ' pri' : ''}${/删除|停止|注销|卸下/.test(a) ? ' dng' : ''}" type="button">${a}</button>`).join(''),
+  }
+}
+function moveUnderline(instant) {
+  const bar = panel.querySelector('.sp-tabs'), on = bar?.querySelector('button.on'), ul = bar?.querySelector('.ul')
+  if (!on || !ul) return
+  if (instant) ul.style.transition = 'none'
+  ul.style.left = on.offsetLeft + 'px'
+  ul.style.width = (on.offsetWidth - 14) + 'px'
+  if (instant) { void ul.offsetWidth; ul.style.transition = '' }
+}
 function renderPanel(swap) {
   const d = DEPTS[state.open]
   const item = state.items[state.target]
-  const tabs = item.tabs || [{ name: item.name, api: item.api, blocks: item.blocks, actions: item.actions }]
-  state.tab = Math.min(state.tab, tabs.length - 1)
-  const page = tabs[state.tab]
+  const page = pageOf(item)
   const paint = () => {
     clearInterval(runTimer)
     panel.classList.remove('show')
+    const h = pageHtml(page)
     panel.innerHTML = `
       <div class="sp-head">
         <div class="sp-meta"><span><span class="a">X-0${d.n}</span>&nbsp;&nbsp;${d.n}-${String(state.target + 1).padStart(2, '0')}&nbsp;&nbsp;${item.name}</span><span class="api">${page.api || ''}</span></div>
-        ${item.tabs ? `<div class="sp-tabs" role="tablist">${tabs.map((t, k) => `<button type="button" role="tab" data-tab="${k}" aria-selected="${k === state.tab}"${k === state.tab ? ' class="on"' : ''}><b>${String(k + 1).padStart(2, '0')}</b>${t.name}</button>`).join('')}</div>` : ''}
+        ${item.tabs ? `<div class="sp-tabs" role="tablist">${item.tabs.map((t, k) => `<button type="button" role="tab" data-tab="${k}" aria-selected="${k === state.tab}"${k === state.tab ? ' class="on"' : ''}><b>${String(k + 1).padStart(2, '0')}</b>${t.name}</button>`).join('')}<i class="ul"></i></div>` : ''}
       </div>
-      <div class="sp-body" role="tabpanel">${page.blocks.map(renderBlock).join('')}</div>
-      <div class="sp-actions">${page.actions.map((a, i) => `<button class="btn${i === 0 ? ' pri' : ''}${/删除|停止|注销|卸下/.test(a) ? ' dng' : ''}" type="button">${a}</button>`).join('')}</div>`
+      <div class="sp-body" role="tabpanel">${h.body}</div>
+      <div class="sp-actions">${h.actions}</div>`
     // 逐块错开显现
     ;[...panel.querySelectorAll('.sp-head, .blk, .sp-actions')].forEach((el, k) => { el.style.transitionDelay = `${k * 60}ms` })
     panel.offsetWidth
+    moveUnderline(true)
     panel.classList.add('show')
     state.shown = state.target
+    decrypt()
   }
   if (swap && panel.classList.contains('show')) {
-    // 切换条目：旧内容上滑淡出，新内容自下方接入（不再用黑条遮挡）
+    // 切换条目：旧内容上滑淡出，新内容自下方接入，并重新解密
     panel.classList.add('leave')
     later(160, () => { panel.classList.remove('leave'); paint() })
   } else paint()
 }
+// 切换页签：只换正文与操作，下划线 180ms 移动，正文 150ms 淡入（借鉴 RhineLabUI 的页签过渡）
 function selectTab(k) {
   const item = state.items[state.target]
   if (!item?.tabs || k < 0 || k >= item.tabs.length || k === state.tab) return
   state.tab = k
-  renderPanel(true)
+  clearInterval(runTimer)
+  ;[...panel.querySelectorAll('.sp-tabs button')].forEach((b, j) => { b.classList.toggle('on', j === k); b.setAttribute('aria-selected', j === k) })
+  moveUnderline(false)
+  const page = pageOf(item), h = pageHtml(page)
+  const body = panel.querySelector('.sp-body'), act = panel.querySelector('.sp-actions')
+  panel.querySelector('.sp-meta .api').textContent = page.api || ''
+  ;[body, act].forEach(el => { el.classList.remove('fadein'); el.classList.add('fade') })
+  body.innerHTML = h.body
+  act.innerHTML = h.actions
+  void body.offsetWidth
+  ;[body, act].forEach(el => { el.classList.remove('fade'); el.classList.add('fadein') })
 }
+
+// ── 确认弹窗：删除类操作二次确认；进入中途关闭从当前状态接续；Esc 只关弹窗 ──
+const modal = document.getElementById('modal')
+let modalReturn = null, modalTimer = 0
+function openModal(name, api) {
+  $s('m-text').textContent = `将删除「${name}」。此操作会写入后端，删除后无法撤销。`
+  $s('m-api').textContent = api
+  modalReturn = document.activeElement
+  clearTimeout(modalTimer)
+  modal.classList.add('show', 'enter')
+  void modal.offsetWidth
+  modal.classList.remove('enter')
+  modal.classList.add('in')
+  $s('m-cancel').focus({ preventScroll: true })
+}
+function closeModal(done) {
+  if (!modal.classList.contains('show')) return
+  modal.classList.remove('in')
+  clearTimeout(modalTimer)
+  modalTimer = setTimeout(() => { modal.classList.remove('show'); modalReturn?.focus?.({ preventScroll: true }); done?.() }, 200)
+}
+$s('m-cancel').addEventListener('click', () => closeModal())
+$s('m-ok').addEventListener('click', () => { const api = $s('m-api').textContent; closeModal(() => toast(`已删除 · ${api}`)) })
+modal.addEventListener('click', e => { if (e.target === modal) closeModal() })
+addEventListener('keydown', e => {
+  if (!modal.classList.contains('show')) return
+  if (e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); closeModal() }
+  else if (e.key === 'Tab') { e.preventDefault(); (document.activeElement === $s('m-ok') ? $s('m-cancel') : $s('m-ok')).focus() }
+}, true)
 
 // ── 面板交互：开关、按钮反馈、快速启动的模拟运行 ──
 const toastEl = document.getElementById('toast')
@@ -1039,7 +1197,7 @@ panel.addEventListener('click', e => {
   const text = b.textContent
   if (text === '开始执行') startRun()
   else if (text === '停止') { clearInterval(runTimer); setRun('idle', 0, '已停止', '队列已手动停止'); toast('队列已停止') }
-  else if (/删除/.test(text)) toast('演示：删除前会二次确认')
+  else if (/删除/.test(text)) openModal(state.items[state.target].name, pageApi())
   else if (/保存/.test(text)) toast(`已保存 · ${pageApi()}`)
   else toast(`演示：${text} · ${pageApi()}`)
 })
@@ -1211,13 +1369,15 @@ function closeSection() {
   sect.classList.remove('reel-in', 'landed')
   window.chain?.close()
   hub.querySelectorAll('.s-morph').forEach(el => el.remove())
+  // 索引与其余方块在飞回途中就淡入；目标方块先藏着，等替身落地同一帧再换成真身
+  tiles[i].el.style.visibility = 'hidden'
+  hub.classList.remove('sectioned')
+  sect.classList.remove('on')
   // 部门卡按同一种方式飞回方块原位
   playMorph(i, true, el => {
-    hub.classList.remove('sectioned')
-    sect.classList.remove('on')
+    tiles[i].el.style.visibility = ''
     panel.innerHTML = ''; currentEl.innerHTML = ''
-    setTimeout(() => el.remove(), 240)
-    el.style.transition = 'opacity .24s'; el.style.opacity = '0'
+    el.remove()
     state.open = -1; state.closing = false; state.morph = null
     tiles[i].el.focus({ preventScroll: true })
   })
@@ -1245,7 +1405,7 @@ addEventListener('keydown', e => {
 })
 
 const clock = document.getElementById('clock')
-setInterval(() => { clock.textContent = new Date().toLocaleTimeString('zh-CN', { hour12: false }) }, 1000)
+setInterval(() => rollDigits(clock, new Date().toLocaleTimeString('zh-CN', { hour12: false })), 1000)
 
 // ── 启动动画时间轴（ms）。段落：黑场标志 → 接入输入 → 标志绘制与品牌 → 身份 → 授权圆环 → 欢迎 → 白场入索引 ──
 const boot = document.getElementById('boot')
@@ -1361,21 +1521,20 @@ function faceTexture(index, name) {
   for (const [x, y] of [[30, 30], [482, 30], [30, 294], [482, 294]]) {
     g.beginPath(); g.arc(x, y, 5, 0, Math.PI * 2); g.fill()
   }
-  // AUTO-MAS 标志（细圆环 + 琥珀核心 + 四向刻度 + 斜线）
-  const cx = 150, cy = 150, r = 64
+  // 档案章标志：切角方框 + A 形折线 + 琥珀方块
+  g.fillStyle = 'rgba(42,43,42,0.85)'
+  g.fillRect(70, 70, 160, 160)
+  g.save()
+  g.translate(90, 90)
+  g.scale(3, 3)
   g.strokeStyle = 'rgba(255,255,255,0.95)'
-  g.lineWidth = 12
-  g.beginPath(); g.arc(cx, cy, r, 0, Math.PI * 2); g.stroke()
-  g.lineWidth = 9
-  g.beginPath()
-  g.moveTo(cx, cy - r - 26); g.lineTo(cx, cy - r + 6)
-  g.moveTo(cx, cy + r - 6); g.lineTo(cx, cy + r + 26)
-  g.moveTo(cx - r - 26, cy); g.lineTo(cx - r + 6, cy)
-  g.moveTo(cx + r - 6, cy); g.lineTo(cx + r + 26, cy)
-  g.moveTo(cx - 46, cy + 46); g.lineTo(cx + 46, cy - 46)
-  g.stroke()
+  g.lineWidth = 2.6
+  g.stroke(new Path2D('M9 2H38V26M26 38H2V9L9 2'))
+  g.lineWidth = 3.25
+  g.stroke(new Path2D('M10 31 20 9 30 31M14.5 23H25.5'))
   g.fillStyle = '#e8701f'
-  g.beginPath(); g.arc(cx, cy, 20, 0, Math.PI * 2); g.fill()
+  g.fillRect(31, 31, 7, 7)
+  g.restore()
   if (name) {
     g.fillStyle = 'rgba(20,20,18,0.85)'
     g.font = '700 30px "AUTO-MAS MiSans", "Microsoft YaHei", sans-serif'
@@ -1406,6 +1565,8 @@ let introTarget = 0
 let running = false
 let hovered = -1
 let onDone = null
+// 借鉴 RhineLabUI：停止操作 2.5 秒后渐入呼吸（8 秒与 13 秒周期叠加，相邻错相）；悬停卡带抬起
+let idleT = 0, breath = 0, clockT = 0, lastDraw = 0
 
 // 曲线：s 为相对选中位置的槽位，越大越靠右下、越靠近镜头
 function place(s) {
@@ -1449,6 +1610,7 @@ function build(items, deptN) {
     face.position.z = 0.135
     const edge = new THREE.LineSegments(EDGE, new THREE.LineBasicMaterial({ color: 0x9e9a90, transparent: true, opacity: 0.55 }))
     root.add(body, face, edge)
+    root.userData.lift = 0
     body.userData.k = item ? k : -1
     group.add(root)
     cassettes.push({ k, root, body, face, edge })
@@ -1460,7 +1622,8 @@ function layout() {
   for (const c of cassettes) {
     const s = c.k - cur - shift
     const p = place(s)
-    c.root.position.set(p.x, p.y, p.z)
+    const b = breath * 0.06 * (0.6 * Math.sin(clockT * Math.PI / 4 + c.k * 0.7) + 0.4 * Math.sin(clockT * Math.PI / 6.5 + c.k * 1.3))
+    c.root.position.set(p.x, p.y + b + c.root.userData.lift * 0.22, p.z)
     c.root.rotation.set(p.rx, p.ry, p.rz)
     c.root.scale.setScalar(p.scale)
     const fade = Math.max(0, Math.min(1, 1.8 - Math.abs(s) / 4.2)) * Math.min(1, intro * 1.4)
@@ -1496,9 +1659,22 @@ function frame(t) {
   intro += (introTarget - intro) * (1 - Math.pow(0.004, dt))
   if (Math.abs(target - cur) < 0.0005) cur = target
   if (Math.abs(introTarget - intro) < 0.002) intro = introTarget
-  layout()
-  renderer.render(scene, camera)
-  if (cur !== target || intro !== introTarget) requestAnimationFrame(frame)
+  const settling = cur !== target || intro !== introTarget
+  idleT = settling ? 0 : idleT + dt
+  clockT += dt
+  const goal = !REDUCE && idleT > 2.5 && introTarget === 1 ? 1 : 0
+  breath += (goal - breath) * Math.min(1, dt * 0.8)
+  if (Math.abs(goal - breath) < 0.001) breath = goal
+  let lifting = false
+  for (const c of cassettes) {
+    const lt = c.k === hovered ? 1 : 0
+    c.root.userData.lift += (lt - c.root.userData.lift) * Math.min(1, dt * 12)
+    if (Math.abs(lt - c.root.userData.lift) < 0.002) c.root.userData.lift = lt
+    else lifting = true
+  }
+  // 只剩呼吸时按 30 帧绘制，降低持续占用
+  if (settling || lifting || t - lastDraw > 33) { layout(); renderer.render(scene, camera); lastDraw = t }
+  if (settling || lifting || breath > 0 || goal > 0) requestAnimationFrame(frame)
   else {
     running = false
     last = 0
@@ -1520,7 +1696,7 @@ function pick(e) {
 canvas.addEventListener('pointermove', e => {
   const k = pick(e)
   canvas.style.cursor = k >= 0 ? 'pointer' : 'default'
-  if (k !== hovered) { hovered = k; wake(); if (!running) { layout(); renderer.render(scene, camera) } }
+  if (k !== hovered) { hovered = k; idleT = 0; wake() }
 })
 canvas.addEventListener('click', e => {
   const k = pick(e)
@@ -1540,6 +1716,7 @@ window.chain = {
   },
   setTarget(i) {
     target = i
+    idleT = 0
     wake()
   },
   close() {

@@ -19,6 +19,8 @@ FocusScope {
     property int target: 0
     readonly property var item: items.length ? items[Math.min(target, items.length - 1)] : null
 
+    property var hub: null          // 一级索引：取方块实时位置、在飞行期间隐藏对应方块
+    property bool returning: false  // 正在飞回：索引提前淡入，与飞回并行
     property real reveal: 0         // 外围元素整体显现
     property bool landed: false     // 部门卡已由真身接替
     property real tiltX: 0
@@ -30,6 +32,8 @@ FocusScope {
 
     // ── 打开 / 关闭 ──────────────────────────────────────────────────────
     function open(i, r, tileItem) {
+        if (hub) { r = hub.liveTileRect(i); hub.hiddenIndex = i }
+        returning = false
         index = i
         target = 0
         panel.tab = 0
@@ -48,7 +52,10 @@ FocusScope {
         revealAnim.stop()
         hideAnim.start()
         chain.close()
-        morph.start(morph.tileRect, null, true)
+        // 索引在飞回途中就开始淡入；目标方块保持隐藏，落地同一帧再换成真身，避免闪一下
+        returning = true
+        const r = hub ? hub.liveTileRect(index) : morph.tileRect
+        morph.start(r, null, true)
     }
     function select(k) {
         if (!items.length) return
@@ -575,7 +582,9 @@ FocusScope {
             easing.type: Easing.Linear
             onFinished: {
                 if (morph.reverse) {
+                    if (view.hub) view.hub.hiddenIndex = -1
                     morph.visible = false
+                    view.returning = false
                     view.index = -1
                     view.closed()
                 } else {

@@ -46,7 +46,13 @@ FocusScope {
         openRequested(i, tileRect(i))
     }
 
+    property int hiddenIndex: -1         // 过渡体正替身飞行的方块
     function tileItem(i) { return tiles.itemAt(i) }
+    // 方块当前在画面上的矩形（含视差与悬停放大），过渡体以此为起止点
+    function liveTileRect(i) {
+        const t = tiles.itemAt(i)
+        return t ? t.mapToItem(hub, 0, 0, t.width, t.height) : tileRect(i)
+    }
 
     function focusCurrent() {
         tiles.itemAt(current).forceActiveFocus()
@@ -257,7 +263,7 @@ FocusScope {
             px: -hub.mx * dp + Math.sin(hub.clock / 2.6 + index) * dp * 0.15 * hub.floatAmp
             py: -hub.my * dp + Math.cos(hub.clock / 3.1 + index * 1.7) * dp * 0.15 * hub.floatAmp
             intro: hub.tileIntro(index)
-            visible: hub.chrome > 0
+            visible: hub.chrome > 0 && hub.hiddenIndex !== index
             current: hub.current === index
             dimmed: true
             onHovered: hub.current = index

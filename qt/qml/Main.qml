@@ -11,6 +11,7 @@ Window {
     property bool skipBoot: false
     property bool backendEnabled: true
     property int initialSection: 0
+    property int returnAfter: 0             // 自检：进入二级界面 N 毫秒后自动返回
     property string themeMode: "system"
     property real simulateLoad: 0           // >0：按真实阶段模拟一次耗时 N 秒的后端启动
     property bool booted: false
@@ -69,7 +70,10 @@ Window {
         if (bootSeq.exiting || skipBoot) hub.introMs = 700
         booted = true
         if (initialSection >= 1 && initialSection <= 10)
-            Qt.callLater(() => hub.open(initialSection - 1))
+            Qt.callLater(() => {
+                hub.open(initialSection - 1)
+                if (returnAfter > 0) returnTimer.start()
+            })
         else
             hub.forceActiveFocus()
     }
@@ -88,7 +92,7 @@ Window {
             focus: true
             active: root.booted
             paused: sections.busy
-            sectioned: sections.busy
+            sectioned: sections.busy && !sections.returning
             backendStatus: root.source ? root.source.status : ""
             onOpenRequested: (i, r) => sections.open(i, r, hub.tileItem(i))
         }
@@ -97,6 +101,7 @@ Window {
             id: sections
             anchors.fill: parent
             departments: hub.departments
+            hub: hub
             onClosed: hub.focusCurrent()
         }
 
@@ -114,6 +119,8 @@ Window {
             onFinished: root.finishBoot()
         }
     }
+
+    Timer { id: returnTimer; interval: root.returnAfter; onTriggered: sections.close() }
 
     Shortcut {
         sequences: ["Esc", "Space"]

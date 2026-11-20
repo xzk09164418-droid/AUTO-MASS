@@ -36,6 +36,8 @@ def parse_args() -> argparse.Namespace:
         "--simulate-load", type=float, default=0, metavar="SECONDS",
         help="不连接后端，按真实阶段模拟一次耗时 N 秒的后端启动（演示长时间加载）",
     )
+    parser.add_argument("--return-after", type=int, default=0, metavar="MS",
+                        help="配合 --section：进入后 N 毫秒自动返回索引（自检返回过渡用）")
     parser.add_argument("--size", help="窗口逻辑尺寸，如 1920x1080（分辨率适配测试用）")
     return parser.parse_args()
 
@@ -65,6 +67,7 @@ def main() -> int:
             "backendEnabled": not (args.no_backend or args.simulate_load > 0),
             "simulateLoad": args.simulate_load,
             "initialSection": args.section,
+            "returnAfter": args.return_after,
             "themeMode": args.theme,
         }
     )
