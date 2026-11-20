@@ -265,12 +265,12 @@ Item {
                     readonly property string iconPath: cas.real && chain.items[cas.k] && chain.items[cas.k].icon ? chain.items[cas.k].icon : ""
                     IconDisc { visible: parent.iconPath !== ""; x: 20; y: 30; width: 100; height: 100; path: parent.iconPath }
                     Emblem {
+                        face: Emblem.Tape
                         visible: parent.iconPath === ""
                         x: 34; y: 44
                         width: 72; height: 72
                         ink: Theme.dark ? "#e0e3dc" : "#ffffff"
                         core: Theme.accent
-                        lineWidth: 3.2
                         curve: false
                         Rectangle { anchors.fill: parent; anchors.margins: -10; z: -1; color: Theme.dark ? "#11181b" : "#2a2b2a"; opacity: 0.85 }
                     }

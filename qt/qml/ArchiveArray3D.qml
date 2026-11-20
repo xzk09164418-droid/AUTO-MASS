@@ -756,7 +756,7 @@ Item {
         Text { x: 22; y: 230; text: parent.no; color: "#171713"; font.family: Theme.font; font.pixelSize: 130; font.bold: true }
         Rectangle { x: 782; y: 32; width: 221; height: 39; color: "#171713"; Text { x: 27; anchors.verticalCenter: parent.verticalCenter; text: "A M / S C"; color: "#eee9de"; font.family: Theme.font; font.pixelSize: 24 } }
         Text { x: 830; y: 84; text: "INFO"; color: "#171713"; font.family: Theme.font; font.pixelSize: 64; font.bold: true }
-        Emblem { x: 820; y: 250; width: 92; height: 92; ink: "#171713"; core: Theme.accent; lineWidth: 2.6 }
+        Emblem { face: Emblem.Archive; x: 820; y: 250; width: 92; height: 92; ink: "#171713"; core: Theme.accent }
         Mark { x: 915; y: 254; width: 84; height: 84; ink: "#171713" }
     }
     component DiscArt: Item {

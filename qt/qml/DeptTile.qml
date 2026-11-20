@@ -140,6 +140,7 @@ Item {
 
     // 右上角的档案章标志（取代原先嵌在字形里的圆环标志）
     Emblem {
+        face: Emblem.Hub
         visible: tile.isCard || tile.isBlock
         anchors.right: parent.right
         anchors.top: parent.top
