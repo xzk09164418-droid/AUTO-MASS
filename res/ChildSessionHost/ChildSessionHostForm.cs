@@ -101,6 +101,7 @@ namespace BetterGenshinImpact.Service.ChildSession
         private bool _lockDesktopAspectRatio = false;
         private bool _miniWindowMode = false;
         private Rectangle _normalBounds;
+        private FormWindowState _windowStateBeforeMini;
         private bool _allowClose;
         private bool _isConnecting;
         private string _statusMessage = "桌面分身宿主已初始化（默认托盘常驻运行）";
@@ -115,7 +116,7 @@ namespace BetterGenshinImpact.Service.ChildSession
             _isHiddenToTray = startHidden;
 
             AutoScaleMode = AutoScaleMode.None;
-            Text = "BetterGI 桌面分身 · AUTO-MAS";
+            Text = "automass桌面分身";
             MinimumSize = new Size(415, 90);
             StartPosition = FormStartPosition.Manual;
             var screenArea = Screen.PrimaryScreen != null ? Screen.PrimaryScreen.WorkingArea : new Rectangle(0, 0, 1920, 1080);
@@ -184,7 +185,7 @@ namespace BetterGenshinImpact.Service.ChildSession
                 ForeColor = TextPrimary
             };
 
-            _trayToggleVisibleItem = new ToolStripMenuItem("显示 BetterGI 桌面分身窗口")
+            _trayToggleVisibleItem = new ToolStripMenuItem("显示 automass桌面分身窗口")
             {
                 ForeColor = TextPrimary,
                 Font = new Font("Microsoft YaHei UI", 9F, FontStyle.Bold)
@@ -263,7 +264,7 @@ namespace BetterGenshinImpact.Service.ChildSession
             _trayMenu.Opening += delegate
             {
                 _trayToggleVisibleItem.Text = _isHiddenToTray
-                    ? "🖥 显示 BetterGI 桌面分身窗口"
+                    ? "🖥 显示 automass桌面分身窗口"
                     : "👁 隐藏桌面分身窗口到托盘";
                 _trayWatchModeItem.Checked = _watchModeEnabled;
             };
@@ -271,7 +272,7 @@ namespace BetterGenshinImpact.Service.ChildSession
             _trayIcon = new NotifyIcon
             {
                 Icon = Icon ?? SystemIcons.Application,
-                Text = "BetterGI 桌面分身 · AUTO-MAS (托盘常驻运行)",
+                Text = "automass桌面分身 (托盘常驻运行)",
                 ContextMenuStrip = _trayMenu,
                 Visible = true
             };
@@ -311,7 +312,7 @@ namespace BetterGenshinImpact.Service.ChildSession
                 {
                     _trayIcon.ShowBalloonTip(
                         2500,
-                        "BetterGI 桌面分身已最小化到系统托盘",
+                        "automass桌面分身已最小化到系统托盘",
                         "常驻远程桌面连接在后台保持运行，双击托盘图标可随时查看桌面分身画面。",
                         ToolTipIcon.Info);
                 }
@@ -375,7 +376,7 @@ namespace BetterGenshinImpact.Service.ChildSession
             {
                 AutoSize = true,
                 Location = new Point(32, 9),
-                Text = "BetterGI 桌面分身",
+                Text = "automass桌面分身",
                 ForeColor = TextPrimary,
                 Font = new Font("Microsoft YaHei UI", 9.5F, FontStyle.Bold, GraphicsUnit.Point)
             };
@@ -516,6 +517,8 @@ namespace BetterGenshinImpact.Service.ChildSession
             _overlayBackdrop.Controls.Add(_centerCard);
             _workspaceContainer.Controls.Add(_overlayBackdrop);
             _workspaceContainer.Controls.Add(_rdpHost);
+            _workspaceContainer.ClientSizeChanged += delegate { _rdpHost.FitToWorkspace(); };
+            _rdpHost.FitToWorkspace();
             _overlayBackdrop.BringToFront();
 
             Controls.Add(_workspaceContainer);
@@ -725,7 +728,7 @@ namespace BetterGenshinImpact.Service.ChildSession
             {
                 MessageBox.Show(
                     this,
-                    "【BetterGI · AUTO-MAS 本地远程桌面 (Child Session) 说明】\n\n" +
+                    "【automass桌面分身 (Child Session) 说明】\n\n" +
                     "1. 默认托盘运行：远程桌面宿主默认最小化在系统托盘运行，避免打扰主桌面；双击系统托盘图标或在 Web 控制台点击“显示远程桌面窗口”即可查看画面。\n" +
                     "2. 包装器模式：通过任务计划程序 (TASK_RUN_USE_SESSION_ID) 在桌面分身内拉起 child_session_wrapper.py，实时采集脚本 PID 与退出码，并在结束或超上限时间时执行 3 遍 taskkill /F /T。\n" +
                     "3. 外部程序借用与让渡：外部程序可调用 POST /api/child-session/acquire 申请借用桌面分身，队列将在相邻子任务间隔自动暂停并释放画面，待外部程序调用 POST /api/child-session/release 后自动恢复。\n" +
@@ -1026,7 +1029,9 @@ namespace BetterGenshinImpact.Service.ChildSession
         {
             if (!_miniWindowMode)
             {
-                _normalBounds = Bounds;
+                _windowStateBeforeMini = WindowState;
+                _normalBounds = WindowState == FormWindowState.Normal ? Bounds : RestoreBounds;
+                WindowState = FormWindowState.Normal;
                 _miniWindowMode = true;
                 TopMost = true;
                 ClientSize = new Size(520, 328);
@@ -1035,6 +1040,7 @@ namespace BetterGenshinImpact.Service.ChildSession
             else
             {
                 _miniWindowMode = false;
+                WindowState = FormWindowState.Normal;
                 if (_normalBounds.Width > 200 && _normalBounds.Height > 200)
                 {
                     Bounds = _normalBounds;
@@ -1043,6 +1049,7 @@ namespace BetterGenshinImpact.Service.ChildSession
                 {
                     ClientSize = new Size(1280, 752);
                 }
+                WindowState = _windowStateBeforeMini;
             }
             UpdateToolbarButtonsVisualState();
         }
@@ -1054,7 +1061,10 @@ namespace BetterGenshinImpact.Service.ChildSession
                 return;
             }
             var targetWidth = Math.Max(480, ClientSize.Width);
-            var targetRdpHeight = (int)Math.Round(targetWidth * (double)_desktopSize.Height / _desktopSize.Width);
+            var desktop = _rdpHost.RemoteDesktopSize;
+            if (desktop.IsEmpty) desktop = _desktopSize;
+            if (desktop.Width <= 0 || desktop.Height <= 0) return;
+            var targetRdpHeight = (int)Math.Round(targetWidth * (double)desktop.Height / desktop.Width);
             var chromeHeight = _topBar.Height + (_infoBarPanel.Visible ? _infoBarPanel.Height : 0);
             ClientSize = new Size(targetWidth, targetRdpHeight + chromeHeight);
         }
@@ -1143,7 +1153,7 @@ namespace BetterGenshinImpact.Service.ChildSession
                 var leaseBadge = !string.IsNullOrEmpty(_externalLeaseHolder)
                     ? string.Format("  [已让渡: {0}]", _externalLeaseHolder)
                     : "";
-                _titleLabel.Text = string.Format("BetterGI 桌面分身{0}{1}", sidBadge, leaseBadge);
+                _titleLabel.Text = string.Format("automass桌面分身{0}{1}", sidBadge, leaseBadge);
             }
 
             if (_trayIcon != null)
@@ -1151,7 +1161,7 @@ namespace BetterGenshinImpact.Service.ChildSession
                 string trayState = !string.IsNullOrEmpty(_externalLeaseHolder)
                     ? "已让渡外部程序"
                     : (connected ? (sid.HasValue ? "已连接 #" + sid.Value : "已连接") : "待连接");
-                string trayText = string.Format("BetterGI 桌面分身 ({0})", trayState);
+                string trayText = string.Format("automass桌面分身 ({0})", trayState);
                 _trayIcon.Text = trayText.Length > 63 ? trayText.Substring(0, 63) : trayText;
             }
 
@@ -1214,7 +1224,7 @@ namespace BetterGenshinImpact.Service.ChildSession
         {
             using (var dlg = new OpenFileDialog())
             {
-                dlg.Title = "选择要在 BetterGI 桌面分身中启动的脚本或程序";
+                dlg.Title = "选择要在 automass桌面分身中启动的脚本或程序";
                 dlg.Filter = "可执行程序或脚本 (*.exe;*.bat;*.cmd;*.py)|*.exe;*.bat;*.cmd;*.py|所有文件 (*.*)|*.*";
                 if (dlg.ShowDialog(this) != DialogResult.OK)
                 {
