@@ -91,8 +91,20 @@ Item {
         font.letterSpacing: 1.2
     }
 
+    DepartmentArt {
+        department: tile.d.key
+        ink: tile.textColor
+        accent: Theme.accent
+        width: tile.isCard || tile.isBlock ? parent.width * 0.62 : 56
+        height: tile.isCard || tile.isBlock ? parent.height * 0.42 : 40
+        x: tile.isCard || tile.isBlock ? (parent.width - width) / 2 : -width - 8
+        y: tile.isCard || tile.isBlock ? parent.height * 0.07 : (parent.height - height) / 2
+    }
+
     Column {
-        anchors.centerIn: parent
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.verticalCenter: parent.verticalCenter
+        anchors.verticalCenterOffset: tile.isCard || tile.isBlock ? tile.height * 0.19 : 0
         spacing: 0
 
         Repeater {
@@ -109,7 +121,7 @@ Item {
                     text: modelData
                     color: tile.textColor
                     font.family: Theme.font
-                    font.pixelSize: tile.d.size
+                    font.pixelSize: tile.isCard || tile.isBlock ? Math.round(tile.d.size * 0.58) : tile.d.size
                     font.weight: Font.Black
                     font.letterSpacing: -tile.d.size * 0.02
                 }
@@ -136,20 +148,6 @@ Item {
             font.weight: Font.DemiBold
             font.letterSpacing: 4
         }
-    }
-
-    // 右上角的档案章标志（取代原先嵌在字形里的圆环标志）
-    Emblem {
-        face: Emblem.Hub
-        visible: tile.isCard || tile.isBlock
-        anchors.right: parent.right
-        anchors.top: parent.top
-        anchors.margins: tile.d.center ? 16 : 10
-        width: tile.d.center ? 30 : 20
-        height: width
-        ink: tile.textColor
-        core: Theme.accent
-        opacity: tile.isCard || tile.isBlock ? 0.9 : 0.75
     }
 
     MouseArea {
