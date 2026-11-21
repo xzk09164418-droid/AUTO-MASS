@@ -26,7 +26,7 @@
 
 ## MiSans
 
-- 字体及分片信息见 frontend/public/fonts/misans/NOTICE.md，发行时应连同字体资源保留该声明。
+- 字体及分片信息见 design/qt-demo/vendor/misans/NOTICE.md，发行时应连同字体资源保留该声明。
 
 各依赖库继续适用其自带许可证。作者同意 fork 的沟通不替代这些许可证和署名要求。发布构建时应同时提供与其对应的源代码和构建说明。
 
@@ -34,3 +34,7 @@
 
 Qt 便携包使用 7-Zip 的 7z.sfx 自解压模块，Copyright (C) 1999-2026 Igor Pavlov。
 许可证见 licenses/7-Zip-LICENSE.txt；上游源码与下载：https://www.7-zip.org/ 。自解压仅展开文件，不替用户修改系统设置。
+
+### Three.js（Qt 美术参考页）
+
+版本 0.184.0，MIT 许可证。所需模块位于 design/qt-demo/vendor/three，完整许可证见该目录 LICENSE。

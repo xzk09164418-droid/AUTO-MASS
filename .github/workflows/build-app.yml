@@ -109,7 +109,7 @@ jobs:
           Write-Host "前置检查通过：将发布 $env:VERSION_TAG"
         shell: pwsh
 
-      - name: 构建 Node.js 浏览器与原生 Windows 包
+      - name: 构建 Qt 与原生 Windows 包
         uses: ./.github/actions/build-windows-unpacked
         with:
           github-token: ${{ github.token }}
@@ -119,7 +119,7 @@ jobs:
 
       - name: 准备待签名的原生启动器
         shell: pwsh
-        run: Copy-Item -LiteralPath 'frontend/dist/win-unpacked/AUTO-MAS.exe' -Destination 'AUTO-MAS.exe'
+        run: Copy-Item -LiteralPath 'dist/win-unpacked/AUTO-MAS.exe' -Destination 'AUTO-MAS.exe'
 
       - name: 上传未签名主程序
         id: upload-unsigned-main-program
@@ -138,7 +138,7 @@ jobs:
           artifact-configuration-slug: "AUTO-MAS"
           github-artifact-id: "${{ steps.upload-unsigned-main-program.outputs.artifact-id }}"
           wait-for-completion: true
-          output-artifact-directory: 'frontend\dist\win-unpacked'
+          output-artifact-directory: 'dist\win-unpacked'
 
       - name: 构建安装包
         uses: Minionguyjpro/Inno-Setup-Action@36abc9fdddc244a69f4895566fa5b2d8d5854e43 # v1.2.7
@@ -150,7 +150,7 @@ jobs:
             /q
 
       - name: 创建便携包压缩包
-        run: Compress-Archive -Path .\frontend\dist\win-unpacked\* -DestinationPath AUTO-MAS-${{ steps.generate_version_info.outputs.version_tag }}-x64.zip -Force
+        run: Compress-Archive -Path .\dist\win-unpacked\* -DestinationPath AUTO-MAS-${{ steps.generate_version_info.outputs.version_tag }}-x64.zip -Force
         shell: pwsh
 
       - name: 上传未签名安装程序

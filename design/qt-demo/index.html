@@ -4,8 +4,8 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>AUTO-MAS 档案终端演示</title>
-<link rel="stylesheet" href="../../frontend/public/fonts/misans/misans.css" />
-<script type="importmap">{ "imports": { "three": "/frontend/node_modules/three/build/three.module.js" } }</script>
+<link rel="stylesheet" href="./vendor/misans/misans.css" />
+<script type="importmap">{ "imports": { "three": "./vendor/three/build/three.module.js" } }</script>
 <style>
 :root {
   --bg: #e6e3df;
@@ -1481,7 +1481,7 @@ runBoot()
 // 左下角 3D 录像带串：条目即卡带，沿斜向曲线排布；选中的卡带抽出并转向镜头。
 // 只在动画进行时渲染（静止即停帧），时间步长随 requestAnimationFrame 与刷新率同步。
 import * as THREE from 'three'
-import { RoundedBoxGeometry } from '/frontend/node_modules/three/examples/jsm/geometries/RoundedBoxGeometry.js'
+import { RoundedBoxGeometry } from './vendor/three/examples/jsm/geometries/RoundedBoxGeometry.js'
 
 const W = 900
 const H = 640

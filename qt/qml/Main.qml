@@ -1,6 +1,5 @@
 import QtQuick
 import QtQuick.Window
-import Qt.labs.platform as Native
 import "."
 
 // 外壳：1920×1080 参考舞台按窗口等比缩放；启动动画 → 部门索引 → 二级界面。
@@ -9,6 +8,7 @@ Window {
     id: root
 
     property var backend: null
+    property var client: null
     property bool skipBoot: false
     property bool backendEnabled: true
     property int initialSection: 0
@@ -22,23 +22,10 @@ Window {
     property bool bootHold: false
 
     property var uiOptions: ({})
-    readonly property bool toTray: !!uiOptions.IfToTray && tray.available
     flags: Qt.Window | Qt.WindowTitleHint | Qt.WindowSystemMenuHint | Qt.WindowMinMaxButtonsHint
         | (uiOptions.IfHideCloseButton ? Qt.CustomizeWindowHint : Qt.WindowCloseButtonHint)
     onClosing: event => {
-        if (toTray) { event.accepted = false; hide() }
-    }
-    Native.SystemTrayIcon {
-        id: tray
-        visible: !!root.uiOptions.IfShowTray || root.toTray
-        icon.source: "../../res/icons/AUTO-MAS.ico"
-        tooltip: "AUTO-MAS"
-        function restoreWindow() { root.show(); root.raise(); root.requestActivate() }
-        onActivated: reason => { if (reason === Native.SystemTrayIcon.Trigger || reason === Native.SystemTrayIcon.DoubleClick) restoreWindow() }
-        menu: Native.Menu {
-            Native.MenuItem { text: "显示 AUTO-MAS"; onTriggered: tray.restoreWindow() }
-            Native.MenuItem { text: "退出 AUTO-MAS"; onTriggered: Qt.quit() }
-        }
+        if (client) { event.accepted = false; client.close_window() }
     }
 
     width: 1600

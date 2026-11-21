@@ -90,7 +90,8 @@ class DesktopTools(FileLocations):
         archives = directory / "log-archive"
         files = [
             (directory / "app.log", "后端 · 当前", True),
-            (directory / "node-frontend.log", "Node · 当前", True),
+            (directory / "qt-client.log", "Qt · 当前", True),
+            (directory / "qt-backend-launcher.log", "Qt · 后端启动", True),
         ]
         files.extend(
             (p, p.name, False) for p in sorted(archives.glob("*.log"), reverse=True)

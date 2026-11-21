@@ -33,7 +33,6 @@
 `res/version.json` 全部由本脚本从它生成，不要手改：
 
 - `res/version.json`   —— 整份生成（前端编译期注入、发布 CI 生成 Release 正文都读它）
-- `frontend/package.json`
 - `app/core/config.py`
 - `pyproject.toml`     —— PEP 440 写法，如 5.5.0b3
 - `uv.lock`            —— 其中 auto-mas 包自身的版本，同样是 PEP 440 写法
@@ -82,7 +81,6 @@ DEVELOPMENT_BRANCH = "dev"
 
 CHANGELOG_PATH = REPO_ROOT / "CHANGELOG.md"
 VERSION_JSON_PATH = REPO_ROOT / "res" / "version.json"
-PACKAGE_JSON_PATH = REPO_ROOT / "frontend" / "package.json"
 APP_CONFIG_PATH = REPO_ROOT / "app" / "core" / "config.py"
 PYPROJECT_PATH = REPO_ROOT / "pyproject.toml"
 UV_LOCK_PATH = REPO_ROOT / "uv.lock"
@@ -211,7 +209,7 @@ RELEASE_NOTE_JSON_BUDGET = 18000
 CUT_MARK = "（更新日志过长，还有 {count} 条未显示，完整内容见 GitHub Release）"
 
 # 改了这些路径的 PR 被视为用户可见，必须带碎片（除非打了 skip-changelog 标签）
-USER_VISIBLE_PREFIXES = ("app/", "frontend/src/", "frontend/electron/", "main.py")
+USER_VISIBLE_PREFIXES = ("app/", "qt/", "main.py")
 # 普通 PR 完全不许碰的文件：它们只由发版 PR 更新
 PROTECTED_FILES = ("CHANGELOG.md", "res/version.json")
 
@@ -1127,9 +1125,8 @@ PYPROJECT_VERSION = re.compile(r'(?m)^(version\s*=\s*)"[^"]*"')
 UV_LOCK_VERSION = re.compile(
     r'(?m)^(\[\[package\]\]\nname = "auto-mas"\nversion = )"[^"]*"'
 )
-# (相对路径, 正则)：普通 PR 不许改动这四处的版本号取值
+# (相对路径, 正则)：普通 PR 不许改动这些位置的版本号取值
 VERSION_FIELDS = (
-    ("frontend/package.json", PACKAGE_JSON_VERSION),
     ("app/core/config.py", APP_CONFIG_VERSION),
     ("pyproject.toml", PYPROJECT_VERSION),
     ("uv.lock", UV_LOCK_VERSION),
@@ -1152,12 +1149,6 @@ def build_expected() -> Dict[Path, str]:
     return {
         CHANGELOG_PATH: render_changelog(sections, dates),
         VERSION_JSON_PATH: render_version_json(current_version, sections),
-        PACKAGE_JSON_PATH: substitute_once(
-            read_text(PACKAGE_JSON_PATH),
-            PACKAGE_JSON_VERSION,
-            current_version,
-            "frontend/package.json",
-        ),
         APP_CONFIG_PATH: substitute_once(
             read_text(APP_CONFIG_PATH),
             APP_CONFIG_VERSION,

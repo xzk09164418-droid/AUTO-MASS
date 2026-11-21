@@ -30,6 +30,7 @@ internal static class AutoMassQtLauncher
         {
             string root = AppDomain.CurrentDomain.BaseDirectory;
             string python = Path.Combine(root, "python", "pythonw.exe");
+            if (!File.Exists(python)) python = Path.Combine(root, ".venv", "Scripts", "pythonw.exe");
             string entry = Path.Combine(root, "qt", "main.py");
             if (!File.Exists(python) || !File.Exists(entry))
                 throw new FileNotFoundException("Extract the complete package before starting AUTO-MASS.");

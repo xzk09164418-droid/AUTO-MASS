@@ -12,20 +12,20 @@ if errorlevel 1 (
     exit /b 1
 )
 
-:: 无窗口静默启动模式：不弹出浏览器窗口，远程桌面默认在系统托盘静默运行
+:: 无窗口静默启动模式：不弹出 Qt 窗口，远程桌面默认在系统托盘静默运行
 :: 用法示例：
 ::   Start-Headless.bat --auto-run
 ::   Start-Headless.bat --run-queue first
 ::   Start-Headless.bat --run-script <ScriptUUID>
 
 if exist "%~dp0.venv\Scripts\pythonw.exe" (
-    start "" "%~dp0.venv\Scripts\pythonw.exe" "%~dp0main.py" --headless %*
+    start "" "%~dp0.venv\Scripts\pythonw.exe" "%~dp0qt\main.py" --headless %*
     exit /b
 )
 
 if exist "%~dp0.venv\Scripts\python.exe" (
-    start "" /B "%~dp0.venv\Scripts\python.exe" "%~dp0main.py" --headless %*
+    start "" /B "%~dp0.venv\Scripts\python.exe" "%~dp0qt\main.py" --headless %*
     exit /b
 )
 
-start "" /B python "%~dp0main.py" --headless %*
+start "" /B python "%~dp0qt\main.py" --headless %*

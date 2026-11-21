@@ -6,7 +6,7 @@
 #define MyAppPublisher "AUTO-MAS Team"
 #define MyAppURL "https://auto-mas.top/"
 #define MyAppExeName "AUTO-MAS.exe"
-#define MyAppPath GetEnv("GITHUB_WORKSPACE") + "\frontend\dist\win-unpacked"
+#define MyAppPath GetEnv("GITHUB_WORKSPACE") + "\dist\win-unpacked"
 #define RootPath GetEnv("GITHUB_WORKSPACE")
 
 [Setup]

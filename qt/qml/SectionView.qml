@@ -547,7 +547,7 @@ FocusScope {
             return
         }
         if (op.savePorts) {
-            const err = api.savePorts(Number(Live.pick(item, "frontendPort")), Number(Live.pick(item, "backendPort")))
+            const err = api.savePorts(Number(Live.pick(item, "backendPort")))
             toast.show(err ? "保存失败：" + err : "端口已保存，下次启动时生效")
             return
         }

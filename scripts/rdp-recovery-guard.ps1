@@ -208,11 +208,11 @@ try {
         (Join-Path $Root '.venv/Scripts/python.exe'),
         (Join-Path $Root '.venv/Scripts/pythonw.exe')
     )
-    $serverScript = Join-Path $Root 'frontend/server.js'
+    $qtScript = Join-Path $Root 'qt/main.py'
     foreach ($candidate in @(Get-CimInstance Win32_Process)) {
         $owned = $candidate.ExecutablePath -in $ownedExecutables
-        if (-not $owned -and $candidate.Name -eq 'node.exe' -and $candidate.CommandLine) {
-            $owned = $candidate.CommandLine.Contains($serverScript)
+        if (-not $owned -and $candidate.Name -in @('python.exe','pythonw.exe') -and $candidate.CommandLine) {
+            $owned = $candidate.CommandLine.Contains($qtScript)
         }
         if ($owned) {
             $process = Get-Process -Id $candidate.ProcessId -ErrorAction SilentlyContinue

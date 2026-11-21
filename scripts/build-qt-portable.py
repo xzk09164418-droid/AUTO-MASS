@@ -7,11 +7,11 @@ import argparse
 import importlib.metadata as metadata
 import json
 import os
-from pathlib import Path
 import shutil
 import subprocess
 import sys
 import tomllib
+from pathlib import Path
 
 from packaging.requirements import Requirement
 from packaging.utils import canonicalize_name
@@ -171,7 +171,7 @@ def main():
         json.dumps(manifest, indent=2), encoding="utf-8"
     )
     (target / "START-HERE.txt").write_text(
-        "AUTO-MASS 0.1.0 Qt / Windows x64\n\nExtract the complete directory to a writable location, then run AUTO-MASS.exe.\nPython 3.12, Qt Essentials and backend production dependencies are included.\nNo Node.js installation is required. Optional Qt 3D enhancement is not included.\nNo user configuration, login credentials, logs or recovery state is included.\nWindows RDP and .NET Framework are OS components; external scripts, games and UU are not included.\nThe Qt/RDP exit cleanup path has not been validated against real running tasks.\nUse the browser edition documentation only for optional browser-edition features.\nSource and license: https://github.com/xzk09164418-droid/AUTO-MASS\n",
+        "AUTO-MASS 0.1.0 Qt / Windows x64\n\nExtract the complete directory to a writable location, then run AUTO-MASS.exe.\nPython 3.12, Qt Essentials and backend production dependencies are included.\nNo Node.js installation is required. Optional Qt 3D enhancement is not included.\nNo user configuration, login credentials, logs or recovery state is included.\nWindows RDP and .NET Framework are OS components; external scripts, games and UU are not included.\nThe Qt/RDP exit cleanup path has not been validated against real running tasks.\nClosing the Qt window keeps the tray and backend running. Use the tray menu for complete shutdown.\nSource and license: https://github.com/xzk09164418-droid/AUTO-MASS\n",
         encoding="utf-8",
     )
     print(json.dumps({"directory": str(target), "packages": len(seen)}))

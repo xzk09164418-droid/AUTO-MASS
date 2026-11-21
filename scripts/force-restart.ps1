@@ -1,5 +1,5 @@
 ﻿#Requires -Version 5.1
-param([Parameter(Mandatory=$true)][string]$Root, [switch]$PlanOnly)
+param([Parameter(Mandatory=$true)][string]$Root, [switch]$PlanOnly, [ValidateSet('Qt')][string]$Frontend = 'Qt')
 $ErrorActionPreference = 'Stop'
 # 预检查失败也必须可见，避免助手尚未进入清理阶段就静默退出。
 trap {
@@ -14,17 +14,17 @@ $launcher = Join-Path $rootPath 'AUTO-MAS.exe'
 $recovery = Join-Path $rootPath 'data\desktop_recovery'
 $runtimeNames = @('external-processes', 'desktop_recovery', 'child_session_jobs', 'queue-control-notices', 'hotkey-capture.json', 'hotkey-capture-relay.json', 'hotkey-relay-status.json', 'hotkey-relay-status.tmp')
 $runtimePaths = @($runtimeNames | ForEach-Object { Join-Path $rootPath ('data\' + $_) })
-if (!(Test-Path -LiteralPath $launcher -PathType Leaf)) { throw 'Missing AUTO-MAS.exe' }
 $configPath = Join-Path $rootPath 'config\Config.json'
 $config = Get-Content -LiteralPath $configPath -Raw -Encoding UTF8 | ConvertFrom-Json
 $rdpEnabled = $config.ChildSession.Enabled -eq $true
 # 只认本安装的完整入口路径，不按通用进程名结束其他软件。
-$entries = @((Join-Path $rootPath 'main.py'), (Join-Path $rootPath 'frontend\server.js'))
+$entries = @((Join-Path $rootPath 'main.py'), (Join-Path $rootPath 'qt\main.py'))
 $hostExe = Join-Path $rootPath 'res\ChildSessionHost\AutoMas.ChildSessionHost.exe'
 $inventory = @(Get-CimInstance Win32_Process)
 $selected = @{}
 $python = @((Join-Path $rootPath 'python\python.exe'), (Join-Path $rootPath '.venv\Scripts\python.exe')) | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -First 1
 if (!$python) { throw 'Python runtime required for external occupancy cleanup' }
+if ($Frontend -eq 'Qt' -and !(Test-Path -LiteralPath (Join-Path $rootPath 'qt\main.py') -PathType Leaf)) { throw 'Missing Qt frontend' }
 $stateTool = Join-Path $PSScriptRoot 'force-restart-state.py'
 $planText = & $python $stateTool plan --root $rootPath
 if ($LASTEXITCODE -ne 0) { throw 'Cannot inspect external occupancy records' }
@@ -121,7 +121,9 @@ public static class MasForceSession {
     }
     # 不转发旧启动参数和恢复环境变量；正常启动及普通重启完全不走本路径。
     Remove-Item Env:AUTO_MAS_DESKTOP_RECOVERY -ErrorAction SilentlyContinue
-    Start-Process -FilePath $launcher -WorkingDirectory $rootPath -WindowStyle Hidden
+    $pythonw = Join-Path (Split-Path $python -Parent) 'pythonw.exe'
+    if (!(Test-Path -LiteralPath $pythonw)) { $pythonw = $python }
+    Start-Process -FilePath $pythonw -ArgumentList ('"' + (Join-Path $rootPath 'qt\main.py') + '"') -WorkingDirectory $rootPath -WindowStyle Hidden
     (@('Force restart completed; old runtime state archived.') + $externalWarnings) | Set-Content -LiteralPath (Join-Path $logDir 'force-restart.log') -Encoding UTF8
     if ($externalWarnings.Count -gt 0) {
         Add-Type -AssemblyName System.Windows.Forms

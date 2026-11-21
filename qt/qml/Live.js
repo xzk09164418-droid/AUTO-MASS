@@ -408,7 +408,7 @@ function settings(g, version, qq) {
     var qqOn = B(SD.tog(N.IfOpenClawQQ), "Notify.IfOpenClawQQ")
     if (!(qq && qq.connected) && !N.IfOpenClawQQ) qqOn.off = true
     return [
-        { name: "启动与界面", en: "START · UI", live: true, api: api, save: save, blocks: [SD.kv("启动与界面", [["开机自启", B(SD.tog(g.Start.IfSelfStart), "Start.IfSelfStart"), "Start.IfSelfStart"], ["启动后最小化", B(SD.tog(g.Start.IfMinimizeDirectly), "Start.IfMinimizeDirectly"), "Start.IfMinimizeDirectly"], ["显示托盘图标", B(SD.tog(g.UI.IfShowTray), "UI.IfShowTray"), "UI.IfShowTray"], ["关闭到托盘", B(SD.tog(g.UI.IfToTray), "UI.IfToTray"), "UI.IfToTray"], ["隐藏关闭按钮", B(SD.tog(g.UI.IfHideCloseButton), "UI.IfHideCloseButton"), "UI.IfHideCloseButton"], ["主题", SD.segk(["跟随系统", "浅色", "深色"], 0, "theme"), "客户端设置"], ["动态效果", SD.segk(["减少", "标准", "增强"], 1, "motion"), "客户端设置"]])], actions: ["保存"] },
+        { name: "启动与界面", en: "START · UI", live: true, api: api, save: save, blocks: [SD.kv("启动与界面", [["开机自启", B(SD.tog(g.Start.IfSelfStart), "Start.IfSelfStart"), "Start.IfSelfStart"], ["启动后最小化", B(SD.tog(g.Start.IfMinimizeDirectly), "Start.IfMinimizeDirectly"), "Start.IfMinimizeDirectly"], ["关闭窗口", "隐藏到托盘，后端继续运行"], ["隐藏关闭按钮", B(SD.tog(g.UI.IfHideCloseButton), "UI.IfHideCloseButton"), "UI.IfHideCloseButton"], ["主题", SD.segk(["跟随系统", "浅色", "深色"], 0, "theme"), "客户端设置"], ["动态效果", SD.segk(["减少", "标准", "增强"], 1, "motion"), "客户端设置"]])], actions: ["保存"] },
         { name: "功能", en: "FUNCTION", live: true, api: api, save: save, blocks: [
             SD.kv("运行", [["历史记录保留", B(SD.sel(["7 天", "15 天", "30 天", "60 天", "90 天", "180 天", "365 天", "永久"], idx(keep, F.HistoryRetentionTime)), "Function.HistoryRetentionTime", keep), "Function.HistoryRetentionTime"], ["运行时允许睡眠", B(SD.tog(F.IfAllowSleep), "Function.IfAllowSleep"), "Function.IfAllowSleep"], ["静默模式", B(SD.tog(F.IfSilence), "Function.IfSilence"), "Function.IfSilence"], ["屏蔽模拟器广告", B(SD.tog(F.IfBlockAd), "Function.IfBlockAd"), "Function.IfBlockAd"], ["哔哩哔哩协议弹窗", B(SD.tog(F.IfAgreeBilibili), "Function.IfAgreeBilibili"), "Function.IfAgreeBilibili"], ["匿名遥测", B(SD.tog(F.IfEnableTelemetry), "Function.IfEnableTelemetry"), "Function.IfEnableTelemetry"]]),
             SD.kv("语音", [["语音提示", voiceOn, "Voice.Enabled"], ["语音风格", W(B(SD.seg(["简洁", "聒噪"], idx(["simple", "noisy"], g.Voice.Type)), "Voice.Type", ["simple", "noisy"]), voiceOn), "Voice.Type · 开启语音提示后可选"]])
@@ -553,9 +553,8 @@ function local(g, port, vd, nav, ports) {
         { name: "全局热键", en: "HOTKEY", live: true, api: api, save: save, blocks: [
             SD.kv("全局热键", [["启用全局热键", hkOn, "Hotkey.Enabled"], ["任务启停", hotkey(H.ToggleStartStop, "Hotkey.ToggleStartStop"), "Hotkey.ToggleStartStop"], ["上一个任务", hotkey(H.PreviousTask, "Hotkey.PreviousTask"), "Hotkey.PreviousTask"], ["下一个任务", hotkey(H.NextTask, "Hotkey.NextTask"), "Hotkey.NextTask"]])
         ], ops: { "保存并重新加载": { saveFirst: true, path: "/api/dispatch/hotkey/reload", body: {}, done: "热键已重新加载" } }, actions: ["保存并重新加载"] },
-        // 端口：页面端口（网页版）与后端端口，保存到 config/HostInstance.json，下次启动时生效
+        // 后端端口保存到 config/HostInstance.json，下次启动时生效。
         { name: "连接端口", en: "HOST", live: true, api: "config/HostInstance.json", blocks: [SD.kv("连接", [
-            ["页面端口", Object.assign(SD.num(ports && ports.frontendPort || 36262), { min: 1024, max: 65535, k: "frontendPort" })],
             ["后端端口", Object.assign(SD.num(ports && ports.backendPort || port), { min: 1024, max: 65535, k: "backendPort" })],
             ["当前连接", [SD.tag("已连接", "ok"), "127.0.0.1:" + port]]])],
           ops: { "保存端口": { savePorts: true } }, actions: ["保存端口"] }
@@ -586,7 +585,7 @@ function sign(tools, accounts) {
     var status = ""
     try { status = JSON.parse(G.Status || "{}").text || "" } catch (e) {}
     var signOn = B(SD.tog(G.Enabled), "GameSign.Enabled")
-    // 每个账号组一张卡：名称、启用与各平台凭据（可直接粘贴凭据，扫码登录仍需在网页版完成）
+    // 每个账号组一张卡：名称、启用与各平台凭据，可粘贴凭据或打开平台登录。
     var groupCards = ids.map(function (a, n) {
         var d = accounts[a.uid].GameSignAccount, s = { path: "/api/tools/sign/account/update", base: { accountId: a.uid } }
         function token(v, key) { return B(Object.assign(SD.inp(v || "", true), { secret: true }), key) }
