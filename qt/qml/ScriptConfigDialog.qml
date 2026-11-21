@@ -112,7 +112,9 @@ RhineDialog {
             enabled:!dialog.busy && editor.text===dialog.original;onActivated:dialog.loadFile(currentText)}
         // 原文件编辑区（文本编辑需要滚动）
         Rectangle {visible:dialog.editingFile;Layout.fillWidth:true;Layout.fillHeight:true;color:"transparent";border.width:1.5;border.color:editor.activeFocus?Theme.accent:Theme.ink
-            C.ScrollView {anchors.fill:parent;anchors.margins:8
+            C.ScrollView {id:editorScroll;anchors.fill:parent;anchors.margins:8
+                C.ScrollBar.vertical: RhineScrollBar { parent: editorScroll; x: editorScroll.width - width; height: editorScroll.height }
+                C.ScrollBar.horizontal: RhineScrollBar { parent: editorScroll; y: editorScroll.height - height; width: editorScroll.width }
                 C.TextArea {id:editor; color:Theme.ink; selectByMouse:true;readOnly:dialog.busy || !dialog.file; font.family:"Consolas"; font.pixelSize:14; selectionColor:Theme.accent; selectedTextColor:"#ffffff"; background:null} } }
         ColumnLayout {visible:!dialog.editingFile && !dialog.session;Layout.fillWidth:true;Layout.fillHeight:true;enabled:!dialog.busy;spacing:10
             RowLayout { spacing:14

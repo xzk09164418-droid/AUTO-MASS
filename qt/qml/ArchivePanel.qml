@@ -434,7 +434,7 @@ Item {
                 panel.requestEnhanced()
                 return
             }
-            Theme.motion = motions[cur]
+            Theme.requestMotion(motions[cur])
             panel.toast("动态效果：" + spec.opts[cur])
             panel.motionChosen(motions[cur])
         }
@@ -870,7 +870,7 @@ Item {
             onMovementEnded: follow = atYEnd
             onCountChanged: if (follow) positionViewAtEnd()
             model: parent.b.lines
-            C.ScrollBar.vertical: C.ScrollBar {}
+            C.ScrollBar.vertical: RhineScrollBar { onDark: true }
             delegate: Text {
                 required property var modelData
                 width: lines.width - 12; wrapMode: Text.WrapAnywhere
@@ -996,7 +996,7 @@ Item {
                     tabGlide.from=contentX; tabGlide.to=to; tabGlide.start()
                 }
                 NumberAnimation { id: tabGlide; target: tabScroll; property: "contentX"; duration: 240; easing.type: Easing.OutCubic }
-                C.ScrollBar.horizontal: C.ScrollBar { height: 6; policy: tabScroll.contentWidth > tabScroll.width ? C.ScrollBar.AlwaysOn : C.ScrollBar.AlwaysOff }
+                C.ScrollBar.horizontal: RhineScrollBar { height: 8; policy: tabScroll.contentWidth > tabScroll.width ? C.ScrollBar.AlwaysOn : C.ScrollBar.AlwaysOff }
                 Row {
                     id: tabStrip
                     spacing: 2
@@ -1060,7 +1060,7 @@ Item {
             clip: panel.scrollForm; interactive: panel.scrollForm
             contentWidth: width; contentHeight: body.implicitHeight
             boundsBehavior: Flickable.StopAtBounds
-            C.ScrollBar.vertical: C.ScrollBar { policy: panel.scrollForm && formScroll.contentHeight>formScroll.height ? C.ScrollBar.AlwaysOn : C.ScrollBar.AlwaysOff }
+            C.ScrollBar.vertical: RhineScrollBar { policy: panel.scrollForm && formScroll.contentHeight>formScroll.height ? C.ScrollBar.AlwaysOn : C.ScrollBar.AlwaysOff }
             Column {
                 id: body
                 opacity: panel.tabFade

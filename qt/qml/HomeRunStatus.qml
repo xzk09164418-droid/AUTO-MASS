@@ -51,13 +51,11 @@ Item {
         contentWidth: width
         contentHeight: stack.implicitHeight
         boundsBehavior: Flickable.StopAtBounds
-        C.ScrollBar.vertical: C.ScrollBar {
+        C.ScrollBar.vertical: RhineScrollBar {
             id: bar
             policy: list.contentHeight > list.height ? C.ScrollBar.AlwaysOn : C.ScrollBar.AlwaysOff
             interactive: true
             onPressedChanged: if (pressed) followMotion.stop()
-            width: 10
-            contentItem: Rectangle { implicitWidth: 5; color: Theme.accent }
         }
         Column {
             id: stack

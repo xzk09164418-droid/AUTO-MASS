@@ -88,6 +88,7 @@ Window {
         Theme.mode = themeMode
         Theme.enhancedAvailable = !!enhanced && enhanced.installed
         Theme.motion = motionMode === "enhanced" && !Theme.enhancedAvailable ? "standard" : motionMode
+        Theme.motionHandled = true
         if (skipBoot) {
             if (!source || source.status === "ready") finishBoot()
             else { bootHold = true; bootSeq.clockBase = 0; bootSeq.frame = bootSeq.holdFrame }
@@ -116,6 +117,9 @@ Window {
         scale: Math.min(root.width / 1920, root.height / 1080)
         clip: true
 
+        Item {
+        id: scene
+        anchors.fill: parent
         DepartmentHub {
             id: hub
             objectName: "hub"
@@ -168,6 +172,16 @@ Window {
             onUiSettings: patch => root.uiOptions = Object.assign({},root.uiOptions,patch)
             onClosed: hub.focusCurrent()
         }
+        }
+
+        // ── 动态效果挡位切换（标准 ↔ 增强）：定格当前画面 → 切换 → 等新画面就绪 → 斜线扫过、定格模糊退去 ──
+        MotionShift {
+            id: motionShift
+            anchors.fill: parent
+            z: 50
+            sceneItem: scene
+            sectionView: sections
+        }
 
         BootSequence {
             id: bootSeq
@@ -182,6 +196,11 @@ Window {
             backendStage: root.source ? root.source.stage : "OFFLINE PREVIEW"
             onFinished: root.finishBoot()
         }
+    }
+
+    Connections {
+        target: Theme
+        function onMotionRequested(next) { motionShift.run(next) }
     }
 
     Connections {

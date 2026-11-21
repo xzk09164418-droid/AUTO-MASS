@@ -265,7 +265,8 @@ Item {
             exposure: 1.05
             // 环境光照：演示基线的 RoomEnvironment（强度 0.48）+ 半球光，烘成一张 HDR（qt/tools/make_room_env.py）
             // Qt 的透射采样比 three.js 清晰（不按粗糙度模糊），透出的内层更深：环境光略提、透射降到 0.3，与演示截图逐区对齐
-            probeExposure: 1.3
+            // 深色主题：环境光压低，暗色盒阵里只有抬起的那盒（保持浅暖色）显得发亮
+            probeExposure: Theme.dark ? 0.75 : 1.3
             lightProbe: Texture { source: Qt.resolvedUrl("../assets3d/room-env.ktx"); mappingMode: Texture.LightProbe }
             fog: Fog {
                 enabled: true
@@ -292,7 +293,7 @@ Item {
         DirectionalLight {
             id: key
             color: "#fff7ed"
-            brightness: 1.4 / Math.PI
+            brightness: (Theme.dark ? 0.9 : 1.4) / Math.PI
             position: Qt.vector3d(-6, 14, -5)
             castsShadow: true
             shadowMapQuality: Light.ShadowMapQualityVeryHigh
@@ -305,7 +306,7 @@ Item {
         }
         DirectionalLight {
             color: "#ffffff"
-            brightness: 0.6 / Math.PI
+            brightness: (Theme.dark ? 0.35 : 0.6) / Math.PI
             position: Qt.vector3d(7, 8, -10)
             rotation: Quaternion.lookAt(position, Qt.vector3d(0, 0, 0), Qt.vector3d(0, 0, -1), Qt.vector3d(0, 1, 0))
         }
@@ -441,14 +442,15 @@ Item {
     }
     PartMaterial {
         id: matShell
-        uRaisedColor: root.lin("#fffdfa")
-        uColor: root.lin("#fff7ed"); uRoughness: 0.28; uTransmission: 0.3; uThickness: 0.12
-        uAttenuation: root.lin("#eee6df"); uAttenuationDistance: 2; uClearcoat: 0.3; uClearcoatRoughness: 0.25; uGradient: 1
+        uRaisedColor: root.lin(Theme.dark ? "#d8d1c7" : "#fffdfa")
+        // 深色主题：外壳为炭黑，选中抬起的那盒仍混到 uRaisedColor（浅暖色）
+        uColor: root.lin(Theme.dark ? "#30363a" : "#fff7ed"); uRoughness: 0.28; uTransmission: 0.3; uThickness: 0.12
+        uAttenuation: root.lin(Theme.dark ? "#22282b" : "#eee6df"); uAttenuationDistance: 2; uClearcoat: 0.3; uClearcoatRoughness: 0.25; uGradient: 1
     }
     // 其余部件不透光：用不写透射的着色器，才会画进屏幕纹理、透过磨砂外壳显出来
-    PartMaterial { id: matEdges; uRaisedColor: root.lin("#f0e7df"); fragmentShader: "shaders/arraypart_opaque.frag"; uColor: root.lin("#fff5e9"); uRoughness: 0.38; uMetalness: 0.02 }
-    PartMaterial { id: matDiffuser; uRaisedColor: root.lin("#e2dad4"); fragmentShader: "shaders/arraypart_opaque.frag"; uColor: root.lin("#806447"); uRoughness: 0.7 }
-    PartMaterial { id: matIndex; uRaisedColor: root.lin("#e4d6c5"); fragmentShader: "shaders/arraypart_opaque.frag"; uColor: root.lin("#e4d6c5"); uRoughness: 0.52; uMetalness: 0.05 }
+    PartMaterial { id: matEdges; uRaisedColor: root.lin(Theme.dark ? "#c9c0b6" : "#f0e7df"); fragmentShader: "shaders/arraypart_opaque.frag"; uColor: root.lin(Theme.dark ? "#272c2f" : "#fff5e9"); uRoughness: 0.38; uMetalness: 0.02 }
+    PartMaterial { id: matDiffuser; uRaisedColor: root.lin("#e2dad4"); fragmentShader: "shaders/arraypart_opaque.frag"; uColor: root.lin(Theme.dark ? "#3a3129" : "#806447"); uRoughness: 0.7 }
+    PartMaterial { id: matIndex; uRaisedColor: root.lin("#e4d6c5"); fragmentShader: "shaders/arraypart_opaque.frag"; uColor: root.lin(Theme.dark ? "#4a4741" : "#e4d6c5"); uRoughness: 0.52; uMetalness: 0.05 }
     PartMaterial { id: matFasteners; fragmentShader: "shaders/arraypart_opaque.frag"; uColor: Qt.vector3d(0.58, 0.6, 0.61); uRoughness: 0.19; uMetalness: 0.82 }
     // ── 实例表：与演示基线相同的范围（左右各 3 列、前后各 18 行，约 259 盒）。
     //    以阵列「当前滑到的位置」为中心，而不是目标格：切换行列时边缘的列 / 行随阵列平移自然移出画面，
@@ -689,6 +691,37 @@ Item {
     // 摘要行 0.7 秒淡入并上移 8px、读取行 0.7 秒淡入，二者延迟 0.4 秒。离开 / 进入读取时按同样的时长反向
     readonly property var cssEase: [0.25, 0.1, 0.25, 1, 1, 1]
     readonly property var outExpo: [0.22, 1, 0.36, 1, 1, 1]
+    // 文字衬底：右侧档案信息与底部操作区各铺一层柔边底色，叠在录像带上的文字在浅色 / 深色下都清楚
+    Item {
+        id: scrims
+        anchors.fill: parent
+        visible: false
+        Rectangle {
+            x: 850; y: 420; width: 1150; height: 420
+            gradient: Gradient {
+                orientation: Gradient.Horizontal
+                GradientStop { position: 0; color: Qt.rgba(Theme.bg.r, Theme.bg.g, Theme.bg.b, 0) }
+                GradientStop { position: 0.2; color: Qt.rgba(Theme.bg.r, Theme.bg.g, Theme.bg.b, Theme.dark ? 0.7 : 0.58) }
+                GradientStop { position: 1; color: Qt.rgba(Theme.bg.r, Theme.bg.g, Theme.bg.b, Theme.dark ? 0.8 : 0.68) }
+            }
+        }
+        Rectangle {
+            y: 790; width: parent.width; height: 330
+            gradient: Gradient {
+                GradientStop { position: 0; color: Qt.rgba(Theme.bg.r, Theme.bg.g, Theme.bg.b, 0) }
+                GradientStop { position: 0.35; color: Qt.rgba(Theme.bg.r, Theme.bg.g, Theme.bg.b, Theme.dark ? 0.72 : 0.6) }
+                GradientStop { position: 1; color: Qt.rgba(Theme.bg.r, Theme.bg.g, Theme.bg.b, Theme.dark ? 0.88 : 0.78) }
+            }
+        }
+    }
+    MultiEffect {
+        anchors.fill: parent
+        source: scrims
+        blurEnabled: true; blur: 1; blurMax: 64
+        opacity: root.uiShown ? 1 : 0
+        visible: opacity > 0
+        Behavior on opacity { enabled: Theme.richMotion; NumberAnimation { duration: 700; easing.type: Easing.BezierSpline; easing.bezierCurve: root.cssEase } }
+    }
     Item {
         anchors.fill: parent
         opacity: root.uiShown ? 1 : 0
@@ -702,9 +735,9 @@ Item {
                 spacing: 16
                 opacity: root.uiShown ? 1 : 0
                 Behavior on opacity { enabled: Theme.richMotion; NumberAnimation { duration: 700; easing.type: Easing.BezierSpline; easing.bezierCurve: root.cssEase } }
-                Text { text: "INTERNAL DATABASE"; color: "#77756d"; font.family: Theme.font; font.pixelSize: 12; font.letterSpacing: 1.3 }
-                Text { text: "／"; color: "#77756d"; font.family: Theme.font; font.pixelSize: 12 }
-                RollText { text: root.column ? root.column.name : ""; dir: root.dir; color: "#77756d"; font.family: Theme.font; font.pixelSize: 12; font.letterSpacing: 1.3 }
+                Text { text: "INTERNAL DATABASE"; color: Theme.muted; font.family: Theme.font; font.pixelSize: 12; font.letterSpacing: 1.3 }
+                Text { text: "／"; color: Theme.muted; font.family: Theme.font; font.pixelSize: 12 }
+                RollText { text: root.column ? root.column.name : ""; dir: root.dir; color: Theme.muted; font.family: Theme.font; font.pixelSize: 12; font.letterSpacing: 1.3 }
             }
             Item { width: 1; height: 22 }
             Row {
@@ -718,14 +751,14 @@ Item {
             Item {
                 width: 950; height: 1
                 Rectangle {
-                    x: 57; width: parent.width - 57; height: 1; color: "#504b41"
+                    x: 57; width: parent.width - 57; height: 1; color: Theme.ink
                     transform: Scale {
                         origin.x: 950 - 57
                         xScale: root.uiShown ? 1 : 0
                         Behavior on xScale { enabled: Theme.richMotion; NumberAnimation { duration: 1300; easing.type: Easing.BezierSpline; easing.bezierCurve: root.outExpo } }
                     }
                 }
-                Rectangle { x: -4; y: -3; width: 6; height: 6; color: "#282a24"; opacity: root.uiShown ? 1 : 0 }
+                Rectangle { x: -4; y: -3; width: 6; height: 6; color: Theme.ink; opacity: root.uiShown ? 1 : 0 }
             }
             Item { width: 1; height: 22 }
             Item {
@@ -744,7 +777,7 @@ Item {
                     onTapped: root.open()
                 }
                 RollText { text: root.rowName; dir: root.dir; color: Theme.ink; font.family: Theme.font; font.pixelSize: 16 }
-                Text { anchors.right: parent.right; text: root.isQueue ? "QUEUE ITEM" : root.singleColumn ? "RECORD" : "SCRIPT PAGE"; color: "#666257"; font.family: Theme.font; font.pixelSize: 11; font.letterSpacing: 1 }
+                Text { anchors.right: parent.right; text: root.isQueue ? "QUEUE ITEM" : root.singleColumn ? "RECORD" : "SCRIPT PAGE"; color: Theme.muted; font.family: Theme.font; font.pixelSize: 11; font.letterSpacing: 1 }
             }
             Item { width: 1; height: 58 }
             Row {
@@ -767,8 +800,8 @@ Item {
             Row {
                 spacing: 21
                 RollDigits { text: String(root.row + 1).padStart(2, "0"); dir: root.dir; color: Theme.ink; font.family: Theme.font; font.pixelSize: 58 }
-                Text { anchors.bottom: parent.bottom; anchors.bottomMargin: 8; text: "/"; color: "#8f8a80"; font.family: Theme.font; font.pixelSize: 32; font.weight: Font.Light }
-                Text { anchors.bottom: parent.bottom; anchors.bottomMargin: 10; text: String(root.rowCount).padStart(2, "0"); color: "#726f67"; font.family: Theme.font; font.pixelSize: 22 }
+                Text { anchors.bottom: parent.bottom; anchors.bottomMargin: 8; text: "/"; color: Theme.muted; font.family: Theme.font; font.pixelSize: 32; font.weight: Font.Light }
+                Text { anchors.bottom: parent.bottom; anchors.bottomMargin: 10; text: String(root.rowCount).padStart(2, "0"); color: Theme.muted; font.family: Theme.font; font.pixelSize: 22 }
             }
         }
         // 底部：上下翻档 + 刻度
@@ -789,7 +822,7 @@ Item {
                         required property int index
                         readonly property int r: parent.first + index
                         width: 14; height: 40
-                        Rectangle { x: 6; width: 2; anchors.verticalCenter: parent.verticalCenter; height: parent.r === root.row ? 33 : 12; color: parent.r === root.row ? "#24261f" : "#aaa59a"
+                        Rectangle { x: 6; width: 2; anchors.verticalCenter: parent.verticalCenter; height: parent.r === root.row ? 33 : 12; color: parent.r === root.row ? Theme.ink : Theme.hair
                             Behavior on height { NumberAnimation { duration: 400 } } }
                         MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.goCell(root.cellLane, root.cellRow + parent.r - root.row) }
                     }
@@ -809,7 +842,7 @@ Item {
                 anchors.verticalCenter: parent.verticalCenter
                 width: 160
                 spacing: 7
-                RollText { text: "COLUMN " + String(root.lane + 1).padStart(2, "0") + " / " + String(root.laneCount).padStart(2, "0"); dir: root.dir; color: "#726f67"; font.family: Theme.font; font.pixelSize: 10; font.letterSpacing: 1.2 }
+                RollText { text: "COLUMN " + String(root.lane + 1).padStart(2, "0") + " / " + String(root.laneCount).padStart(2, "0"); dir: root.dir; color: Theme.muted; font.family: Theme.font; font.pixelSize: 10; font.letterSpacing: 1.2 }
                 RollText { text: root.column ? root.column.name : ""; dir: root.dir; color: Theme.ink; font.family: Theme.font; font.pixelSize: 15 }
             }
             Text { width: 46; height: 46; text: "→"; color: Theme.ink; font.pixelSize: 24; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
@@ -819,7 +852,7 @@ Item {
             x: 505; y: 1080 - 60 - 12
             visible: !!root.column || root.isQueue
             text: (root.singleColumn ? "" : "←  →  ／  A  D  切换" + (root.isQueue ? "队列" : "程序") + "    ／    ") + "↑  ↓  ／  W  S  前后档案    ／    ENTER  读取"
-            color: "#858077"; font.family: Theme.font; font.pixelSize: 10; font.letterSpacing: 0.9
+            color: Theme.muted; font.family: Theme.font; font.pixelSize: 11; font.letterSpacing: 0.9
         }
     }
 }

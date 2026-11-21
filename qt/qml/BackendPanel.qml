@@ -159,7 +159,7 @@ Item {
                 clip: true
                 model: root.backend ? root.backend.logs : []
                 onCountChanged: positionViewAtEnd()
-                ScrollBar.vertical: ScrollBar {}
+                ScrollBar.vertical: RhineScrollBar {}
                 delegate: Text {
                     required property var modelData
                     width: logView.width - 12

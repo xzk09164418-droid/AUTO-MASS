@@ -189,6 +189,7 @@ FocusScope {
     }
     property var lastSnapshot: null
     property var schedulerNames: null
+    property var schedulerPaths: ({})       // 脚本 ID → 启动程序路径（阵列图标唱片）
     property int sectionGeneration: 0
     property bool snapshotPending: false
     function currentScheduler(generation) {
@@ -207,7 +208,7 @@ FocusScope {
             lastSnapshot = snap
             const previous = item?.runtimeKey
             const previousTab = panel.tab
-            const list = [live.scheduler[0]].concat(Live.dispatchCenter(snap, schedulerNames, null))
+            const list = [live.scheduler[0]].concat(Live.dispatchCenter(snap, schedulerNames, null, schedulerPaths))
             const position = previous ? list.findIndex(row => row.runtimeKey === previous) : target
             setLive("scheduler", list)
             if (previous) {
@@ -388,7 +389,10 @@ FocusScope {
                         })
                         const launch = { cycles:queues.data || {}, tasks:tasks, queueScripts:queueScripts, users:users, scopeErrors:scopeErrors,
                                          power: m.p.code === 200 ? m.p.signal : "NoAction" }
-                        setLive(key, Live.dispatchCenter(snap, names, launch))
+                        const paths = {}
+                        if (m.s.code === 200) m.s.index.forEach(x => { const c = m.s.data[x.uid]; if (c?.Script?.ScriptPath) paths[x.uid] = c.Script.ScriptPath })
+                        schedulerPaths = paths
+                        setLive(key, Live.dispatchCenter(snap, names, launch, paths))
                         schedulerNames = names
                     })
                 })
@@ -667,6 +671,13 @@ FocusScope {
 
     Keys.onPressed: event => {
         if (!opened) return
+        // Ctrl+F：聚焦本页搜索框
+        if (event.key === Qt.Key_F && (event.modifiers & Qt.ControlModifier)) {
+            const f = scriptShelf.visible ? scriptShelf.searchField : sectionSearch.visible ? sectionSearch : null
+            if (f) { f.forceActiveFocus(); f.selectAll() }
+            event.accepted = true
+            return
+        }
         if (scriptShelf.typing) return
         let k = event.key
         if (modal.shown) { if (k === Qt.Key_Escape) modal.close(); event.accepted = true; return }
@@ -1056,56 +1067,114 @@ FocusScope {
     }
 
     // ── 右侧：分页点、档案卡、铭牌 ───────────────────────────────────────
-    Row {
+    // 条目少时用圆点；条目多时换成「序号 / 总数」+ 刻度条（宽度固定，不会挤到搜索框）
+    Item {
         id: pager
         visible: !view.arrayMode
         x: 1150
         y: 58
         z: 5
-        spacing: 4
+        height: 22
+        width: Math.max(0, back.x - 14 - 198 - 28 - x)
         opacity: view.reveal
-        readonly property int maxDots: scriptShelf.visible ? 7 : 12
-        readonly property int first: view.items.length <= maxDots ? 0
-            : Math.max(0, Math.min(view.items.length - maxDots, view.target - Math.floor(maxDots / 2)))
+        readonly property int n: view.items.length
+        readonly property bool dense: n > 7
+        Row {
+            visible: !pager.dense
+            spacing: 4
+            Repeater {
+                model: pager.dense ? 0 : pager.n
+                Item {
+                    id: dot
+                    required property int index
+                    readonly property bool on: view.target === index
+                    width: on ? 42 : 22
+                    height: 22
+                    activeFocusOnTab: true
+                    Accessible.role: Accessible.Button
+                    Accessible.name: String(index + 1).padStart(2, "0") + " " + (view.items[index] ? view.items[index].name : "")
+                    Keys.onSpacePressed: view.select(index)
+                    Rectangle { visible: dot.on; y: 10; width: 12; height: 2; color: Theme.accent }
+                    Rectangle { visible: dot.on; x: 30; y: 10; width: 12; height: 2; color: Theme.accent }
+                    Rectangle {
+                        anchors.centerIn: parent
+                        width: dot.on ? 12 : 6
+                        height: width
+                        radius: width / 2
+                        color: dot.on ? "transparent" : Theme.accent
+                        border.width: dot.on ? 2 : 0
+                        border.color: Theme.accent
+                        scale: dotMouse.containsMouse && !dot.on ? 1.6 : 1
+                        Behavior on scale { NumberAnimation { duration: 150 } }
+                    }
+                    Rectangle { anchors.fill: parent; color: "transparent"; border.width: 2; border.color: Theme.accent; visible: dot.activeFocus }
+                    MouseArea { id: dotMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: view.select(dot.index) }
+                }
+            }
+        }
         Text {
-            visible: view.items.length > pager.maxDots
+            id: pagerCount
+            visible: pager.dense
             anchors.verticalCenter: parent.verticalCenter
-            rightPadding: 10
-            text: String(view.target + 1).padStart(2, "0") + " / " + String(view.items.length).padStart(2, "0")
+            text: String(view.target + 1).padStart(2, "0") + " / " + String(pager.n).padStart(2, "0")
             color: Theme.accent
             font.family: Theme.font
             font.pixelSize: 13
             font.weight: Font.Bold
             font.letterSpacing: 1
         }
-        Repeater {
-            model: Math.min(view.items.length, pager.maxDots)
-            Item {
-                id: dot
-                required property int modelData
-                readonly property int index: pager.first + modelData
-                readonly property bool on: view.target === index
-                width: on ? 42 : 22
-                height: 22
-                activeFocusOnTab: true
-                Accessible.role: Accessible.Button
-                Accessible.name: String(index + 1).padStart(2, "0") + " " + (view.items[index] ? view.items[index].name : "")
-                Keys.onSpacePressed: view.select(index)
-                Rectangle { visible: dot.on; y: 10; width: 12; height: 2; color: Theme.accent }
-                Rectangle { visible: dot.on; x: 30; y: 10; width: 12; height: 2; color: Theme.accent }
+        // 刻度条：刻度均匀铺满固定宽度（条目再多也只画到每 5px 一根），当前条目是一根高的橙色刻度；
+        // 点击 / 拖动按位置换条目，滚轮逐个切换，悬停显示条目名
+        Item {
+            id: strip
+            visible: pager.dense
+            x: pagerCount.implicitWidth + 16
+            width: Math.max(40, pager.width - x)
+            height: 22
+            readonly property int ticks: Math.max(2, Math.min(pager.n, Math.floor(width / 5)))
+            function at(px) { return Math.max(0, Math.min(pager.n - 1, Math.round(px / width * (pager.n - 1)))) }
+            function px(i) { return pager.n > 1 ? i / (pager.n - 1) * (width - 2) : 0 }
+            Rectangle { anchors.verticalCenter: parent.verticalCenter; width: parent.width; height: 1; color: Theme.hair; opacity: 0.6 }
+            Repeater {
+                model: strip.ticks
                 Rectangle {
-                    anchors.centerIn: parent
-                    width: dot.on ? 12 : 6
-                    height: width
-                    radius: width / 2
-                    color: dot.on ? "transparent" : Theme.accent
-                    border.width: dot.on ? 2 : 0
-                    border.color: Theme.accent
-                    scale: dotMouse.containsMouse && !dot.on ? 1.6 : 1
-                    Behavior on scale { NumberAnimation { duration: 150 } }
+                    required property int index
+                    x: index / (strip.ticks - 1) * (strip.width - 2)
+                    width: 2; height: 8
+                    anchors.verticalCenter: parent.verticalCenter
+                    color: Theme.accent
+                    opacity: 0.55
                 }
-                Rectangle { anchors.fill: parent; color: "transparent"; border.width: 2; border.color: Theme.accent; visible: dot.activeFocus }
-                MouseArea { id: dotMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: view.select(dot.index) }
+            }
+            Rectangle {
+                visible: stripMouse.containsMouse
+                x: strip.px(strip.at(stripMouse.mouseX)) - 1
+                width: 4; height: 16
+                anchors.verticalCenter: parent.verticalCenter
+                color: Theme.ink; opacity: 0.35
+            }
+            Rectangle {
+                x: strip.px(view.target) - 2
+                width: 6; height: 22
+                color: Theme.accent
+                Behavior on x { enabled: Theme.richMotion; NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+            }
+            MouseArea {
+                id: stripMouse
+                anchors.fill: parent; anchors.topMargin: -8; anchors.bottomMargin: -8
+                hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+                onPressed: mouse => view.select(strip.at(mouse.x))
+                onPositionChanged: mouse => { if (pressed) view.select(strip.at(mouse.x)) }
+                onWheel: wheel => view.select(view.target + (wheel.angleDelta.y > 0 || wheel.pixelDelta.y > 0 ? -1 : 1))
+            }
+            Rectangle {
+                visible: stripMouse.containsMouse && !stripMouse.pressed
+                readonly property int hit: strip.at(stripMouse.mouseX)
+                x: Math.max(0, Math.min(strip.width - width, strip.px(hit) - width / 2))
+                y: 30
+                width: tipText.implicitWidth + 20; height: 26
+                color: Theme.ink
+                Text { id: tipText; anchors.centerIn: parent; text: String(parent.hit + 1).padStart(2, "0") + "  " + (view.items[parent.hit] ? view.items[parent.hit].name : ""); color: Theme.paper; font.family: Theme.font; font.pixelSize: 12; font.weight: Font.Bold; font.letterSpacing: 1 }
             }
         }
     }
@@ -1257,6 +1326,48 @@ FocusScope {
     readonly property bool signSorting: opened && !!d && d.key === "gamesign"
     onSignSortingChanged: signSorting ? sortDock.register("signGroups", signSortGroup) : sortDock.unregister("signGroups", signSortGroup)
     onOpenedChanged: if (!opened) { sortDock.reset(); workspace.leave() }
+    // ── 搜索：匹配条目名、英文名、编号、账号与功能分页名，跳到对应的卡片（与分页）；回车下一个，Shift+回车上一个 ──
+    property var searchHits: []
+    property int searchHit: 0
+    function searchItems(q) {
+        q = q.trim().toLowerCase()
+        if (!q || !d) return []
+        const hits = []
+        const has = v => String(v || "").toLowerCase().includes(q)
+        items.forEach((it, i) => {
+            if (!it) return
+            if ([it.name, it.en, d.n + "-" + String(i + 1).padStart(2, "0")].concat(it.accounts || []).some(has)) { hits.push({ i: i, tab: -1 }); return }
+            // 分页名，其次分页里的分区标题、字段名与表格首列
+            const inPage = p => has(p.name) || (p.blocks || []).some(b => has(b.title)
+                || (Array.isArray(b.rows) ? b.rows : []).some(r => Array.isArray(r) && typeof r[0] === "string" && has(r[0])))
+            SD.pages(it).forEach((p, t) => { if (inPage(p)) hits.push({ i: i, tab: t }) })
+        })
+        return hits
+    }
+    function showHit(k) {
+        if (!searchHits.length) return
+        searchHit = (k + searchHits.length) % searchHits.length
+        const h = searchHits[searchHit]
+        if (h.i !== target) select(h.i)
+        if (h.tab >= 0) Qt.callLater(() => { panel.tab = h.tab; if (arrayMode) syncArray() })
+    }
+    SearchField {
+        id: sectionSearch
+        objectName: "sectionSearch"
+        z: 7
+        visible: view.opened && !!view.d && view.d.key !== "scripts" && view.items.length > 1
+        x: back.x - 14 - width
+        y: back.y; width: 198; height: back.height
+        opacity: view.reveal
+        Accessible.name: "搜索本页条目"
+        badge: view.searchHits.length ? (view.searchHit + 1) + " / " + view.searchHits.length : "无匹配"
+        miss: !view.searchHits.length
+        onTextEdited: { view.searchHits = view.searchItems(text); view.showHit(0) }
+        Keys.onReturnPressed: event => view.showHit(view.searchHit + (event.modifiers & Qt.ShiftModifier ? -1 : 1))
+        Keys.onEnterPressed: event => view.showHit(view.searchHit + (event.modifiers & Qt.ShiftModifier ? -1 : 1))
+        onLeave: view.forceActiveFocus()
+        onVisibleChanged: if (!visible) { clear(); view.searchHits = [] }
+    }
     ScriptShelf {
         id: scriptShelf
         objectName: "scriptShelf"
@@ -1443,7 +1554,7 @@ FocusScope {
             if (e.state === "installing") toast.show("3D 增强组件：" + (e.detail || "准备下载") + "…", true)
             else if (e.state === "removing") toast.show("正在删除 3D 增强组件…", true)
             else if (e.state === "installed" && e.detail === "kept") toast.show("已取消删除 3D 增强组件")
-            else if (e.state === "installed") { Theme.motion = "enhanced"; e.choose("enhanced"); toast.show("3D 增强组件已安装，已切换到增强挡位") }
+            else if (e.state === "installed") { Theme.requestMotion("enhanced"); e.choose("enhanced"); toast.show("3D 增强组件已安装，已切换到增强挡位") }
             else if (e.state === "missing") toast.show("已删除 3D 增强组件")
             else if (e.state === "pending-remove") toast.show("3D 增强组件将在退出程序、下次启动空闲后删除")
             else if (e.state === "error") toast.show("3D 增强组件失败：" + e.detail)

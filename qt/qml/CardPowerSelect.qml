@@ -22,6 +22,11 @@ C.AbstractButton {
     // 菜单比字段左右各宽出 pad，右侧留出编号列；字段文字与菜单项左对齐
     readonly property real pad: 12
     readonly property real indexColumn: 30
+    // 菜单不超出卡片：按字段上下方的剩余空间决定展开方向与可见行数，其余在菜单内滚动
+    property bool openUp: false
+    property int visibleRows: 0
+    property real fieldY: 0
+    readonly property bool overflow: visibleRows < menuIndexes.length
     readonly property bool fullyOpen: expanded && reveal === 1
     readonly property var labelWidths: options.map(label => metrics.advanceWidth(label))
     readonly property real shortestLabel: labelWidths.length ? Math.min(...labelWidths) : 0
@@ -69,7 +74,14 @@ C.AbstractButton {
         hoverRow = -1
         const at = field.mapToItem(card, 0, 0)
         menu.x = at.x - pad
-        menu.y = at.y + height
+        fieldY = at.y
+        const count = menuIndexes.length
+        const below = Math.floor((card.height - at.y - height - 8) / height)
+        const above = Math.floor((at.y - 8) / height)
+        // 下方放得下全部或至少 5 行时照常向下展开，否则向更宽的一侧展开
+        openUp = below < Math.min(count, 5) && above > below
+        visibleRows = Math.max(1, Math.min(count, openUp ? above : below))
+        list.positionViewAtBeginning()
         forceActiveFocus()
         expanded = true
     }
@@ -90,6 +102,7 @@ C.AbstractButton {
             const last = menuIndexes.length - 1
             if (last >= 0) keyboardRow = keyboardRow < 0 ? (event.key === Qt.Key_Down ? 0 : last)
                 : Math.max(0, Math.min(last, keyboardRow + (event.key === Qt.Key_Down ? 1 : -1)))
+            if (keyboardRow >= 0) list.positionViewAtIndex(keyboardRow, ListView.Contain)
         } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || event.key === Qt.Key_Space) {
             if (expanded && keyboardRow >= 0) choose(menuIndexes[keyboardRow])
             else if (expanded) expanded = false
@@ -136,15 +149,22 @@ C.AbstractButton {
         clip: true
         z: 19
         width: field.width + 2 * field.pad + field.indexColumn
-        height: field.menuIndexes.length * field.height * field.reveal
+        height: field.visibleRows * field.height * field.reveal
+        y: field.openUp ? field.fieldY - height : field.fieldY + field.height
         border.width: 0
         color: Theme.paper
-        Column {
-            anchors.bottom: parent.bottom
+        ListView {
+            id: list
+            // 向下展开时内容从上方滑入，向上展开时从下方滑入
+            anchors.bottom: field.openUp ? undefined : parent.bottom
+            anchors.top: field.openUp ? parent.top : undefined
             width: parent.width
-            Repeater {
-                model: field.menuIndexes
-                C.AbstractButton {
+            height: field.visibleRows * field.height
+            clip: true
+            interactive: field.overflow
+            boundsBehavior: Flickable.StopAtBounds
+            model: field.menuIndexes
+            delegate: C.AbstractButton {
                     id: option
                     required property int modelData
                     required property int index
@@ -191,7 +211,15 @@ C.AbstractButton {
                         }
                     }
                 }
-            }
+        }
+        // 滚动位置：右缘细条
+        Rectangle {
+            visible: field.overflow
+            x: parent.width - 3
+            width: 2
+            height: Math.max(16, list.height * list.visibleArea.heightRatio)
+            y: (field.openUp ? 0 : parent.height - list.height) + list.visibleArea.yPosition * list.height
+            color: Theme.accent
         }
     }
     // 展开时字段一行的顶盖：铺满菜单宽度，盖住两侧页面内容，当前值与字段原位对齐
@@ -201,7 +229,7 @@ C.AbstractButton {
         visible: menu.visible
         z: menu.z
         x: menu.x
-        y: menu.y - field.height
+        y: field.fieldY
         width: menu.width
         height: field.height
         color: Theme.paper
@@ -228,9 +256,9 @@ C.AbstractButton {
         readonly property color ink: Theme.ink
         readonly property int margin: 5
         x: menu.x - margin - 1
-        y: menu.y - field.height - margin - 1
+        y: (field.openUp ? field.fieldY - field.visibleRows * field.height : field.fieldY) - margin - 1
         width: menu.width + 2 * (margin + 1)
-        height: field.height * (1 + field.menuIndexes.length) + 2 * (margin + 1)
+        height: field.height * (1 + field.visibleRows) + 2 * (margin + 1)
         visible: menu.visible
         z: menu.z + 1
         onProgressChanged: requestPaint()
@@ -238,7 +266,10 @@ C.AbstractButton {
         onVisibleChanged: if (visible) requestPaint()
         onPaint: {
             const ctx = getContext("2d")
+            ctx.reset()
             ctx.clearRect(0, 0, width, height)
+            // 向上展开：上下翻转坐标，外框仍从字段一行开始描出
+            if (field.openUp) { ctx.translate(0, height); ctx.scale(1, -1) }
             const left = margin, right = width - margin
             const top = margin, bottom = top + field.height + menu.height + 2
             const origin = left + (right - left) * field.outlineOrigin

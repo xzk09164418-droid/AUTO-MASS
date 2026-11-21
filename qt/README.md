@@ -32,6 +32,8 @@ uv pip install --python .venv/Scripts/python.exe -r qt/requirements.txt
   Windows x64 的 D3D11 首次启动使用与 Qt 版本匹配的预编译材质和字节码。材质或着色器更新后，在安装了增强组件的 Windows x64 环境运行 `python qt/tools/bake_array_shaders.py`，并更新 `qt/main.py` 中的缓存修订号。
   Qt Quick 3D 在 `PySide6-Addons` 里（下载约 161 MB，安装后约 420 MB），**默认不安装**：在设置里选「增强」时二次确认后下载（版本与 PySide6 一致）。
   切回其它挡位时不立即删除，只写入 `config/QtEnhancedRemove.flag`；退出程序、下次启动加载完毕并空闲后在后台删除；删除前切回增强则取消。
+- 深色主题下增强阵列的录像带为炭黑色，只有选中抬起的那盒保持浅色；阵列上的文字区铺有柔边衬底。
+- 托管管理、调度队列、调度中心的录像带唱片取所选脚本启动程序（exe）的图标；调度中心取任务当前运行（否则第一个）脚本。
 - 选择的挡位保存在 `config/QtClient.json`，下次启动沿用（`--motion` 可临时指定）。
 
 ## 结构
@@ -55,6 +57,10 @@ uv pip install --python .venv/Scripts/python.exe -r qt/requirements.txt
 | `qml/Ledger.qml` | 底部刻度栏 |
 | `WEB-PARITY.md` | 与网页版逐页的交互对照（含各控件的可用条件） |
 | `qml/PageScale.qml` | 刻度翻页条：主页任务对象与各部门的长表格超出一页时用它翻页，不滚动 |
+| `qml/SearchField.qml` | 二级界面右上的搜索框（Ctrl+F 聚焦）：托管管理按名称 / 账号筛选；其余部门匹配条目名、编号、账号、分页名与字段名，跳到对应卡片与分页，回车下一个、Shift+回车上一个 |
+| `qml/RhineScrollBar.qml` | 统一滚动条：发丝轨道 + 方头滑块，悬停 / 拖动加粗转橙 |
+| `assets/logos/` | 12 款默认标志（PNG / SVG）：录像带串里没有 exe 图标的卡带按部门显示 01–10，其余用 11 |
+| `qml/MotionShift.qml` | 标准 ↔ 增强挡位切换过渡：定格画面模糊并压上挡位铭牌，等新画面就绪后斜线扫过揭开 |
 
 ## 一级界面
 

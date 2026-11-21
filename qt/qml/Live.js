@@ -772,8 +772,9 @@ function launchCard(launch) {
                "刷新": {reload:true} },
         actions: Object.keys(launch.scopeErrors || {}).length ? ["开始", "刷新"] : ["开始"] }
 }
-function dispatchCenter(snapshot, queueNames, launch) {
+function dispatchCenter(snapshot, queueNames, launch, scriptPaths) {
     queueNames = queueNames || {}
+    scriptPaths = scriptPaths || {}
     var tasks = snapshot && snapshot.tasks ? snapshot.tasks : []
     var api = "GET /api/dispatch/runtime-snapshot"
     var head = launch ? [launchCard(launch)] : []
@@ -807,7 +808,9 @@ function dispatchCenter(snapshot, queueNames, launch) {
             tabs.push({ name: "循环", api: api, blocks: [SD.table("下次运行", ["脚本", "下次运行", "状态"], t.cycleNextList.map(function (c) {
                 return [c.scriptName, c.nextRunAt.slice(5, 16), c.isRunning ? RUN : c.isDue ? SD.tag("到点", "run") : WAIT]
             }), [2.4, 1.4, 1])], actions: ["停止任务"] })
-        return { runtimeKey: t.taskId, name: title(t, i), en: t.mode.toUpperCase() + (t.isCycle ? " · CYCLE" : "") + " · " + String(i + 1).padStart(2, "0"), live: true,
+        // 3D 阵列：以正在运行（否则第一个）脚本的启动程序图标作唱片
+        var lead = p.current || (t.task_info || [])[0]
+        return { runtimeKey: t.taskId, icon: lead ? scriptPaths[lead.script_id] || "" : "", name: title(t, i), en: t.mode.toUpperCase() + (t.isCycle ? " · CYCLE" : "") + " · " + String(i + 1).padStart(2, "0"), live: true,
             ops: { "停止任务": { confirm: "将停止「" + title(t, i) + "」。", path: "/api/dispatch/stop", body: { taskId: t.taskId }, reload: true },
                    "上一个托管": { path: "/api/dispatch/navigation/previous", body: {} }, "下一个托管": { path: "/api/dispatch/navigation/next", body: {} } },
             tabs: tabs }

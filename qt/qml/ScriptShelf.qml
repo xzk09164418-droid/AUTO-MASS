@@ -20,6 +20,7 @@ Item {
     property point pointer
     readonly property string query: search.text.trim().toLowerCase()
     readonly property bool typing: search.activeFocus
+    property alias searchField: search
     readonly property var filtered: records.filter(s => (!sortableMode || !parked.includes(s.uid)) &&
         (!query || [s.name,s.uid,...(s.accounts || [])].some(v => String(v).toLowerCase().includes(query))))
     readonly property bool sortableMode: !view.arrayMode
@@ -131,26 +132,17 @@ Item {
         })
     }
 
-    C.TextField {
+    SearchField {
         id: search
         objectName: "scriptSearch"
         anchors.right: shelf.right
         anchors.rightMargin: shelf.width - shelf.backButton.x + 14
         y: shelf.backButton.y; width: 198; height: shelf.backButton.height
-        // 与「RETURN TO INDEX」同一样式：透明底、1.5 线框、粗体字距；输入内容时收窄字距
-        placeholderText: "SEARCH"; leftPadding: 38; Accessible.name: "搜索脚本或账号"; selectByMouse: true
+        Accessible.name: "搜索脚本或账号"
         opacity: shelf.view.reveal
-        font.family: Theme.font; font.pixelSize: 13; font.weight: Font.Bold; font.letterSpacing: text ? 1 : 3.6
-        color: Theme.ink
-        placeholderTextColor: Theme.ink
-        verticalAlignment: TextInput.AlignVCenter
-        background: Rectangle { color: "transparent"; border.color: search.activeFocus ? Theme.accent : Theme.ink; border.width: 1.5 }
-        Item {
-            x: 14; anchors.verticalCenter: parent.verticalCenter; width: 16; height: 16
-            Rectangle { width: 11; height: 11; radius: 6; color: "transparent"; border.color: Theme.ink; border.width: 1.5 }
-            Rectangle { x: 9.5; y: 9.5; width: 6; height: 1.5; rotation: 45; transformOrigin: Item.Left; color: Theme.ink }
-        }
-        Keys.onEscapePressed: { clear(); shelf.view.forceActiveFocus() }
+        badge: shelf.filtered.length ? shelf.filtered.length + " 项" : "无匹配"
+        miss: !shelf.filtered.length
+        onLeave: shelf.view.forceActiveFocus()
         onAccepted: shelf.view.forceActiveFocus()
     }
     // 新建 / 复制：放在铭牌下方右侧，与「RETURN TO INDEX」同一种按钮样式
@@ -206,7 +198,7 @@ Item {
             id: stagedList
             anchors.fill: parent; anchors.margins: 12; anchors.topMargin: 38
             clip: true; model: shelf.stack
-            C.ScrollBar.vertical: C.ScrollBar {}
+            C.ScrollBar.vertical: RhineScrollBar {}
             delegate: Item {
                 required property var modelData
                 required property int index

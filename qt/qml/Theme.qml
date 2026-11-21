@@ -9,6 +9,14 @@ QtObject {
     // 动态效果挡位：reduced 减少（直接替换、无解密 / 呼吸 / 抽出）· standard 标准 · enhanced 增强（预留给 3D 档案）
     property string motion: "standard"
     readonly property bool richMotion: motion !== "reduced"
+    // 运行中切换挡位走这里：Main 先定格画面，再切换并播放过渡；没有接收方时直接切换
+    signal motionRequested(string next)
+    property bool motionHandled: false
+    function requestMotion(next) {
+        if (next === motion) return
+        if (motionHandled) motionRequested(next)
+        else motion = next
+    }
     // 3D 增强组件（Qt Quick 3D + 档案模型）为可选安装：未安装时不能选增强挡位
     property bool enhancedAvailable: false
     readonly property bool dark: mode === "dark"
