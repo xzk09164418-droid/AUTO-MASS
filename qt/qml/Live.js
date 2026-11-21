@@ -759,8 +759,9 @@ function launchCard(launch) {
         return !groups.some(g => g.users.some(u => u.toggle)) || groups.some(g => g.users.some(u => u.toggle?.v))
     }
     return { name: "发起任务", en: "LAUNCH", live: true, api: api, blocks: blocks,
-        ops: { "开始": { confirm: "将按所选任务与模式开始运行。", path: "/api/dispatch/start", body: body, reload: true, done: "已开始运行", when: anyUser } },
-        actions: ["开始"] }
+        ops: { "开始": { confirm: "将按所选任务与模式开始运行。", path: "/api/dispatch/start", body: body, reload: true, done: "已开始运行", when: anyUser },
+               "刷新": {reload:true} },
+        actions: Object.keys(launch.scopeErrors || {}).length ? ["开始", "刷新"] : ["开始"] }
 }
 function dispatchCenter(snapshot, queueNames, launch) {
     queueNames = queueNames || {}

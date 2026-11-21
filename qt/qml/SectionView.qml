@@ -71,6 +71,7 @@ FocusScope {
     }
     // 会随运行状态变化的数据（远程桌面连接、热键控制队列等）：控件的可用条件与状态文字按它即时刷新
     property var env: ({})
+    property int deskStatusRequest: 0
     function pollDesk() {
         if (!api || !d) return
         if (d.key === "emulators") {
@@ -84,7 +85,9 @@ FocusScope {
             })
             return
         }
+        const request = ++deskStatusRequest
         api.get("/api/child-session/status", text => {
+            if (request !== deskStatusRequest) return
             let r = null; try { r = JSON.parse(text) } catch (e) {}
             if (r && r.code === 200) env = Object.assign({}, env, { desk: r.data })
         })
@@ -102,6 +105,17 @@ FocusScope {
     HotkeyRecorder { id: recorder; host: view }
     LogViewer { id: logViewer; objectName: "logViewer"; host: view }
     function toastText(text) { toast.show(text) }
+    property int replayRequest: 0
+    function loadReplayArchive() {
+        const request = ++replayRequest
+        api.get("/api/history/replays", text => {
+            if (request !== replayRequest || !opened || d?.key !== "history") return
+            let response
+            try { response = JSON.parse(text) } catch (e) {}
+            const list = live.history
+            if (list) setLive("history", list.map(entry => entry.en === "REPLAY ARCHIVE" ? Live.replayArchive(response) : entry))
+        })
+    }
     property var historyFilter: ({ start: "", end: "", mode: 0 })
     // 运行快照：托管脚本 / 循环队列运行时锁定对应配置，结束后解锁（与网页版一致）
     property var runtimeTasks: []
@@ -121,13 +135,13 @@ FocusScope {
     }
     property var lastSnapshot: null
     property var schedulerNames: null
-    property int schedulerGeneration: 0
+    property int sectionGeneration: 0
     property bool snapshotPending: false
     function currentScheduler(generation) {
-        return generation === schedulerGeneration && opened && api && d?.key === "scheduler"
+        return generation === sectionGeneration && opened && api && d?.key === "scheduler"
     }
     function refreshScheduler() {
-        const generation = schedulerGeneration
+        const generation = sectionGeneration
         if (!currentScheduler(generation) || !schedulerNames || snapshotPending) return
         snapshotPending = true
         api.get("/api/dispatch/runtime-snapshot", text => {
@@ -211,7 +225,7 @@ FocusScope {
         })
     }
     function fetchLive(key) {
-        const generation = ++schedulerGeneration
+        const generation = ++sectionGeneration
         schedulerNames = null
         snapshotPending = false
         if (!api) { liveState = ""; return }
@@ -256,7 +270,16 @@ FocusScope {
         } else if (key === "history") {
             if (!historyFilter.start) historyFilter = { start: today(-6), end: today(0), mode: 0 }
             const f = historyFilter
-            call("/api/history/search", { mode: ["DAILY", "WEEKLY", "MONTHLY"][f.mode], start_date: f.start, end_date: f.end }, r => r.code === 200 ? setLive(key, Live.history(r, f)) : fail(r))
+            const query = {mode:["DAILY","WEEKLY","MONTHLY"][f.mode], start_date:f.start, end_date:f.end}
+            call("/api/history/search", query, r => {
+                if (generation !== sectionGeneration || d?.key !== key) return
+                const list = Live.history(r, f)
+                if (r.code !== 200) list[0].blocks = [list[0].blocks[0],
+                    SD.note(r.message || "历史记录读取失败，请重新查询。", true)]
+                list.splice(1, 0, Live.replayArchive({message:"正在读取失败回放…"}))
+                setLive(key, list)
+                loadReplayArchive()
+            })
         } else if (key === "scheduler") {
             // 发起任务需要：任务列表、脚本名、各队列的队列项（从某脚本开始）、各脚本账号（账号范围）、当前电源动作
             callAll([["q", "/api/queue/get", {}], ["t", "/api/info/combox/task", {}], ["cs", "/api/info/combox/script", {}],
@@ -277,21 +300,33 @@ FocusScope {
                         if (demoSnapshot && demoSnapshot.queueNames) Object.assign(names, demoSnapshot.queueNames)
                         const scriptNames = {}
                         if (m.cs.code === 200) m.cs.data.forEach(o => scriptNames[o.value] = o.label.replace(/^通用 - /, ""))
-                        const queueScripts = {}
+                        const queueScripts = {}, scopeErrors = {}
                         if (queues.code === 200) queues.index.forEach(q => {
                             const r = items["i" + q.uid], seen = []
-                            if (r && r.code === 200) r.index.forEach(x => { const sid = r.data[x.uid].Info.ScriptId; if (sid && sid !== "-" && scriptNames[sid] && seen.indexOf(sid) < 0) seen.push(sid) })
-                            queueScripts[q.uid] = seen.map(sid => ({ value: sid, label: scriptNames[sid] }))
+                            if (r?.code === 200) r.index.forEach(x => {
+                                const sid = r.data[x.uid]?.Info?.ScriptId
+                                if (sid && sid !== "-" && !seen.includes(sid)) seen.push(sid)
+                            })
+                            else scopeErrors[q.uid] = "队列项读取失败，请刷新重试"
+                            queueScripts[q.uid] = seen.map(sid => ({value:sid, label:scriptNames[sid] || sid}))
                         })
                         const users = {}
                         if (m.s.code === 200) m.s.index.forEach(x => {
                             const ur = m.s.users && m.s.users[x.uid]
-                            users[x.uid] = ur ? ur.index.filter(u => {
-                                const info = ur.data[u.uid]?.Info
-                                return info?.Status && info.RemainedDay !== 0
-                            }).map(u => ({value:u.uid, label:ur.data[u.uid].Info.Name || u.uid})) : []
+                            if (ur?.code !== 200) return
+                            users[x.uid] = ur.index.filter(u => ur.data[u.uid]?.Info).map(u => {
+                                const info = ur.data[u.uid].Info
+                                const reason = !info.Status ? "未启用" : info.RemainedDay === 0 ? "天数已耗尽" : ""
+                                return {value:u.uid, label:info.Name || u.uid, reason:reason}
+                            })
                         })
-                        const launch = { tasks: m.t.code === 200 ? m.t.data.filter(o => o.value) : [], queueScripts: queueScripts, users: users,
+                        const tasks = m.t.code === 200 ? m.t.data.filter(o => o.value) : []
+                        tasks.forEach(task => {
+                            const scripts = queueScripts[task.value] || [task]
+                            if (queues.code !== 200 || scripts.some(script => !users[script.value]))
+                                scopeErrors[task.value] = "账号范围读取失败，请刷新重试"
+                        })
+                        const launch = { tasks:tasks, queueScripts:queueScripts, users:users, scopeErrors:scopeErrors,
                                          power: m.p.code === 200 ? m.p.signal : "NoAction" }
                         setLive(key, Live.dispatchCenter(snap, names, launch))
                         schedulerNames = names
@@ -344,7 +379,10 @@ FocusScope {
             if (r.code === 200 || r.code === undefined) {
                 toast.show(op.show && r.message ? r.message : (op.done || "已完成"))
                 if (op.reload) fetchLive(d.key)
-                if (op.poll) pollDesk()
+                if (op.path === "/api/child-session/window" && r.data?.hostStatus) {
+                    deskStatusRequest++
+                    env = Object.assign({}, env, {desk:r.data})
+                } else if (op.poll) pollDesk()
             } else toast.show("操作失败：" + (r.message || op.path))
         }
         const body = typeof op.body === "function" ? op.body(env) : op.body
@@ -414,6 +452,11 @@ FocusScope {
         if (op.savePorts) {
             const err = api.savePorts(Number(Live.pick(item, "frontendPort")), Number(Live.pick(item, "backendPort")))
             toast.show(err ? "保存失败：" + err : "端口已保存，下次启动时生效")
+            return
+        }
+        if (op.refreshReplays) { loadReplayArchive(); return }
+        if (op.replayPath) {
+            if (!fileLocations.openFile(op.replayPath)) toast.show("无法打开回放文件，请检查文件是否存在")
             return
         }
         if (op.historyLog) { logViewer.open(op.historyLog, op.title || ""); return }
