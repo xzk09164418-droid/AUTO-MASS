@@ -16,7 +16,7 @@ FocusScope {
     readonly property bool busy: index >= 0
     readonly property var d: index >= 0 ? departments[index] : null
     readonly property var conf: d ? SD.sections[d.n] : null
-    // 已接入后端的部门用实时数据，其余仍是演示数据（逐步接入）
+    // 仅离线预览使用示例；联网模式在首次读取完成前显示连接状态。
     property var api: null                  // BackendSupervisor（后端就绪时）
     property var enhanced: null             // EnhancedComponent
     // 增强挡位 + 已装 3D 组件 + 托管管理 / 调度队列：以多列档案阵列取代标准版式
@@ -31,10 +31,13 @@ FocusScope {
     property var homeCards: [Live.homePlaceholder(0, "等待后端连接…", false), Live.homePlaceholder(1, "等待后端连接…", false)]
     property int quickRequest: 0
     property int overviewRequest: 0
+    signal uiSettings(var patch)
     onApiChanged: {
+        if (api) call("/api/setting/get",{},r=>{if (r.code===200) uiSettings(r.data.UI || {})})
         quickRequest++
         overviewRequest++
         if (!api) homeCards = [Live.homePlaceholder(0, "等待后端连接…", false), Live.homePlaceholder(1, "等待后端连接…", false)]
+        if (!api && onlineHome) { const cached=Object.assign({},live); delete cached.activity; live=cached }
         if (opened && d) fetchLive(d.key)
     }
     property var live: ({})                 // 部门 key → 条目
@@ -42,7 +45,15 @@ FocusScope {
     property string liveMessage: ""
     readonly property bool isLive: showingOnlineHome ? !!api && !homeCards[target].placeholder : !!(d && live[d.key])
     readonly property bool emulatorPage: !!d && d.key === "emulators"
-    readonly property var items: emulatorPage ? emulatorConfigs.records : showingOnlineHome ? homeCards : d && d.key === "scripts" ? scriptShelf.filtered : d && live[d.key] ? live[d.key] : conf ? conf.items : []
+    readonly property var connectionCard: ({
+        name:d?.zh || "", en:"CONNECTION", live:true,
+        blocks:[SD.note(!api ? "等待后端连接…" : liveState === "error" ? liveMessage : "正在读取配置…", true)],
+        ops:{"重试":{reload:true}}, actions:api && liveState === "error" ? ["重试"] : []
+    })
+    readonly property var items: emulatorPage ? emulatorConfigs.records : showingOnlineHome ? homeCards
+        : d?.key === "scripts" ? scriptShelf.filtered : d && live[d.key] ? live[d.key]
+        : onlineHome && d?.key === "activity" ? activityShelf.records()
+        : onlineHome ? [connectionCard] : conf ? conf.items : []
     onItemsChanged: {
         if (!opened) return
         target = Math.min(target, Math.max(0, items.length - 1))
@@ -50,6 +61,7 @@ FocusScope {
     }
     // ── 后端接入 ──────────────────────────────────────────────────────────
     function call(path, body, cb) {
+        if (!api) { cb({code:0,message:"后端未连接"}); return }
         api.request(path, JSON.stringify(body || {}), text => {
             let r = null
             try { r = JSON.parse(text) } catch (e) { r = { code: 0, message: "响应无法解析" } }
@@ -63,6 +75,7 @@ FocusScope {
         const next = () => {
             if (i >= steps.length) { done(out); return }
             const st = steps[i++]
+            if (!api) { out[st[0]]={code:0,message:"后端未连接"}; next(); return }
             // body 为 null 表示 GET 接口
             if (st[2] === null) api.get(st[1], text => { let r = { code: 0 }; try { r = JSON.parse(text) } catch (e) {} out[st[0]] = r; next() })
             else call(st[1], st[2], r => { out[st[0]] = r; next() })
@@ -104,6 +117,21 @@ FocusScope {
     }
     HotkeyRecorder { id: recorder; host: view }
     LogViewer { id: logViewer; objectName: "logViewer"; host: view }
+    function copyText(value) { fileLocations.copyText(value); toast.show("已复制") }
+    function signatureExample(base, scriptId, callerId, holdId, operation) {
+        return ['import os, json, uuid, base64, hmac, hashlib, urllib.request',
+            'from datetime import datetime, timezone',
+            'command = dict(version=1, requestId=str(uuid.uuid4()), callerId='+JSON.stringify(callerId)+',',
+            '    action='+JSON.stringify(operation)+', scriptId='+JSON.stringify(scriptId)+', holdId='+JSON.stringify(holdId)+', ttlSeconds=1800,',
+            '    issuedAt=datetime.now(timezone.utc).isoformat())',
+            'payload = base64.urlsafe_b64encode(json.dumps(command).encode()).decode().rstrip("=")',
+            'signature = hmac.new(os.environ["AUTO_MAS_CONTROL_SECRET"].encode(), payload.encode(), hashlib.sha256).hexdigest()',
+            'body = json.dumps(dict(payload=payload, signature=signature)).encode()',
+            'url = '+JSON.stringify(base+'/api/dispatch/external-holds/')+' + command["action"]',
+            'request = urllib.request.Request(url, data=body, headers={"Content-Type":"application/json"})',
+            'with urllib.request.urlopen(request, timeout=10) as response: print(response.read().decode())'].join("\n")
+    }
+    function askWorkspace(title, detail, action) { modal.ask(title,detail,"","确认",true,action) }
     function toastText(text) { toast.show(text) }
     property int replayRequest: 0
     function loadReplayArchive() {
@@ -229,6 +257,11 @@ FocusScope {
         schedulerNames = null
         snapshotPending = false
         if (!api) { liveState = ""; return }
+        if (key === "activity") {
+            setLive(key,activityShelf.records())
+            if (opened) activityShelf.load(activityShelf.games[target]?.[0] || activityShelf.games[0][0],false)
+            return
+        }
         if (key === "home") { loadQuickStart(); loadOverview(); return }
         const supported = ["home", "scripts", "emulators", "queue", "scheduler", "localControls", "gamesign", "history", "settings"]
         if (supported.indexOf(key) < 0) { liveState = ""; return }
@@ -326,7 +359,7 @@ FocusScope {
                             if (queues.code !== 200 || scripts.some(script => !users[script.value]))
                                 scopeErrors[task.value] = "账号范围读取失败，请刷新重试"
                         })
-                        const launch = { tasks:tasks, queueScripts:queueScripts, users:users, scopeErrors:scopeErrors,
+                        const launch = { cycles:queues.data || {}, tasks:tasks, queueScripts:queueScripts, users:users, scopeErrors:scopeErrors,
                                          power: m.p.code === 200 ? m.p.signal : "NoAction" }
                         setLive(key, Live.dispatchCenter(snap, names, launch))
                         schedulerNames = names
@@ -365,6 +398,7 @@ FocusScope {
             const q = reqs[i++]
             call(q.path, q.body, r => {
                 if (r.code === 200) {
+                    if (q.path === "/api/setting/update" && q.body.data?.UI) uiSettings(q.body.data.UI)
                     if (q.path === "/api/scripts/update" || q.path === "/api/scripts/user/update")
                         scriptShelf.acknowledge(q)
                     next()
@@ -374,6 +408,15 @@ FocusScope {
         }
         next()
     }
+    ActivityShelf { id: activityShelf; host:view }
+    ArchiveWorkspace { id: workspace; host: view; archive: panel }
+    onIndexChanged: workspace.leave()
+    onItemChanged: if (workspace.record && workspace.source !== item) workspace.leave()
+    onTargetChanged: {
+        workspace.leave()
+        if(opened && api && d?.key==="activity") activityShelf.load(activityShelf.games[target]?.[0],false)
+    }
+
     function exec(op) {
         const done = r => {
             if (r.code === 200 || r.code === undefined) {
@@ -387,13 +430,36 @@ FocusScope {
         }
         const body = typeof op.body === "function" ? op.body(env) : op.body
         if (op.get) api.get(op.path, text => { let r = { code: 0 }; try { r = JSON.parse(text) } catch (e) {} done(r) })
-        else call(op.path, body, done)
+        else if (op.queueMode && op.queueMode()) {
+            call("/api/queue/get", {queueId:body.taskId}, result => {
+                const info = result.data?.[body.taskId]?.Info
+                if (result.code !== 200 || !info) { toast.show("读取队列类型失败，请重试"); return }
+                body.mode = info.CycleEnabled ? "CycleRun" : "AutoProxy"
+                if (info.CycleEnabled) delete body.resumeFromScriptId
+                call(op.path, body, done)
+            })
+        } else call(op.path, body, done)
     }
     function runOp(op) {
         if (!op) return
+        if (op.workspace) { workspace.begin(op.workspace, op); return }
+        if (op.perform) { op.perform(); return }
         if (op.overview || op.homeRetry) {
             if (op.overview || target === 1) loadOverview()
             else loadQuickStart()
+            return
+        }
+        if (op.period !== undefined) {
+            const preset=op.period.v
+            let start=today(preset===1?-1:preset===2?-7:0),end=today(preset===1?-1:0)
+            if(preset>=3){
+                const now=new Date(),day=now.getDate()
+                now.setDate(1);now.setMonth(now.getMonth()-(preset===6?6:preset-2))
+                now.setDate(Math.min(day,new Date(now.getFullYear(),now.getMonth()+1,0).getDate()))
+                start=Qt.formatDate(now,"yyyy-MM-dd")
+            }
+            historyFilter={start:start,end:end,preset:preset,mode:preset>=5?2:preset>=3?1:0}
+            fetchLive("history")
             return
         }
         if (op.query) {
@@ -514,6 +580,7 @@ FocusScope {
         panel.tab = items[target] && items[target]._tab ? items[target]._tab : 0
         landed = false
         opened = true
+        if (d.key==="activity" && api) activityShelf.load(activityShelf.games[target][0],false)
         // 增强阵列：方块直接消失不再重建，阵列飞入
         if (arrayMode) { landed = true; setupArray() }
         else morph.start(r, tileItem, false)
@@ -579,6 +646,7 @@ FocusScope {
         else if (k === Qt.Key_S) k = Qt.Key_Down
         else if (k === Qt.Key_A) k = Qt.Key_Left
         else if (k === Qt.Key_D) k = Qt.Key_Right
+        if (k === Qt.Key_Escape && workspace.record) { workspace.leave(); event.accepted = true; return }
         if (arrayItem) {
             // 阵列：方向键切列 / 翻档，回车读取，ESC 先退出读取再返回索引
             if (k === Qt.Key_Escape) { if (arrayItem.detailOpen) arrayItem.close(); else close(); event.accepted = true; return }
@@ -597,7 +665,7 @@ FocusScope {
         else if (k === Qt.Key_Up || k === Qt.Key_Left) { select(target - 1); event.accepted = true }
         else if (k >= Qt.Key_1 && k <= Qt.Key_9) {
             const t = k - Qt.Key_1
-            if (t < SD.pages(item).length) panel.tab = t
+            if (t < panel.pages.length) panel.tab = t
             event.accepted = true
         }
     }
@@ -612,7 +680,15 @@ FocusScope {
             }
             // 卡片顶部：滚轮切换分页
             if (panel.visible && panel.wheelTabs(view, event.x, event.y, event.pixelDelta.y, event.angleDelta.y)) { event.accepted = true; return }
-            if (panel.scripts) {
+            const log = panel.logViewport
+            if (log && log.visible && log.contains(log.mapFromItem(view,event.x,event.y))) {
+                const maxY=Math.max(0,log.contentHeight-log.height)
+                log.contentY=Math.max(0,Math.min(maxY,log.contentY-(event.pixelDelta.y || event.angleDelta.y/2)))
+                log.follow=log.contentY>=maxY-1
+                event.accepted=true
+                return
+            }
+            if (panel.scrollForm) {
                 const dy=event.pixelDelta.y ? -event.pixelDelta.y : -event.angleDelta.y/2
                 for (const surface of [panel.formViewport]) {
                     const at = surface.mapFromItem(view,event.x,event.y)
@@ -1007,7 +1083,7 @@ FocusScope {
             width: parent.width - 60
             height: parent.height - 40
             dept: view.d
-            item: view.item
+            item: workspace.record || view.item
             itemIndex: view.target
             // 后端还在读取本部门数据时，档案卡停在合拢状态；读取完成（或失败）立即揭开
             saving: view.saving
@@ -1016,8 +1092,11 @@ FocusScope {
             loading: view.liveState === "loading"
             onToast: text => toast.show(text)
             onConfirmDelete: (name, api) => modal.open(name, api)
-            emulatorManager: view.emulatorPage ? emulatorConfigs : null
-            onLiveAction: name => view.liveAction(name)
+            emulatorManager: view.emulatorPage && !workspace.record ? emulatorConfigs : null
+            onLiveAction: name => {
+                if (workspace.record) view.runOp(workspace.record.ops[name])
+                else view.liveAction(name)
+            }
             onLiveOp: op => view.runOp(op)
             onRequestEnhanced: {
                 if (!view.enhanced) return
@@ -1113,7 +1192,7 @@ FocusScope {
     })
     readonly property bool signSorting: opened && !!d && d.key === "gamesign"
     onSignSortingChanged: signSorting ? sortDock.register("signGroups", signSortGroup) : sortDock.unregister("signGroups", signSortGroup)
-    onOpenedChanged: if (!opened) sortDock.reset()
+    onOpenedChanged: if (!opened) { sortDock.reset(); workspace.leave() }
     ScriptShelf {
         id: scriptShelf
         objectName: "scriptShelf"

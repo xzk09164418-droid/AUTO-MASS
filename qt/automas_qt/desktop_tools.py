@@ -49,6 +49,41 @@ class DesktopTools(FileLocations):
             lines.append(output if output is not None else "（已丢弃）")
         return "\n".join(lines) or "无日志行"
 
+    def _session_start(self, path: Path) -> int:
+        """定位当前后端启动标记。追加日志时只扫描新增的字节。"""
+        marker = "| 配置管理 | AUTO-MAS 后端应用程序".encode()
+        try:
+            stat = path.stat()
+            previous = getattr(self, "_log_checkpoint", None)
+            same = (
+                previous and previous[0] == stat.st_ino and previous[1] <= stat.st_size
+            )
+            floor = max(0, previous[1] - len(marker)) if same else 0
+            boundary = previous[2] if same else 0
+            if same and previous[1] == stat.st_size:
+                return boundary
+            with path.open("rb") as stream:
+                end = stat.st_size
+                suffix = b""
+                while end > floor:
+                    start = max(floor, end - 128 * 1024)
+                    stream.seek(start)
+                    block = stream.read(end - start) + suffix
+                    hit = block.rfind(marker)
+                    if hit >= 0:
+                        position = start + hit
+                        prefix_start = max(0, position - 4096)
+                        stream.seek(prefix_start)
+                        prefix = stream.read(position - prefix_start)
+                        boundary = prefix_start + prefix.rfind(b"\n") + 1
+                        break
+                    suffix = block[: len(marker)]
+                    end = start
+            self._log_checkpoint = (stat.st_ino, stat.st_size, boundary)
+            return boundary
+        except OSError:
+            return 0
+
     @Slot(result="QVariantList")
     def logFiles(self) -> list[dict]:
         directory = ROOT_DIR / "debug"
@@ -60,14 +95,27 @@ class DesktopTools(FileLocations):
         files.extend(
             (p, p.name, False) for p in sorted(archives.glob("*.log"), reverse=True)
         )
-        return [
+        result = [
             dict(label=label, path=str(p), current=current)
             for p, label, current in files
             if p.is_file()
         ]
 
-    @Slot(str, float, result="QVariantMap")
-    def logWindow(self, filename: str, before: float) -> dict:
+        backend = directory / "app.log"
+        boundary = self._session_start(backend)
+        if boundary and not any(archives.glob(f"backend-before-*-{boundary}.log")):
+            result.append(
+                dict(
+                    label="后端 · 本次启动以前",
+                    path=str(backend),
+                    current=False,
+                    previous=True,
+                )
+            )
+        return result
+
+    @Slot(str, float, bool, result="QVariantMap")
+    def logWindow(self, filename: str, before: float, previous: bool) -> dict:
         """读截至指定字节的日志页；返回行首偏移，用作上一页的截止位置。"""
         path = Path(filename).resolve()
         if (
@@ -78,15 +126,23 @@ class DesktopTools(FileLocations):
         try:
             with path.open("rb") as stream:
                 size = stream.seek(0, 2)
-                end = size if before < 0 else min(size, int(before))
-                start = max(0, end - 128 * 1024)
+                boundary = (
+                    self._session_start(path)
+                    if path == ROOT_DIR / "debug/app.log"
+                    else 0
+                )
+                floor = 0 if previous else boundary
+                limit = boundary if previous else size
+                end = limit if before < 0 else max(floor, min(limit, int(before)))
+                start = max(floor, end - 128 * 1024)
                 stream.seek(start)
                 data = stream.read(end - start)
-                newline = data.find(b"\n") if start else -1
+                newline = data.find(b"\n") if start > floor else -1
                 if 0 <= newline < len(data) - 1:
                     start += newline + 1
                     data = data[newline + 1 :]
                 return {
+                    "floor": floor,
                     "text": data.decode("utf-8", errors="replace"),
                     "start": start,
                     "end": end,

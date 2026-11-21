@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Window
+import Qt.labs.platform as Native
 import "."
 
 // 外壳：1920×1080 参考舞台按窗口等比缩放；启动动画 → 部门索引 → 二级界面。
@@ -19,6 +20,26 @@ Window {
     property bool booted: false
     // --skip-boot 只在后端已就绪时直接跳过；后端还在启动时仍由启动动画的授权段承接等待（显示实时进度），就绪后快速收尾
     property bool bootHold: false
+
+    property var uiOptions: ({})
+    readonly property bool toTray: !!uiOptions.IfToTray && tray.available
+    flags: Qt.Window | Qt.WindowTitleHint | Qt.WindowSystemMenuHint | Qt.WindowMinMaxButtonsHint
+        | (uiOptions.IfHideCloseButton ? Qt.CustomizeWindowHint : Qt.WindowCloseButtonHint)
+    onClosing: event => {
+        if (toTray) { event.accepted = false; hide() }
+    }
+    Native.SystemTrayIcon {
+        id: tray
+        visible: !!root.uiOptions.IfShowTray || root.toTray
+        icon.source: "../../res/icons/AUTO-MAS.ico"
+        tooltip: "AUTO-MAS"
+        function restoreWindow() { root.show(); root.raise(); root.requestActivate() }
+        onActivated: reason => { if (reason === Native.SystemTrayIcon.Trigger || reason === Native.SystemTrayIcon.DoubleClick) restoreWindow() }
+        menu: Native.Menu {
+            Native.MenuItem { text: "显示 AUTO-MAS"; onTriggered: tray.restoreWindow() }
+            Native.MenuItem { text: "退出 AUTO-MAS"; onTriggered: Qt.quit() }
+        }
+    }
 
     width: 1600
     height: 900
@@ -173,6 +194,7 @@ Window {
             arrayHostItem: arrayLoader.status === Loader.Ready ? arrayLoader.item : null
             onlineHome: root.backendEnabled
             api: root.backendEnabled && root.backend && root.backend.status === "ready" ? root.backend : null
+            onUiSettings: patch => root.uiOptions = Object.assign({},root.uiOptions,patch)
             onClosed: hub.focusCurrent()
         }
 

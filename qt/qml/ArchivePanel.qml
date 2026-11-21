@@ -15,6 +15,7 @@ Item {
     property var host
     property var emulatorManager: null
     readonly property bool scripts: !!dept && dept.key === "scripts"
+    readonly property bool scrollForm: scripts || !!item?.workspace || !!item?.scrollBody
     property alias formViewport: formScroll
     property alias tabViewport: tabScroll
     ArchiveFilePicker { id: filePicker; objectName: "archiveFilePicker" }
@@ -115,10 +116,11 @@ Item {
     property var homeRuns
     property Item taskPickerArea: null
     property Item runArea: null
+    property Item logViewport: null
     Core.Settings { id: choices; category: "QuickStart"; property string selectedIds: ""; property string previewIds: "" }
     readonly property var taskOptions: ((item && item.blocks || []).find(b => b.t === "taskPicker") || {}).options || []
     readonly property var selectedTasks: {
-        const raw = item && item.live ? choices.selectedIds : choices.previewIds
+        const raw = item && item.live && taskOptions.length ? fileLocations.quickSelection(choices.selectedIds) : choices.previewIds
         if (!raw) return taskOptions.slice(0, 1)
         try { const ids = JSON.parse(raw); return taskOptions.filter(t => ids.includes(t.value)) }
         catch (e) { return [] }
@@ -128,7 +130,11 @@ Item {
         const index = ids.indexOf(value)
         if (index < 0) ids.push(value)
         else ids.splice(index, 1)
-        if (item.live) choices.selectedIds = JSON.stringify(ids)
+        if (item.live) {
+            const raw = JSON.stringify(ids)
+            if (!fileLocations.saveQuickSelection(raw)) { toast("无法保存快速启动选择"); return }
+            choices.selectedIds = raw
+        }
         else choices.previewIds = JSON.stringify(ids)
     }
 
@@ -159,9 +165,18 @@ Item {
         if (!page) return
         if (shown === null) { lastItem = item; apply(); startDec(); return }
         if (item !== lastItem && item?.runtimeKey && item.runtimeKey === lastItem?.runtimeKey) {
+            const priorY = logViewport?.contentY || 0
+            const follow = logViewport?.follow !== false
+            const key = item.runtimeKey
             lastItem = item
             shown = page
             blockCount = page.blocks.length
+            if (logViewport) Qt.callLater(() => {
+                if (!logViewport || item?.runtimeKey !== key) return
+                logViewport.follow = follow
+                if (follow) logViewport.positionViewAtEnd()
+                else logViewport.contentY = Math.min(priorY, Math.max(0,logViewport.contentHeight-logViewport.height))
+            })
             return
         }
         if (item !== lastItem) { lastItem = item; swapOut.restart(); return }
@@ -198,6 +213,20 @@ Item {
     }
 
     function act(name) {
+        if (item?.workspace) { host.runOp(item.ops[name]); return }
+        if (["绑定 QQ","获取凭据"].includes(name) && unsaved) {
+            const record=item
+            host.save(()=>{ if(item===record) host.liveAction(name) })
+            return
+        }
+        if (item.live && (name === "全局 Webhook" || (scripts && name === "Webhook"))) {
+            const op={workspace:name,userId:page.userId,lock:scripts}
+            if (scripts && unsaved) {
+                const id=item.uid
+                host.save(()=>{if (item?.uid===id) host.runOp(op)})
+            } else host.runOp(op)
+            return
+        }
         if (emulatorManager) { emulatorManager.act(name,item); return }
         if (scripts && name === "选择配置路径") {
             // 单个配置文件选文件、配置目录选文件夹；起点为当前路径，相对路径按脚本根目录解析
@@ -516,7 +545,8 @@ Item {
         Component { id: autoMode; Label { text: "自动代理" } }
         Component { id: cText; Label { text: String(ctl.spec); elide: Text.ElideRight } }
         // 状态文字：按 panel.env 即时计算（如远程桌面连接状态）
-        Component { id: cDyn; Label { text: ctl.spec.f(panel.env || {}); elide: Text.ElideRight; color: ctl.spec.tone ? ctl.spec.tone(panel.env || {}) : Theme.ink } }
+        Component { id: cDyn; Label { text: { panel.edits; return ctl.spec.f(panel.env || {}) }
+            elide: Text.ElideRight; color: ctl.spec.tone ? ctl.spec.tone(panel.env || {}) : Theme.ink } }
         Component { id: cUnit; Text { text: ctl.spec.t; color: Theme.muted; font.family: Theme.font; font.pixelSize: 13 } }
         Component { id: cTog; Tog { spec: ctl.spec } }
         Component { id: cEntries; Btn { text: "编辑清单"; onClicked: entryEditor.edit(ctl.spec, () => panel.edits++) } }
@@ -538,7 +568,7 @@ Item {
                 Btn { visible: !ctl.spec.noBrowse; text: ctl.spec.browse || "浏览"; small: true; onClicked: {
                     const key = ctl.spec.key || ""
                     const base = panel.scripts ? Live.fieldValue(panel.item,"Info.RootPath") || "" : ""
-                    const folder = key === "Info.RootPath" || (key === "Script.ConfigPath" && Live.fieldValue(panel.item,"Script.ConfigPathMode") === "Folder")
+                    const folder = ctl.spec.folder || key === "Info.RootPath" || (key === "Script.ConfigPath" && Live.fieldValue(panel.item,"Script.ConfigPathMode") === "Folder")
                     filePicker.browse(pathValue.text,base,folder,path => { pathValue.text=path; ctl.spec.v=path; ctl.spec.dirty=true; panel.edits++ })
                 } }
             }
@@ -824,24 +854,47 @@ Item {
         implicitHeight: b.tall ? 470 : 170
         color: "#0b0c0b"
         clip: true
-        Column {
-            x: 16; y: 12
-            spacing: 4
-            Repeater {
-                model: parent.parent.b.lines
-                Text {
-                    required property var modelData
-                    textFormat: Text.PlainText
-                    text: modelData[0] + "  " + modelData[1]
-                    color: modelData[2] === "s" ? "#9cc79f" : modelData[2] === "e" ? "#e58a7f" : "#d9d6cf"
-                    font.family: "Consolas"
-                    font.pixelSize: 13
-                }
+        ListView {
+            id: lines
+            anchors.fill: parent; anchors.margins: 12
+            clip: true; spacing: 4
+            property bool follow: true
+            Component.onCompleted: { panel.logViewport = this; positionViewAtEnd() }
+            Component.onDestruction: if (panel.logViewport === this) panel.logViewport = null
+            onMovementEnded: follow = atYEnd
+            onCountChanged: if (follow) positionViewAtEnd()
+            model: parent.b.lines
+            C.ScrollBar.vertical: C.ScrollBar {}
+            delegate: Text {
+                required property var modelData
+                width: lines.width - 12; wrapMode: Text.WrapAnywhere
+                textFormat: Text.PlainText; text: modelData[0] + "  " + modelData[1]
+                color: modelData[2] === "s" ? "#9cc79f" : modelData[2] === "e" ? "#e58a7f" : "#d9d6cf"
+                font.family: "Consolas"; font.pixelSize: 13
             }
         }
     }
     component BannerBlock: Rectangle {
+        id: bannerBlock
         property var b
+        property int slide: 0
+        readonly property var entry: b.slides?.[slide] || b
+        function turn(delta) { slide=(slide+delta+b.slides.length)%b.slides.length }
+        HoverHandler { id: bannerHover }
+        Timer {
+            interval: 6000; repeat:true
+            running: bannerBlock.visible && (bannerBlock.b.slides?.length || 0)>1 && !bannerHover.hovered && Theme.richMotion
+            onTriggered: bannerBlock.turn(1)
+        }
+        Row {
+            z:2; visible:(bannerBlock.b.slides?.length || 0)>1
+            anchors.right:parent.right; anchors.top:parent.top; anchors.margins:12; spacing:4
+            Repeater {
+                model:["‹","›"]
+                C.Button { required property string modelData; required property int index; text:modelData
+                    width:32; height:26; Accessible.name:index?"下一活动":"上一活动"; onClicked:bannerBlock.turn(index?1:-1) }
+            }
+        }
         implicitHeight: 170
         gradient: Gradient {
             orientation: Gradient.Horizontal
@@ -849,17 +902,21 @@ Item {
             GradientStop { position: 0.55; color: b.c[1] }
             GradientStop { position: 1; color: b.c[2] }
         }
+        Image {
+            anchors.fill: parent; source: /^https?:/.test(bannerBlock.entry.cover || "") ? bannerBlock.entry.cover : ""
+            fillMode: Image.PreserveAspectCrop; asynchronous:true; opacity:0.48; sourceSize.width:800
+        }
         Rectangle {
             x: 24; y: 20
             width: vText.implicitWidth + 20; height: 24
             color: "transparent"; border.width: 1; border.color: Qt.rgba(1, 1, 1, 0.7)
             Text { id: vText; anchors.centerIn: parent; text: "● " + parent.parent.b.v; color: "#ffffff"; font.family: Theme.font; font.pixelSize: 13; font.weight: Font.Bold; font.letterSpacing: 2 }
         }
-        Text { x: 24; anchors.bottom: parent.bottom; anchors.bottomMargin: 18; text: parent.b.title; color: "#ffffff"; font.family: Theme.font; font.pixelSize: 32; font.weight: Font.Bold; font.letterSpacing: 3 }
+        Text { x: 24; anchors.bottom: parent.bottom; anchors.bottomMargin: 18; width:parent.width-186; elide:Text.ElideRight; text: bannerBlock.entry.title; color: "#ffffff"; font.family: Theme.font; font.pixelSize: 32; font.weight: Font.Bold; font.letterSpacing: 3 }
         Column {
             anchors.right: parent.right; anchors.rightMargin: 22; anchors.bottom: parent.bottom; anchors.bottomMargin: 18
             Text { anchors.right: parent.right; text: "活动剩余时间"; color: "#ffffff"; font.family: Theme.font; font.pixelSize: 12; font.letterSpacing: 2 }
-            Text { anchors.right: parent.right; text: parent.parent.b.left; color: "#ffffff"; font.family: Theme.font; font.pixelSize: 30; font.weight: Font.Bold }
+            Text { anchors.right: parent.right; text: bannerBlock.entry.left; color: "#ffffff"; font.family: Theme.font; font.pixelSize: 30; font.weight: Font.Bold }
         }
     }
     component ListBlock: Column {
@@ -992,14 +1049,14 @@ Item {
             id: formScroll
             y: tabBar.y + tabBar.height + 16; width: parent.width
             height: Math.max(1,panel.height-y-64)
-            clip: panel.scripts; interactive: panel.scripts
+            clip: panel.scrollForm; interactive: panel.scrollForm
             contentWidth: width; contentHeight: body.implicitHeight
             boundsBehavior: Flickable.StopAtBounds
-            C.ScrollBar.vertical: C.ScrollBar { policy: panel.scripts && formScroll.contentHeight>formScroll.height ? C.ScrollBar.AlwaysOn : C.ScrollBar.AlwaysOff }
+            C.ScrollBar.vertical: C.ScrollBar { policy: panel.scrollForm && formScroll.contentHeight>formScroll.height ? C.ScrollBar.AlwaysOn : C.ScrollBar.AlwaysOff }
             Column {
                 id: body
                 opacity: panel.tabFade
-                width: formScroll.width - (panel.scripts && implicitHeight>formScroll.height ? 12 : 0)
+                width: formScroll.width - (panel.scrollForm && implicitHeight>formScroll.height ? 12 : 0)
                 spacing: 16
                 Repeater {
                     model: panel.blockCount
@@ -1024,7 +1081,7 @@ Item {
                             }
                         }
                         BlockHead {
-                            visible: !!blk.modelData.title; title: blk.modelData.title || ""
+                            visible: !!blk.modelData.title && blk.modelData.t !== "banner"; title: blk.modelData.title || ""
                             refreshDevices: !!blk.modelData.deviceInstances && !!panel.item?.live
                         }
                         Loader {
@@ -1032,7 +1089,14 @@ Item {
                             sourceComponent: blk.modelData.t === "kv" ? kvC : blk.modelData.t === "table" ? tableC
                                 : blk.modelData.t === "stats" ? statsC : blk.modelData.t === "note" ? noteC
                                 : blk.modelData.t === "log" ? logC : blk.modelData.t === "banner" ? bannerC
-                                : blk.modelData.t === "list" ? listC : blk.modelData.t === "taskPicker" ? pickerC : runC
+                                : blk.modelData.t === "qr" ? qrC : blk.modelData.t === "multiline" ? multilineC : blk.modelData.t === "list" ? listC : blk.modelData.t === "taskPicker" ? pickerC : runC
+                            Component { id: qrC; Image { source:blk.modelData.url; height:190; fillMode:Image.PreserveAspectFit; smooth:false; cache:false } }
+                            Component { id: multilineC; C.TextArea {
+                                text:blk.modelData.v; readOnly:!!blk.modelData.readOnly; selectByMouse:true
+                                wrapMode:TextEdit.WrapAnywhere; color:Theme.ink; font.family:"Consolas"; font.pixelSize:14
+                                onTextChanged: if (!readOnly) blk.modelData.v=text
+                                background:Rectangle { color:Theme.paper; border.color:Theme.hair }
+                            } }
                             Component { id: kvC; KvBlock { b: blk.modelData } }
                             Component { id: tableC; TableBlock { b: blk.modelData } }
                             Component { id: statsC; StatsBlock { b: blk.modelData } }

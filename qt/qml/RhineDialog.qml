@@ -31,6 +31,7 @@ C.Popup {
         Rectangle { anchors.fill: parent; color: Theme.paper; border.width: 1.5; border.color: Theme.ink }
         // 浅网格
         Canvas {
+            id: dialogGrid
             anchors.fill: parent; anchors.margins: 2
             opacity: 0.5
             onPaint: {
@@ -39,7 +40,7 @@ C.Popup {
                 for (let x = 40; x < width; x += 40) { ctx.beginPath(); ctx.moveTo(x + 0.5, 0); ctx.lineTo(x + 0.5, height); ctx.stroke() }
                 for (let y = 40; y < height; y += 40) { ctx.beginPath(); ctx.moveTo(0, y + 0.5); ctx.lineTo(width, y + 0.5); ctx.stroke() }
             }
-            Connections { target: Theme; function onDarkChanged() { parent.requestPaint() } }
+            Connections { target: Theme; function onDarkChanged() { dialogGrid.requestPaint() } }
         }
         Rectangle { width: parent.width; height: 4; color: Theme.accent }
         // 右上斜纹带
