@@ -1,11 +1,12 @@
 import QtQuick
-import QtQuick.Shapes
 
 // 实验室导视图版，所有图形共用 96 × 60 的绘图坐标。
-Item {
+Canvas {
     id: art
     required property string department
     required property color ink
+    required property var layout
+    required property real bleed
     required property color accent
 
     // 第一层为仪器轮廓，第二层标出该部门的观察点或操作位置。
@@ -53,23 +54,46 @@ Item {
     })
     readonly property var drawing: drawings[department] || []
 
-    Shape {
-        anchors.centerIn: parent
-        width: 96
-        height: 60
-        scale: Math.min(art.width / width, art.height / height)
-        preferredRendererType: Shape.CurveRenderer
-        ShapePath {
-            fillColor: "transparent"
-            strokeColor: art.ink
-            strokeWidth: 2.8
-            joinStyle: ShapePath.BevelJoin
-            PathSvg { path: art.drawing[0] || "" }
-        }
-        ShapePath {
-            fillColor: art.accent
-            strokeColor: "transparent"
-            PathSvg { path: art.drawing[1] || "" }
+    onDrawingChanged: requestPaint()
+    onInkChanged: requestPaint()
+    onAccentChanged: requestPaint()
+    onLayoutChanged: requestPaint()
+    onBleedChanged: requestPaint()
+    onPaint: {
+        const ctx = getContext("2d")
+        ctx.reset()
+        if (!drawing.length || !layout || width <= 2 * bleed || height <= 2 * bleed)
+            return
+
+        const tileWidth = width - 2 * bleed
+        const tileHeight = height - 2 * bleed
+        const artWidth = tileWidth * layout.w
+        ctx.save()
+        ctx.translate(bleed + tileWidth * layout.x - artWidth / 2,
+                      bleed + tileHeight * layout.y - artWidth * 0.625 / 2)
+        ctx.scale(artWidth / 96, artWidth / 96)
+        ctx.lineWidth = 2.8
+        ctx.lineJoin = "bevel"
+        ctx.strokeStyle = ink
+        ctx.path = drawing[0]
+        ctx.stroke()
+        ctx.fillStyle = accent
+        ctx.path = drawing[1]
+        ctx.fill()
+        ctx.restore()
+
+        // 两轴透明度相乘，四角也会平滑消失；只在图稿重绘时生成蒙版。
+        ctx.globalCompositeOperation = "destination-in"
+        for (const horizontal of [true, false]) {
+            const length = horizontal ? width : height
+            const edge = bleed / length
+            const mask = ctx.createLinearGradient(0, 0, horizontal ? width : 0, horizontal ? 0 : height)
+            mask.addColorStop(0, "transparent")
+            mask.addColorStop(edge, "black")
+            mask.addColorStop(1 - edge, "black")
+            mask.addColorStop(1, "transparent")
+            ctx.fillStyle = mask
+            ctx.fillRect(0, 0, width, height)
         }
     }
 }

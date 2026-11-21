@@ -67,21 +67,15 @@ Item {
         border.color: Theme.accent
     }
 
-    // 将部门线稿裁在入口范围内，保留原排字和交互边界。
-    Item {
+    DepartmentArt {
+        department: tile.d.key
+        layout: tile.d.art
+        bleed: Math.min(tile.width, tile.height) * 0.18
         anchors.fill: parent
-        clip: true
-
-        DepartmentArt {
-            department: tile.d.key
-            ink: tile.textColor
-            accent: Theme.accent
-            width: parent.width * tile.d.art.w
-            height: width * 0.625
-            x: parent.width * tile.d.art.x - width / 2
-            y: parent.height * tile.d.art.y - height / 2
-            opacity: tile.isBlock ? 0.17 : 0.13
-        }
+        anchors.margins: -bleed
+        ink: tile.isBlock && !Theme.dark ? "#a9afb0" : tile.textColor
+        accent: Theme.accent
+        opacity: tile.isBlock ? 0.24 : 0.15
     }
 
     // PV 部门标旁的橙色角块
