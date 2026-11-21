@@ -27,7 +27,7 @@ Rectangle {
         id: label
         anchors.centerIn: parent
         text: btn.text
-        color: btn.primary ? "#ffffff" : btn.hot ? (btn.danger ? Theme.error : Theme.accent) : Theme.ink
+        color: btn.primary ? (btn.hot ? "#ffffff" : Theme.paper) : btn.hot ? (btn.danger ? Theme.error : Theme.accent) : Theme.ink
         font.family: Theme.font
         font.pixelSize: btn.small ? 12 : 14
         font.weight: Font.Bold

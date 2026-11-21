@@ -116,8 +116,9 @@ RhineDialog {
                 C.TextArea {id:editor; color:Theme.ink; selectByMouse:true;readOnly:dialog.busy || !dialog.file; font.family:"Consolas"; font.pixelSize:14; selectionColor:Theme.accent; selectedTextColor:"#ffffff"; background:null} } }
         ColumnLayout {visible:!dialog.editingFile && !dialog.session;Layout.fillWidth:true;Layout.fillHeight:true;enabled:!dialog.busy;spacing:10
             RowLayout { spacing:14
-                RhineCombo {card:dialog.contentItem;label:"Webhook";model:dialog.hooks.map(h=>h.Info.Name);currentIndex:dialog.hooks.indexOf(dialog.hook);Layout.fillWidth:true;onActivated: index => dialog.chooseHook(dialog.hooks[index])}
+                RhineCombo {card:dialog.contentItem;label:"Webhook";model:dialog.hooks.map(h=>h.Info.Name);currentIndex:dialog.hooks.indexOf(dialog.hook);Layout.fillWidth:true;opacity:dialog.hooks.length?1:0;enabled:dialog.hooks.length>0;onActivated: index => dialog.chooseHook(dialog.hooks[index])}
                 RhineButton{text:"＋ 添加";small:true;onClicked:dialog.hookAction("add")} }
+            Text {visible:!dialog.hook && !dialog.busy;text:"暂无 Webhook";color:Theme.muted;font.family:Theme.font;font.pixelSize:14;font.letterSpacing:1.2}
             GridLayout { columns:2;visible:!!dialog.hook;Layout.fillWidth:true;columnSpacing:20;rowSpacing:8
                 FieldLabel{text:"名称"} RhineField{id:hookName;Layout.fillWidth:true}
                 FieldLabel{text:"启用"} RhineSwitch{id:enabledHook}

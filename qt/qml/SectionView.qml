@@ -562,7 +562,7 @@ FocusScope {
         if (!op.path) { if (op.reload) fetchLive(d.key); return }
         // saveFirst：先保存未保存的改动再执行；有确认语时先确认
         const go = () => op.saveFirst ? save(() => exec(op)) : exec(op)
-        if (op.confirm) { modal.ask("确认操作", op.confirm + "此操作会写入后端。", "POST " + op.path, "确认", true, go); return }
+        if (op.confirm) { modal.ask("确认操作", op.confirm, "POST " + op.path, "确认", true, go); return }
         go()
     }
     function liveAction(name) {
@@ -1308,7 +1308,7 @@ FocusScope {
         function open(name, a) {
             title = "确认删除"; okText = "删除"; danger = true; onOk = null
             api = a
-            mText.text = "将删除「" + name + "」。此操作会写入后端，删除后无法撤销。"
+            mText.text = "将删除「" + name + "」，删除后无法撤销。"
             shown = true
             outAnim.stop()
             inAnim.restart()
@@ -1351,31 +1351,52 @@ FocusScope {
         Rectangle {
             id: mBox
             width: 560
-            height: mCol.implicitHeight + 64
+            height: mCol.implicitHeight + 98
             anchors.centerIn: parent
             anchors.verticalCenterOffset: modal.shown ? 12 * (1 - modal.p) : 8 * (1 - modal.p)
             opacity: modal.p
+            // 与 RhineDialog 同一外框：顶部色条、右上斜纹、四角折角、底部编号栏
             color: Theme.paper
-            border.width: 1
-            border.color: Theme.hair
+            border.width: 1.5
+            border.color: Theme.ink
             MouseArea { anchors.fill: parent }
+            Rectangle { width: parent.width; height: 4; color: modal.danger ? Theme.error : Theme.accent }
+            Item {
+                anchors.right: parent.right; anchors.rightMargin: 28; y: 24
+                width: 96; height: 12; clip: true
+                Repeater {
+                    model: 14
+                    Rectangle { required property int index; x: index * 9 - 10; y: -6; width: 3; height: 26; rotation: 35; color: Theme.ink; opacity: 0.85 }
+                }
+            }
+            Repeater {
+                model: 4
+                Item {
+                    required property int index
+                    readonly property bool isRight: index % 2 === 1
+                    readonly property bool isBottom: index > 1
+                    x: isRight ? mBox.width - 22 : 8; y: isBottom ? mBox.height - 22 : 12
+                    width: 14; height: 14
+                    Rectangle { x: parent.isRight ? 12 : 0; width: 2; height: 14; color: Theme.ink }
+                    Rectangle { y: parent.isBottom ? 12 : 0; width: 14; height: 2; color: Theme.ink }
+                }
+            }
+            Rectangle { x: 28; width: parent.width - 56; y: parent.height - 34; height: 1; color: Theme.hair }
+            Text { x: 28; y: parent.height - 26; text: "X-0" + (view.d ? view.d.n : "00") + "  ·  CONFIRM"; color: Theme.accent; font.family: Theme.font; font.pixelSize: 10; font.weight: Font.Bold; font.letterSpacing: 2.4 }
+            Text { anchors.right: parent.right; anchors.rightMargin: 28; y: parent.height - 26; text: "AUTO-MAS  //  ANALYSIS OS"; color: Theme.muted; font.family: Theme.font; font.pixelSize: 10; font.weight: Font.Bold; font.letterSpacing: 2.4 }
             Column {
                 id: mCol
-                x: 40; y: 34
-                width: parent.width - 80
+                x: 36; y: 26
+                width: parent.width - 72
                 spacing: 0
-                Item {
-                    width: parent.width; height: 16
-                    Text { text: "AUTO-MAS / CONFIRM"; color: Theme.muted; font.family: Theme.font; font.pixelSize: 12; font.weight: Font.Bold; font.letterSpacing: 2.4 }
-                    Text { anchors.right: parent.right; text: modal.api; color: Theme.muted; font.family: "Consolas"; font.pixelSize: 12 }
-                }
-                Item { width: 1; height: 18 }
-                Text { text: modal.title; color: Theme.ink; font.family: Theme.font; font.pixelSize: 30; font.weight: Font.Bold; font.letterSpacing: 1.2 }
-                Item { width: 1; height: 18 }
-                Rectangle { width: parent.width; height: 2; color: Theme.ink }
+                Text { text: (view.d ? view.d.code.replace("\n", " ") + "  /  " : "") + "CONFIRM"; color: modal.danger ? Theme.error : Theme.accent; font.family: Theme.font; font.pixelSize: 12; font.weight: Font.Bold; font.letterSpacing: 2.8 }
+                Item { width: 1; height: 6 }
+                Text { text: modal.title; color: Theme.ink; font.family: Theme.font; font.pixelSize: 28; font.weight: Font.Bold; font.letterSpacing: 1.4 }
+                Item { width: 1; height: 12 }
+                Rectangle { width: 36; height: 2; color: Theme.ink }
                 Item { width: 1; height: 20 }
-                Text { id: mText; width: parent.width; wrapMode: Text.Wrap; color: Theme.muted; font.family: Theme.font; font.pixelSize: 15; lineHeight: 1.4 }
-                Item { width: 1; height: 26 }
+                Text { id: mText; width: parent.width; wrapMode: Text.Wrap; color: Theme.ink; font.family: Theme.font; font.pixelSize: 15; lineHeight: 1.4 }
+                Item { width: 1; height: 28 }
                 Row {
                     anchors.right: parent.right
                     spacing: 12
@@ -1398,12 +1419,12 @@ FocusScope {
                             Component.onCompleted: if (index === 0) modal.cancelRef = mb
                             function trigger() {
                                 if (danger && modal.onOk) { const f = modal.onOk; modal.close(() => f()) }
-                                else if (danger) { const a = modal.api; modal.close(() => toast.show("已删除 · " + a)) }
+                                else if (danger) modal.close(() => toast.show("已删除"))
                                 else modal.close()
                             }
                             Keys.onReturnPressed: trigger()
                             Keys.onSpacePressed: trigger()
-                            Text { id: mbText; anchors.centerIn: parent; text: mb.modelData; color: mb.danger ? "#ffffff" : mbMouse.containsMouse || mb.activeFocus ? Theme.accent : Theme.ink; font.family: Theme.font; font.pixelSize: 14; font.weight: Font.Bold; font.letterSpacing: 2 }
+                            Text { id: mbText; anchors.centerIn: parent; text: mb.modelData; color: mb.danger ? (mbMouse.containsMouse || mb.activeFocus ? "#ffffff" : Theme.paper) : mbMouse.containsMouse || mb.activeFocus ? Theme.accent : Theme.ink; font.family: Theme.font; font.pixelSize: 14; font.weight: Font.Bold; font.letterSpacing: 2 }
                             MouseArea { id: mbMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: mb.trigger() }
                         }
                     }

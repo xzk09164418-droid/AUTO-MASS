@@ -19,6 +19,9 @@ C.AbstractButton {
     property int hoverRow: -1
     property real reveal: expanded ? 1 : 0
     property real outlineOrigin: 0.5
+    // 菜单比字段左右各宽出 pad，右侧留出编号列；字段文字与菜单项左对齐
+    readonly property real pad: 12
+    readonly property real indexColumn: 30
     readonly property bool fullyOpen: expanded && reveal === 1
     readonly property var labelWidths: options.map(label => metrics.advanceWidth(label))
     readonly property real shortestLabel: labelWidths.length ? Math.min(...labelWidths) : 0
@@ -45,7 +48,7 @@ C.AbstractButton {
     }
     font.family: Theme.font
     font.pixelSize: 15
-    implicitWidth: Math.max(minWidth, Math.ceil(longestLabel))
+    implicitWidth: Math.max(minWidth, Math.ceil(longestLabel) + 20)
     implicitHeight: 30
     padding: 0
     text: options[selectedIndex] || ""
@@ -65,7 +68,7 @@ C.AbstractButton {
         keyboardRow = -1
         hoverRow = -1
         const at = field.mapToItem(card, 0, 0)
-        menu.x = at.x
+        menu.x = at.x - pad
         menu.y = at.y + height
         forceActiveFocus()
         expanded = true
@@ -132,7 +135,7 @@ C.AbstractButton {
         enabled: field.expanded
         clip: true
         z: 19
-        width: field.width
+        width: field.width + 2 * field.pad + field.indexColumn
         height: field.menuIndexes.length * field.height * field.reveal
         border.width: 0
         color: Theme.paper
@@ -156,34 +159,73 @@ C.AbstractButton {
                         field.keyboardRow = -1
                     }
                     onClicked: field.choose(modelData)
+                    readonly property bool lit: field.fullyOpen && (field.keyboardRow >= 0 ? field.keyboardRow === index : hovered)
+                    leftPadding: field.pad
+                    rightPadding: field.pad
                     background: Item {
-                        Rectangle {
-                            anchors.bottom: parent.bottom
-                            anchors.horizontalCenter: parent.horizontalCenter
-                            anchors.alignWhenCentered: false
-                            width: field.lineWidth
-                            height: 1.5
-                            color: Theme.accent
-                            visible: field.fullyOpen && (field.keyboardRow >= 0 ? field.keyboardRow === option.index : option.hovered)
-                        }
+                        // 当前项：浅墨底 + 左侧橙色竖条
+                        Rectangle { anchors.fill: parent; anchors.leftMargin: 1; anchors.rightMargin: 1; color: Theme.ink; opacity: option.lit ? 0.07 : 0 }
+                        Rectangle { x: 1; width: 3; height: parent.height; color: Theme.accent; visible: option.lit }
+                        Rectangle { anchors.top: parent.top; x: field.pad; width: parent.width - 2 * field.pad; height: 1; color: Theme.hair; opacity: 0.5; visible: option.index > 0 }
                     }
-                    contentItem: Text {
-                        text: field.options[modelData]
-                        font: field.font
-                        color: Theme.ink
-                        verticalAlignment: Text.AlignVCenter
-                        elide: Text.ElideRight
+                    contentItem: Item {
+                        Text {
+                            width: parent.width - field.indexColumn
+                            height: parent.height
+                            text: field.options[option.modelData]
+                            font: field.font
+                            color: option.lit ? Theme.accent : Theme.ink
+                            verticalAlignment: Text.AlignVCenter
+                            elide: Text.ElideRight
+                        }
+                        Text {
+                            anchors.right: parent.right
+                            height: parent.height
+                            text: String(option.modelData + 1).padStart(2, "0")
+                            color: option.lit ? Theme.accent : Theme.hair
+                            font.family: Theme.font
+                            font.pixelSize: 10
+                            font.weight: Font.Bold
+                            font.letterSpacing: 1.2
+                            verticalAlignment: Text.AlignVCenter
+                        }
                     }
                 }
             }
         }
+    }
+    // 展开时字段一行的顶盖：铺满菜单宽度，盖住两侧页面内容，当前值与字段原位对齐
+    Rectangle {
+        id: cap
+        parent: field.card
+        visible: menu.visible
+        z: menu.z
+        x: menu.x
+        y: menu.y - field.height
+        width: menu.width
+        height: field.height
+        color: Theme.paper
+        opacity: Math.min(1, field.reveal * 3)
+        Text {
+            x: field.pad
+            width: parent.width - field.pad - field.indexColumn
+            height: parent.height
+            text: field.text
+            font: field.font
+            color: Theme.ink
+            verticalAlignment: Text.AlignVCenter
+            elide: Text.ElideRight
+        }
+        Text { anchors.right: parent.right; anchors.rightMargin: field.pad; anchors.verticalCenter: parent.verticalCenter; text: "▴"; font.pixelSize: 13; color: Theme.accent }
+        Rectangle { anchors.bottom: parent.bottom; x: field.pad; width: parent.width - 2 * field.pad; height: 1.5; color: Theme.accent }
+        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: field.expanded = false }
     }
     // 外框和柔边共用一条路径，画在独立层上，随卡片一同缩放和倾斜。
     Canvas {
         id: outline
         parent: field.card
         readonly property real progress: field.reveal
-        readonly property color ink: Theme.block
+        readonly property color ink: Theme.ink
         readonly property int margin: 5
         x: menu.x - margin - 1
         y: menu.y - field.height - margin - 1

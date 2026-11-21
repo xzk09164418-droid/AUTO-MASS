@@ -8,7 +8,7 @@ import "SectionData.js" as SD
 import "Live.js" as Live
 
 // 右侧档案卡：条目的功能分页 + 数据块 + 操作按钮。
-// 交互是二级界面的主体：所有控件都可操作，字段名悬停显示对应的后端配置键。
+// 交互是二级界面的主体：所有控件都可操作。
 Item {
     id: panel
 
@@ -256,8 +256,8 @@ Item {
         if (name === "开始执行" && selectedTasks.length) homeRuns.preview(selectedTasks)
         else if (name === "停止" || name === "停止任务") homeRuns.stopPreview()
         else if (/删除/.test(name)) confirmDelete(item ? item.name : "", api)
-        else if (/保存/.test(name)) toast("已保存 · " + api)
-        else toast("演示：" + name + " · " + api)
+        else if (/保存/.test(name)) toast("已保存")
+        else toast("演示：" + name)
     }
 
     // ── 外观小件 ─────────────────────────────────────────────────────────
@@ -291,14 +291,14 @@ Item {
         property bool stateButton: false
         property bool checked: false
         property int entryEdge: Qt.LeftEdge
-        readonly property color stateFill: checked ? "#101010" : "#ffffff"
-        readonly property color stateText: checked ? "#ffffff" : "#101010"
+        readonly property color stateFill: checked ? Theme.ink : Theme.paper
+        readonly property color stateText: checked ? Theme.paper : Theme.ink
         signal clicked()
         implicitWidth: btnText.implicitWidth + (small ? 20 : 40)
         implicitHeight: small ? 28 : 40
         color: stateButton ? stateFill : primary ? (btnMouse.containsMouse ? Theme.accent : Theme.ink) : "transparent"
         border.width: 1.5
-        border.color: stateButton ? "#101010" : btnMouse.containsMouse ? (danger ? Theme.error : Theme.accent) : Theme.ink
+        border.color: stateButton ? Theme.ink : btnMouse.containsMouse ? (danger ? Theme.error : Theme.accent) : Theme.ink
         activeFocusOnTab: true
         Accessible.role: Accessible.Button
         Accessible.name: text
@@ -418,6 +418,8 @@ Item {
     component Seg: Row {
         id: sg
         property var spec
+        // 相邻按钮共用边线
+        spacing: -1.5
         readonly property var motions: ["reduced", "standard", "enhanced"]
         readonly property var themes: ["system", "light", "dark"]
         property int cur: spec.k === "motion" ? Math.max(0, motions.indexOf(Theme.motion))
@@ -453,8 +455,7 @@ Item {
                 Accessible.name: modelData
                 Accessible.checked: on
                 Keys.onSpacePressed: sg.cur = index
-                // 相邻按钮共用边线
-                x: index * -1.5
+                z: on ? 1 : 0
                 Rectangle { anchors.fill: parent; anchors.margins: -3; color: "transparent"; border.width: 2; border.color: Theme.accent; visible: sb.activeFocus }
                 Text {
                     id: sbText
@@ -631,7 +632,7 @@ Item {
                             if (ctl.spec.commands) panel.act(text)
                             else if (ctl.spec.ops && ctl.spec.ops[index]) panel.liveOp(ctl.spec.ops[index])
                             else if (text === "启动" || text === "关闭") {
-                                panel.toast(text + "模拟器实例 · POST /api/emulator/operate")
+                                panel.toast("演示：" + text + "模拟器实例")
                                 text = text === "启动" ? "关闭" : "启动"
                             } else if (text === "录制") panel.toast("演示：按下新的组合键")
                             else panel.toast("演示：" + text)
@@ -685,9 +686,10 @@ Item {
                     font.pixelSize: 14
                     font.letterSpacing: 0.8
                     elide: Text.ElideRight
-                    HoverHandler { id: keyHover; enabled: !!kvRow.modelData[2] }
+                    // 字段名被截断时悬停显示全名
+                    HoverHandler { id: keyHover; enabled: kvLabel.truncated }
                     C.ToolTip.visible: keyHover.hovered
-                    C.ToolTip.text: kvRow.modelData[2] || ""
+                    C.ToolTip.text: kvRow.modelData[0]
                     C.ToolTip.delay: 300
                 }
                 Cell {
@@ -963,10 +965,12 @@ Item {
             Text {
                 id: metaApi
                 anchors.right: parent.right
-                text: (panel.unsaved > 0 ? "● 未保存 " + panel.unsaved + " 处    " : "") + (panel.shown ? panel.shown.api || "" : "")
-                color: Theme.muted
-                font.family: "Consolas"
+                text: panel.unsaved > 0 ? "● 未保存 " + panel.unsaved + " 处" : ""
+                color: Theme.accent
+                font.family: Theme.font
                 font.pixelSize: 12
+                font.weight: Font.Bold
+                font.letterSpacing: 1.6
             }
         }
 
