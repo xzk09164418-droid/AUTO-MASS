@@ -11,6 +11,7 @@ import hashlib
 import json
 import re
 import sys
+import time
 from collections import deque
 from pathlib import Path
 
@@ -96,7 +97,7 @@ class BackendSupervisor(QObject):
         self._network = QNetworkAccessManager(self)
         self._process: QProcess | None = None
         self._stopping = False
-        self._elapsed = 0
+        self._started_at = time.monotonic()
         self._poll = QTimer(self)
         self._poll.setInterval(POLL_INTERVAL_MS)
         self._poll.timeout.connect(self._probe)
@@ -137,7 +138,7 @@ class BackendSupervisor(QObject):
         self._steps_done = 0
         self._progress = 0.0
         self._set_progress(0.03, self.tr("连接后端"))
-        self._elapsed = 0
+        self._started_at = time.monotonic()
         self._probe(first=True)
 
     @Slot()
@@ -269,6 +270,10 @@ class BackendSupervisor(QObject):
                 self._set_progress(1.0, self.tr("就绪"))
                 self._set_status("ready", "")
                 return
+            if (time.monotonic() - self._started_at) * 1000 >= START_TIMEOUT_MS:
+                self._poll.stop()
+                self._set_status("error", self.tr("后端启动超时"))
+                return
             # 核心接口已通、后台仍在初始化：继续轮询，进度由日志推进
             self._set_progress(0.40, self._stage or self.tr("核心服务就绪"))
             if not self._poll.isActive():
@@ -280,8 +285,7 @@ class BackendSupervisor(QObject):
             self._spawn()
             return
 
-        self._elapsed += POLL_INTERVAL_MS
-        if self._elapsed >= START_TIMEOUT_MS:
+        if (time.monotonic() - self._started_at) * 1000 >= START_TIMEOUT_MS:
             self._poll.stop()
             self._set_status("error", self.tr("后端启动超时"))
 

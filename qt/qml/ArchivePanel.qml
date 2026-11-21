@@ -1,4 +1,5 @@
 import QtQuick
+import QtCore as Core
 import QtQuick.Layouts
 import QtQuick.Controls.Basic as C
 import QtQuick.Effects
@@ -11,6 +12,17 @@ import "Live.js" as Live
 Item {
     id: panel
 
+    property var host
+    property var emulatorManager: null
+    readonly property bool scripts: !!dept && dept.key === "scripts"
+    property alias formViewport: formScroll
+    property alias tabViewport: tabScroll
+    ArchiveFilePicker { id: filePicker; objectName: "archiveFilePicker" }
+    ScriptEntryEditor { id: entryEditor; objectName: "scriptEntryEditor"; picker: filePicker }
+    ScriptConfigDialog { id: configDialog; objectName: "scriptConfigDialog"; host: panel.host }
+    function editSpecial(action) {
+        configDialog.begin(action, item, page, item.live)
+    }
     property var dept: null
     property var item: null
     property int itemIndex: 0
@@ -21,10 +33,14 @@ Item {
     // 实时条目的按钮与行内操作交给 SectionView 调后端
     signal liveAction(string name)
     signal liveOp(var op)
+    property bool saving: false
     property int edits: 0                   // 控件改动计数（驱动「未保存 N 处」）
     readonly property int unsaved: { edits; return item && item.live ? Live.dirtyCount(item) : 0 }
     signal motionChosen(string motion)      // 用户切换了动态效果挡位（记住选择；离开增强挡位时标记延后删除）
-    onTabChanged: if (item) item._tab = tab
+    onTabChanged: {
+        if (item) item._tab = tab
+        if (scripts) Qt.callLater(tabScroll.showTab)
+    }
 
     readonly property var pages: item ? SD.pages(item) : []
     readonly property var page: pages.length ? pages[Math.min(tab, pages.length - 1)] : null
@@ -34,13 +50,25 @@ Item {
     property string excl: ""                 // 队列：定时启动与循环队列互斥
     onExclChanged: if (item && item.exclusive !== undefined && item.exclusive !== excl) item.exclusive = excl
 
-    // 快速启动的模拟运行
-    property string runState: "idle"
-    property real runPct: 0
-    property string runTitle: "待命"
-    property string runText: "选择任务后开始执行"
-    property string queueName: SD.TASKS[0]
-    property var statOverride: ({})
+    property var homeRuns
+    property Item taskPickerArea: null
+    property Item runArea: null
+    Core.Settings { id: choices; category: "QuickStart"; property string selectedIds: ""; property string previewIds: "" }
+    readonly property var taskOptions: ((item && item.blocks || []).find(b => b.t === "taskPicker") || {}).options || []
+    readonly property var selectedTasks: {
+        const raw = item && item.live ? choices.selectedIds : choices.previewIds
+        if (!raw) return taskOptions.slice(0, 1)
+        try { const ids = JSON.parse(raw); return taskOptions.filter(t => ids.includes(t.value)) }
+        catch (e) { return [] }
+    }
+    function toggleTask(value) {
+        const ids = selectedTasks.map(t => t.value)
+        const index = ids.indexOf(value)
+        if (index < 0) ids.push(value)
+        else ids.splice(index, 1)
+        if (item.live) choices.selectedIds = JSON.stringify(ids)
+        else choices.previewIds = JSON.stringify(ids)
+    }
 
     property var lastItem: null
     property int blockCount: 0
@@ -73,8 +101,8 @@ Item {
         if (Theme.richMotion) tabFadeAnim.restart()
     }
     function apply() {
-        runTimer.stop()
-        runState = "idle"; runPct = 0; runTitle = "待命"; runText = "选择任务后开始执行"; statOverride = ({})
+        if (!page) { shown = null; blockCount = 0; return }
+        formScroll.contentY = 0
         excl = item && item.exclusive !== undefined ? item.exclusive : ""
         tickets = 0
         // 先清零再给数量，保证换页时数据块全部重建（入场动画、遮挡条序号随之重置）
@@ -102,39 +130,22 @@ Item {
     }
 
     function act(name) {
+        if (emulatorManager) { emulatorManager.act(name,item); return }
+        if (scripts && ["编辑并写回原文件","打开源程序设置","Webhook"].includes(name)) {
+            if (item.live && unsaved) {
+                const record=item, selectedPage=page
+                host.save(() => { if (item===record && page===selectedPage) editSpecial(name) })
+            }
+            else editSpecial(name)
+            return
+        }
         const api = shown ? shown.api : ""
         if (item && item.live) { liveAction(name); return }
-        if (name === "开始执行") startRun()
-        else if (name === "停止" || name === "停止任务") { runTimer.stop(); runState = "idle"; runPct = 0; runTitle = "已停止"; runText = "队列已手动停止"; toast("队列已停止 · POST /api/dispatch/stop") }
+        if (name === "开始执行" && selectedTasks.length) homeRuns.preview(selectedTasks)
+        else if (name === "停止" || name === "停止任务") homeRuns.stopPreview()
         else if (/删除/.test(name)) confirmDelete(item ? item.name : "", api)
         else if (/保存/.test(name)) toast("已保存 · " + api)
         else toast("演示：" + name + " · " + api)
-    }
-
-    readonly property var runSteps: ["主号 · BGI 每日", "小号 · BGI 每日", "鸣潮主号 · 鸣潮日常", "星铁 · 星铁清体力"]
-    property int runN: 0
-    function startRun() {
-        runN = 0
-        runState = "run"; runPct = 4; runTitle = "运行"; runText = queueName + " · " + runSteps[0]
-        runTimer.restart()
-        toast("已开始执行：" + queueName + " · POST /api/dispatch/start")
-    }
-    Timer {
-        id: runTimer
-        interval: 700
-        repeat: true
-        onTriggered: {
-            panel.runN++
-            const total = panel.runSteps.length * 3
-            if (panel.runN >= total) {
-                stop()
-                panel.runState = "done"; panel.runPct = 100; panel.runTitle = "完成"; panel.runText = panel.queueName + " · 本轮全部完成"
-                panel.statOverride = { done: "8", left: "0" }
-                return
-            }
-            panel.runPct = Math.round(panel.runN / total * 100)
-            panel.runText = panel.queueName + " · " + panel.runSteps[Math.floor(panel.runN / 3)]
-        }
     }
 
     // ── 外观小件 ─────────────────────────────────────────────────────────
@@ -317,13 +328,11 @@ Item {
         font.pixelSize: 15
         onActivated: {
             if (spec.v !== currentIndex) { spec.v = currentIndex; spec.dirty = true; panel.edits++ }
-            if (spec.k === "queue") panel.queueName = currentText
         }
         Component.onCompleted: {
             let w = 0
             for (const o of spec.opts) w = Math.max(w, metrics.advanceWidth(o))
             contentWidthHint = w
-            if (spec.k === "queue") panel.queueName = currentText
         }
         FontMetrics { id: metrics; font: cb.font }
         contentItem: Text {
@@ -419,19 +428,23 @@ Item {
         Layout.fillWidth: stretch
         Layout.alignment: Qt.AlignVCenter
         sourceComponent: typeof spec !== "object" ? cText
-            : spec.c === "tog" ? cTog : spec.c === "inp" ? cInp : spec.c === "num" ? cNum
+            : spec.k === "mode" && panel.selectedTasks.length > 1 ? autoMode
+            : spec.c === "entries" ? cEntries : spec.c === "tog" ? cTog : spec.c === "inp" ? cInp : spec.c === "num" ? cNum
             : spec.c === "time" || spec.c === "date" ? cTime : spec.c === "path" ? cPath
+            : spec.k === "power" && spec.c === "sel" ? powerSelect
             : spec.c === "seg" ? cSeg : spec.c === "sel" ? cSel : spec.c === "chips" ? cChips
             : spec.c === "tag" ? cTag : spec.c === "mini" ? cMini : spec.c === "unit" ? cUnit : cText
+        Component { id: autoMode; Label { text: "自动代理" } }
         Component { id: cText; Label { text: String(ctl.spec); elide: Text.ElideRight } }
         Component { id: cUnit; Text { text: ctl.spec.t; color: Theme.muted; font.family: Theme.font; font.pixelSize: 13 } }
         Component { id: cTog; Tog { spec: ctl.spec } }
-        Component { id: cInp; Field { text: ctl.spec.v; mono: ctl.spec.mono; onTextEdited: { ctl.spec.v = text; ctl.spec.dirty = true; panel.edits++ } } }
+        Component { id: cEntries; Btn { text: "编辑清单"; onClicked: entryEditor.edit(ctl.spec, () => panel.edits++) } }
+        Component { id: cInp; Field { echoMode: ctl.spec.secret ? TextInput.Password : TextInput.Normal; text: ctl.spec.v; mono: ctl.spec.mono; onTextEdited: { ctl.spec.v = text; ctl.spec.dirty = true; panel.edits++ } } }
         Component {
             id: cNum
             Row {
                 spacing: 8
-                Field { width: 76; text: String(ctl.spec.v); horizontalAlignment: Text.AlignRight; onTextEdited: { ctl.spec.v = Number(text); ctl.spec.dirty = true; panel.edits++ } validator: IntValidator { bottom: 0; top: 99999 } }
+                Field { width: 76; text: String(ctl.spec.v); horizontalAlignment: Text.AlignRight; onTextEdited: { ctl.spec.v = Number(text); ctl.spec.dirty = true; panel.edits++ } validator: IntValidator { bottom: ctl.spec.min ?? 0; top: ctl.spec.max ?? 99999 } }
                 Text { visible: ctl.spec.unit !== ""; anchors.verticalCenter: parent.verticalCenter; text: ctl.spec.unit; color: Theme.muted; font.family: Theme.font; font.pixelSize: 13 }
             }
         }
@@ -440,11 +453,30 @@ Item {
             id: cPath
             RowLayout {
                 spacing: 10
-                Field { Layout.fillWidth: true; text: ctl.spec.v; mono: true; onTextEdited: { ctl.spec.v = text; ctl.spec.dirty = true; panel.edits++ } }
-                Btn { text: "浏览"; small: true; onClicked: panel.toast("演示：打开文件选择框") }
+                Field { id: pathValue; Layout.fillWidth: true; text: ctl.spec.v; mono: true; onTextEdited: { ctl.spec.v = text; ctl.spec.dirty = true; panel.edits++ } }
+                Btn { text: ctl.spec.browse || "浏览"; small: true; onClicked: {
+                    const key = ctl.spec.key || ""
+                    const base = panel.scripts ? Live.fieldValue(panel.item,"Info.RootPath") || "" : ""
+                    const folder = key === "Info.RootPath" || (key === "Script.ConfigPath" && Live.fieldValue(panel.item,"Script.ConfigPathMode") === "Folder")
+                    filePicker.browse(pathValue.text,base,folder,path => { pathValue.text=path; ctl.spec.v=path; ctl.spec.dirty=true; panel.edits++ })
+                } }
             }
         }
         Component { id: cSeg; Seg { spec: ctl.spec } }
+        Component {
+            id: powerSelect
+            CardPowerSelect {
+                card: panel
+                options: ctl.spec.opts
+                selectedIndex: ctl.spec.v
+                onPicked: index => {
+                    selectedIndex = index
+                    ctl.spec.v = index
+                    ctl.spec.dirty = true
+                    panel.edits++
+                }
+            }
+        }
         Component { id: cSel; Sel { spec: ctl.spec } }
         Component { id: cChips; Chips { spec: ctl.spec } }
         Component { id: cTag; Tag { spec: ctl.spec } }
@@ -460,7 +492,8 @@ Item {
                         text: modelData
                         small: true
                         onClicked: {
-                            if (ctl.spec.ops && ctl.spec.ops[index]) panel.liveOp(ctl.spec.ops[index])
+                            if (ctl.spec.commands) panel.act(text)
+                            else if (ctl.spec.ops && ctl.spec.ops[index]) panel.liveOp(ctl.spec.ops[index])
                             else if (text === "启动" || text === "关闭") {
                                 panel.toast(text + "模拟器实例 · POST /api/emulator/operate")
                                 text = text === "启动" ? "关闭" : "启动"
@@ -495,6 +528,11 @@ Item {
                 required property int index
                 readonly property var modelData: kvb.b.rows[index]
                 width: parent.width
+                visible: {
+                    if (!modelData[3] || !panel.emulatorManager) return true
+                    panel.edits
+                    return modelData[3].includes(Live.fieldValue(panel.item,"Info.Type"))
+                }
                 height: 42
                 Text {
                     id: kvLabel
@@ -630,7 +668,7 @@ Item {
                 border.color: Qt.rgba(Theme.hair.r, Theme.hair.g, Theme.hair.b, 0.7)
                 Text {
                     x: 14; y: 6
-                    text: modelData[2] && panel.statOverride[modelData[2]] !== undefined ? panel.statOverride[modelData[2]] : modelData[1]
+                    text: modelData[2] === "activeTasks" ? (panel.homeRuns.snapshotReady && !panel.homeRuns.snapshotError ? panel.homeRuns.activeTasks.length : "—") : modelData[1]
                     color: Theme.ink; font.family: Theme.font; font.pixelSize: 32; font.weight: Font.Light
                 }
                 Text { x: 14; y: 48; text: modelData[0]; color: Theme.muted; font.family: Theme.font; font.pixelSize: 12; font.letterSpacing: 2.4 }
@@ -701,28 +739,6 @@ Item {
             }
         }
     }
-    component RunBlock: Column {
-        property var b
-        spacing: 10
-        Rectangle { width: parent.width; height: 1; color: Theme.hair; opacity: 0.7 }
-        Rectangle {
-            width: parent.width; height: 6
-            color: Qt.rgba(Theme.ink.r, Theme.ink.g, Theme.ink.b, 0.1)
-            Rectangle { height: parent.height; width: parent.width * panel.runPct / 100; color: Theme.accent; Behavior on width { NumberAnimation { duration: 500 } } }
-        }
-        Row {
-            spacing: 16
-            Rectangle {
-                width: rt.implicitWidth + 20; height: 24
-                color: panel.runState === "run" ? Theme.ink : "transparent"
-                border.width: 1.5
-                border.color: panel.runState === "done" ? Theme.success : Theme.ink
-                Text { id: rt; anchors.centerIn: parent; text: panel.runTitle; color: panel.runState === "run" ? Theme.paper : panel.runState === "done" ? Theme.success : Theme.ink; font.family: Theme.font; font.pixelSize: 13; font.weight: Font.Bold; font.letterSpacing: 2.4 }
-            }
-            Label { height: 24; text: panel.runText }
-        }
-    }
-
     // ── 版面 ────────────────────────────────────────────────────────────
     Item {
         id: content
@@ -759,34 +775,46 @@ Item {
             visible: panel.pages.length > 1
             y: meta.height + 12
             width: parent.width
-            height: visible ? 40 : 0
-            Row {
-                spacing: 2
-                Repeater {
-                    id: tabRep
-                    model: panel.pages.length > 1 ? panel.pages : []
-                    Rectangle {
-                        id: tabBtn
-                        required property var modelData
-                        required property int index
-                        readonly property bool on: panel.tab === index
-                        width: tabRow.implicitWidth + 28
-                        height: 38
-                        color: "transparent"
-                        activeFocusOnTab: true
-                        Accessible.role: Accessible.PageTab
-                        Accessible.name: modelData.name
-                        Keys.onSpacePressed: panel.tab = index
-                        Keys.onReturnPressed: panel.tab = index
-                        Rectangle { anchors.fill: parent; anchors.margins: 2; color: "transparent"; border.width: 2; border.color: Theme.accent; visible: tabBtn.activeFocus }
-                        Row {
-                            id: tabRow
-                            anchors.centerIn: parent
-                            spacing: 7
-                            Text { anchors.baseline: tabName.baseline; text: String(tabBtn.index + 1).padStart(2, "0"); color: tabBtn.on ? Theme.accent : Theme.hair; font.family: Theme.font; font.pixelSize: 10; font.weight: Font.Bold; Behavior on color { ColorAnimation { duration: 180 } } }
-                            Text { id: tabName; text: tabBtn.modelData.name; color: tabBtn.on || tabMouse.containsMouse ? Theme.ink : Theme.muted; font.family: Theme.font; font.pixelSize: 15; font.weight: Font.DemiBold; font.letterSpacing: 1.2; Behavior on color { ColorAnimation { duration: 180 } } }
+            height: visible ? (tabScroll.contentWidth > width ? 47 : 40) : 0
+            Flickable {
+                id: tabScroll
+                anchors.fill: parent; clip: true
+                contentWidth: tabStrip.implicitWidth; contentHeight: height
+                boundsBehavior: Flickable.StopAtBounds
+                function showTab() {
+                    const t=tabRep.itemAt(panel.tab)
+                    if (t) contentX=Math.max(0,Math.min(contentWidth-width,Math.min(t.x,Math.max(contentX,t.x+t.width-width))))
+                }
+                C.ScrollBar.horizontal: C.ScrollBar { height: 6; policy: tabScroll.contentWidth > tabScroll.width ? C.ScrollBar.AlwaysOn : C.ScrollBar.AlwaysOff }
+                Row {
+                    id: tabStrip
+                    spacing: 2
+                    Repeater {
+                        id: tabRep
+                        model: panel.pages.length > 1 ? panel.pages : []
+                        Rectangle {
+                            id: tabBtn
+                            required property var modelData
+                            required property int index
+                            readonly property bool on: panel.tab === index
+                            width: tabRow.implicitWidth + 28
+                            height: 38
+                            color: "transparent"
+                            activeFocusOnTab: true
+                            Accessible.role: Accessible.PageTab
+                            Accessible.name: modelData.name
+                            Keys.onSpacePressed: panel.tab = index
+                            Keys.onReturnPressed: panel.tab = index
+                            Rectangle { anchors.fill: parent; anchors.margins: 2; color: "transparent"; border.width: 2; border.color: Theme.accent; visible: tabBtn.activeFocus }
+                            Row {
+                                id: tabRow
+                                anchors.centerIn: parent
+                                spacing: 7
+                                Text { anchors.baseline: tabName.baseline; text: String(tabBtn.index + 1).padStart(2, "0"); color: tabBtn.on ? Theme.accent : Theme.hair; font.family: Theme.font; font.pixelSize: 10; font.weight: Font.Bold; Behavior on color { ColorAnimation { duration: 180 } } }
+                                Text { id: tabName; text: tabBtn.modelData.name; color: tabBtn.on || tabMouse.containsMouse ? Theme.ink : Theme.muted; font.family: Theme.font; font.pixelSize: 15; font.weight: Font.DemiBold; font.letterSpacing: 1.2; Behavior on color { ColorAnimation { duration: 180 } } }
+                            }
+                            MouseArea { id: tabMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: panel.tab = tabBtn.index }
                         }
-                        MouseArea { id: tabMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: panel.tab = tabBtn.index }
                     }
                 }
             }
@@ -794,53 +822,80 @@ Item {
         }
 
         // 数据块：逐块错开显现
-        Column {
-            id: body
-            opacity: panel.tabFade
-            y: tabBar.y + tabBar.height + 16
-            width: parent.width
-            spacing: 16
-            Repeater {
-                model: panel.blockCount
-                Column {
-                    id: blk
-                    required property int index
-                    readonly property var modelData: panel.shown.blocks[index]
-                    width: body.width
-                    spacing: 8
-                    opacity: 0
-                    // 说明文字默认不显示（各页不再附解释），只保留标记为 keep 的状态提示
-                    visible: !(blk.modelData.t === "note" && !blk.modelData.keep)
-                    transform: Translate { id: blkShift; y: 14 }
-                    Component.onCompleted: enter.start()
-                    SequentialAnimation {
-                        id: enter
-                        PauseAnimation { duration: 40 + blk.index * 60 }
-                        ParallelAnimation {
-                            NumberAnimation { target: blk; property: "opacity"; to: 1; duration: 300 }
-                            NumberAnimation { target: blkShift; property: "y"; to: 0; duration: 420; easing.type: Easing.OutCubic }
+        Flickable {
+            id: formScroll
+            y: tabBar.y + tabBar.height + 16; width: parent.width
+            height: Math.max(1,panel.height-y-64)
+            clip: panel.scripts; interactive: panel.scripts
+            contentWidth: width; contentHeight: body.implicitHeight
+            boundsBehavior: Flickable.StopAtBounds
+            C.ScrollBar.vertical: C.ScrollBar { policy: panel.scripts && formScroll.contentHeight>formScroll.height ? C.ScrollBar.AlwaysOn : C.ScrollBar.AlwaysOff }
+            Column {
+                id: body
+                opacity: panel.tabFade
+                width: formScroll.width - (panel.scripts && implicitHeight>formScroll.height ? 12 : 0)
+                spacing: 16
+                Repeater {
+                    model: panel.blockCount
+                    Column {
+                        id: blk
+                        required property int index
+                        readonly property var modelData: panel.shown.blocks[index]
+                        width: body.width
+                        spacing: 8
+                        opacity: 0
+                        // 说明文字默认不显示（各页不再附解释），只保留标记为 keep 的状态提示
+                        visible: !(blk.modelData.t === "note" && !blk.modelData.keep)
+                        transform: Translate { id: blkShift; y: 14 }
+                        Component.onCompleted: enter.start()
+                        SequentialAnimation {
+                            id: enter
+                            PauseAnimation { duration: 40 + blk.index * 60 }
+                            ParallelAnimation {
+                                NumberAnimation { target: blk; property: "opacity"; to: 1; duration: 300 }
+                                NumberAnimation { target: blkShift; property: "y"; to: 0; duration: 420; easing.type: Easing.OutCubic }
+                            }
                         }
-                    }
-                    BlockHead { visible: !!blk.modelData.title; title: blk.modelData.title || "" }
-                    Loader {
-                        width: parent.width
-                        sourceComponent: blk.modelData.t === "kv" ? kvC : blk.modelData.t === "table" ? tableC
-                            : blk.modelData.t === "stats" ? statsC : blk.modelData.t === "note" ? noteC
-                            : blk.modelData.t === "log" ? logC : blk.modelData.t === "banner" ? bannerC
-                            : blk.modelData.t === "list" ? listC : runC
-                        Component { id: kvC; KvBlock { b: blk.modelData } }
-                        Component { id: tableC; TableBlock { b: blk.modelData } }
-                        Component { id: statsC; StatsBlock { b: blk.modelData } }
-                        Component { id: noteC; NoteBlock { b: blk.modelData } }
-                        Component { id: logC; LogBlock { b: blk.modelData } }
-                        Component { id: bannerC; BannerBlock { b: blk.modelData } }
-                        Component { id: listC; ListBlock { b: blk.modelData } }
-                        Component { id: runC; RunBlock { b: blk.modelData } }
+                        BlockHead { visible: !!blk.modelData.title; title: blk.modelData.title || "" }
+                        Loader {
+                            width: parent.width
+                            sourceComponent: blk.modelData.t === "kv" ? kvC : blk.modelData.t === "table" ? tableC
+                                : blk.modelData.t === "stats" ? statsC : blk.modelData.t === "note" ? noteC
+                                : blk.modelData.t === "log" ? logC : blk.modelData.t === "banner" ? bannerC
+                                : blk.modelData.t === "list" ? listC : blk.modelData.t === "taskPicker" ? pickerC : runC
+                            Component { id: kvC; KvBlock { b: blk.modelData } }
+                            Component { id: tableC; TableBlock { b: blk.modelData } }
+                            Component { id: statsC; StatsBlock { b: blk.modelData } }
+                            Component { id: noteC; NoteBlock { b: blk.modelData } }
+                            Component { id: logC; LogBlock { b: blk.modelData } }
+                            Component { id: bannerC; BannerBlock { b: blk.modelData } }
+                            Component { id: listC; ListBlock { b: blk.modelData } }
+                            Component {
+                                id: pickerC
+                                HomeTaskPicker {
+                                    cardWidth: panel.parent.width
+                                    Component.onCompleted: panel.taskPickerArea = this
+                                    Component.onDestruction: if (panel.taskPickerArea === this) panel.taskPickerArea = null
+                                    options: blk.modelData.options
+                                    selected: panel.selectedTasks.map(t => t.value)
+                                    onToggled: value => panel.toggleTask(value)
+                                }
+                            }
+                            Component {
+                                id: runC
+                                HomeRunStatus {
+                                    runs: panel.homeRuns
+                                    height: Math.max(48, panel.height - formScroll.y - blk.y - 104)
+                                    Component.onCompleted: panel.runArea = this
+                                    Component.onDestruction: if (panel.runArea === this) panel.runArea = null
+                                }
+                            }
+                        }
                     }
                 }
             }
-        }
 
+        }
         // 操作
         Item {
             opacity: panel.tabFade
@@ -857,8 +912,9 @@ Item {
                         required property string modelData
                         required property int index
                         text: modelData
-                        primary: index === 0
+                        primary: panel.emulatorManager ? modelData === "保存" : index === 0
                         danger: /删除|停止|注销|卸下/.test(modelData)
+                        enabled: (!panel.emulatorManager || panel.emulatorManager.canAct(modelData,panel.item)) && !(panel.saving && modelData === "保存") && !(modelData === "开始执行" && panel.item.en === "QUICK START" && (!panel.selectedTasks.length || panel.homeRuns.submitting))
                         onClicked: panel.act(modelData)
                     }
                 }
@@ -866,7 +922,7 @@ Item {
         }
     }
 
-    readonly property real bodyBottom: body.y + body.implicitHeight
+    readonly property real bodyBottom: formScroll.y + body.implicitHeight
 
     // ── 解密层：对角线合拢 → 保持（等待数据）→ 收束；磨砂自上而下退去 ──
     Item {

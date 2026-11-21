@@ -16,6 +16,7 @@ var OK = SD.OK, RUN = SD.RUN, WAIT = SD.WAIT, ERR = SD.ERR
 
 // ── 取值与保存 ─────────────────────────────────────────────────────────
 function valueOf(spec) {
+    if (spec.bossKey) return JSON.stringify(spec.v.trim() ? [spec.v.trim()] : [])
     if (spec.c === "chips") return DAYNAMES.filter(function (d, i) { return spec.v[i] === "1" })
     if (spec.enum) return spec.enum[spec.v]
     if (spec.c === "num") return Number(spec.v)
@@ -53,6 +54,11 @@ function collect(item) {
     })
     return order.map(function (id) { var g = groups[id]; g.body.data = g.data; return { path: g.path, body: g.body } })
 }
+function fieldValue(item,key) {
+    var result = null
+    eachSpec(item, function(spec) { if (spec.key === key) result=valueOf(spec) })
+    return result
+}
 function dirtyCount(item) { var n = 0; eachSpec(item, function (s) { if (s.dirty && s.key) n++ }); return n }
 function clearDirty(item) { eachSpec(item, function (s) { s.dirty = false }) }
 // 读取某个 k 标记的控件当前值（快速启动等操作用）
@@ -73,13 +79,31 @@ function general(uid, c, ur, i) {
     var I = c.Info, S = c.Script, G = c.Game, R = c.Run
     var save = { path: "/api/scripts/update", base: { scriptId: uid } }
     var gameType = idx(["Emulator", "Client", "URL"], G.Type)
-    var users = ur.index.map(function (u) {
-        var d = ur.data[u.uid] || { Info: {}, Data: {} }
-        var usave = { path: "/api/scripts/user/update", base: { scriptId: uid, userId: u.uid } }
-        var rd = d.Info.RemainedDay
-        var last = d.Data && d.Data.LastProxyDate && d.Data.LastProxyDate !== "2000-01-01" ? d.Data.LastProxyDate : "—"
-        return [d.Info.Name, B(SD.tog(d.Info.Status), "Info.Status", null, usave), rd === -1 || rd === undefined ? "永久" : rd + " 天",
-                B(SD.sel(["独立", "共享", "原生"], idx(["independent", "shared", "native"], d.Info.Base)), "Info.Base", ["independent", "shared", "native"], usave), last]
+    var accounts = ur.index.map(function (u,n) {
+        const data = ur.data[u.uid] || {}, info = data.Info || {}, notify = data.Notify || {}
+        const target = {path:"/api/scripts/user/update",base:{scriptId:uid,userId:u.uid}}
+        return {name:"账号" + (n+1), userId:u.uid, save:target, api:target.path, blocks:[
+            SD.kv("基本资料",[
+                ["账号名称", B(SD.inp(info.Name),"Info.Name")], ["启用代理", B(SD.tog(info.Status),"Info.Status")],
+                ["剩余天数（-1 永久）", B(Object.assign(SD.num(info.RemainedDay ?? -1),{min:-1}),"Info.RemainedDay")],
+                ["备注", B(SD.inp(info.Notes),"Info.Notes")],
+                ["配置来源", B(SD.sel(["独立","共享","原生"],idx(["independent","shared","native"],info.Base)),"Info.Base",["independent","shared","native"])]
+            ]),
+            SD.kv("额外脚本",[
+                ["启用前置脚本",B(SD.tog(info.IfScriptBeforeTask),"Info.IfScriptBeforeTask")],
+                ["前置脚本",B(SD.path(info.ScriptBeforeTask),"Info.ScriptBeforeTask")],
+                ["启用后置脚本",B(SD.tog(info.IfScriptAfterTask),"Info.IfScriptAfterTask")],
+                ["后置脚本",B(SD.path(info.ScriptAfterTask),"Info.ScriptAfterTask")]
+            ]),
+            SD.kv("通知设置",[
+                ["启用通知",B(SD.tog(notify.Enabled),"Notify.Enabled")],
+                ["发送统计",B(SD.tog(notify.IfSendStatistic),"Notify.IfSendStatistic")],
+                ["邮件通知",B(SD.tog(notify.IfSendMail),"Notify.IfSendMail")],
+                ["接收邮箱",B(SD.inp(notify.ToAddress),"Notify.ToAddress")],
+                ["Server 酱推送",B(SD.tog(notify.IfServerChan),"Notify.IfServerChan")],
+                ["SendKey",B(Object.assign(SD.inp(notify.ServerChanKey),{secret:true}),"Notify.ServerChanKey")]
+            ])
+        ],actions:["保存","Webhook","添加账号","删除账号"],ops:{"删除账号":{path:"/api/scripts/user/delete",body:target.base,confirm:"删除该账号？",reload:true}}}
     })
     // icon：启动程序路径，录像带上显示该程序的图标唱片
     return { name: I.Name || "未命名脚本", en: "GENERAL · " + String(i + 1).padStart(2, "0"), live: true, uid: uid, icon: S.ScriptPath || "",
@@ -91,27 +115,45 @@ function general(uid, c, ur, i) {
         },
         tabs: [
         { name: "程序", api: save.path, save: save, blocks: [
-            SD.kv("SCRIPT", [["脚本名称", B(SD.inp(I.Name), "Info.Name"), "Info.Name"], ["根目录", B(SD.path(I.RootPath), "Info.RootPath"), "Info.RootPath"], ["启动程序", B(SD.path(S.ScriptPath), "Script.ScriptPath"), "Script.ScriptPath"], ["启动参数", B(SD.inp(S.Arguments, true), "Script.Arguments"), "Script.Arguments"], ["配置路径", B(SD.path(S.ConfigPath), "Script.ConfigPath"), "Script.ConfigPath"], ["路径类型", B(SD.seg(["文件", "文件夹"], idx(["File", "Folder"], S.ConfigPathMode)), "Script.ConfigPathMode", ["File", "Folder"]), "Script.ConfigPathMode"], ["回写配置", B(SD.seg(["从不", "成功时", "失败时", "总是"], idx(["Never", "Success", "Failure", "Always"], S.UpdateConfigMode)), "Script.UpdateConfigMode", ["Never", "Success", "Failure", "Always"]), "Script.UpdateConfigMode"]]),
-            SD.kv("PROCESS", [["追踪进程", B(SD.tog(S.IfTrackProcess), "Script.IfTrackProcess"), "Script.IfTrackProcess"], ["进程名", B(SD.inp(S.TrackProcessName, true), "Script.TrackProcessName"), "Script.TrackProcessName"], ["清理范围", B(SD.seg(["跨会话强力", "仅本轮", "当前会话"], idx(["Force", "Tracked", "Session"], S.TaskKillMode)), "Script.TaskKillMode", ["Force", "Tracked", "Session"]), "Script.TaskKillMode"]])
-        ], actions: ["保存", "立即运行", "删除脚本"] },
-        { name: "判定", api: save.path, save: save, blocks: [
+            SD.kv("基本信息", [["托管名称", B(SD.inp(I.Name), "Info.Name")], ["脚本根目录", B(Object.assign(SD.path(I.RootPath),{browse:"选择文件夹"}), "Info.RootPath")]]),
+            SD.kv("源程序配置", [
+                ["原生配置类型", B(SD.seg(["单个配置文件","配置目录"],idx(["File","Folder"],S.ConfigPathMode)), "Script.ConfigPathMode",["File","Folder"])],
+                ["原生配置路径", B(Object.assign(SD.path(S.ConfigPath),{browse:"选择配置路径"}), "Script.ConfigPath")],
+                ["", Object.assign(SD.mini(["编辑并写回原文件","打开源程序设置"]),{commands:true})]
+            ]),
+            SD.note("支持编辑 UTF-8 配置，保存前会自动备份。在源程序内修改设置后，请先保存，再结束设置会话。",true)
+        ], actions: ["保存", "添加账号", "立即运行", "删除脚本"] },
+        { name: "配置", api: save.path, save: save, blocks: [
+            SD.kv("脚本配置", [
+                ["启动程序", B(SD.path(S.ScriptPath),"Script.ScriptPath")], ["启动参数",B(SD.inp(S.Arguments,true),"Script.Arguments")],
+                ["回写配置", B(SD.seg(["从不","成功时","失败时","总是"],idx(["Never","Success","Failure","Always"],S.UpdateConfigMode)), "Script.UpdateConfigMode",["Never","Success","Failure","Always"])],
+                ["追踪子进程",B(SD.tog(S.IfTrackProcess),"Script.IfTrackProcess")], ["进程名",B(SD.inp(S.TrackProcessName),"Script.TrackProcessName")],
+                ["进程程序路径",B(SD.path(S.TrackProcessExe),"Script.TrackProcessExe")], ["命令行匹配",B(SD.inp(S.TrackProcessCmdline),"Script.TrackProcessCmdline")]
+            ]),
             SD.kv("LOG FILE", [["日志路径", B(SD.path(S.LogPath), "Script.LogPath"), "Script.LogPath"], ["路径日期格式", B(SD.inp(S.LogPathFormat, true), "Script.LogPathFormat"), "Script.LogPathFormat"], ["时间戳位置", [B(SD.num(S.LogTimeStart), "Script.LogTimeStart"), SD.unit("至"), B(SD.num(S.LogTimeEnd), "Script.LogTimeEnd"), SD.unit("列")], "Script.LogTimeStart / LogTimeEnd"], ["时间格式", B(SD.inp(S.LogTimeFormat, true), "Script.LogTimeFormat"), "Script.LogTimeFormat"]]),
             SD.kv("MATCH", [["成功判定", [B(SD.inp(S.SuccessLog), "Script.SuccessLog"), B(SD.seg(["关键字", "正则"], idx(["Split", "Regex"], S.SuccessLogMode)), "Script.SuccessLogMode", ["Split", "Regex"])], "Script.SuccessLog / SuccessLogMode"], ["失败判定", [B(SD.inp(S.ErrorLog), "Script.ErrorLog"), B(SD.seg(["关键字", "正则"], idx(["Split", "Regex"], S.ErrorLogMode)), "Script.ErrorLogMode", ["Split", "Regex"])], "Script.ErrorLog / ErrorLogMode"], ["日志预处理", B(SD.tog(S.LogHookEnabled), "Script.LogHookEnabled"), "Script.LogHookEnabled"], ["推送日志", B(SD.tog(S.PushLogEnabled), "Script.PushLogEnabled"), "Script.PushLogEnabled"]]),
-            SD.note("关键字模式用「|」分隔多个子串，任一命中即判定；正则模式按整行匹配。预处理先于判定执行。")
+            SD.kv("规则", [["预处理规则",B(SD.inp(S.LogHookRules,true),"Script.LogHookRules")],["推送规则",B(SD.inp(S.PushLogPatterns,true),"Script.PushLogPatterns")]])
+        ], actions: ["保存"] },
+        { name: "限制", api: save.path, save: save, blocks: [
+            SD.kv("RUN LIMIT", [["单账号总时限", B(SD.num(R.HardTimeLimit, "分钟"), "Run.HardTimeLimit"), "Run.HardTimeLimit"], ["单次运行时限", B(SD.num(R.RunTimeLimit, "分钟"), "Run.RunTimeLimit"), "Run.RunTimeLimit"], ["单次重试次数", B(SD.num(R.RunTimesLimit, "次"), "Run.RunTimesLimit"), "Run.RunTimesLimit"], ["每日代理上限", B(SD.num(R.ProxyTimesLimit, "次 · 0 为不限"), "Run.ProxyTimesLimit"), "Run.ProxyTimesLimit"]]),
+            SD.kv("清理与恢复", [
+                ["清理范围",B(SD.seg(["跨会话强力","仅本轮","当前会话"],idx(["Force","Tracked","Session"],S.TaskKillMode)),"Script.TaskKillMode",["Force","Tracked","Session"])],
+                ["清理清单", B({c:"entries", v:S.TaskKill || [], kind:"cleanup"},"Script.TaskKill")],
+                ["重启清单", B({c:"entries", v:S.Restart || [], kind:"restart"},"Script.Restart")]
+            ])
         ], actions: ["保存"] },
         { name: "游戏", api: save.path, save: save, blocks: [
             SD.kv("GAME", [["随脚本启动游戏", B(SD.tog(G.Enabled), "Game.Enabled"), "Game.Enabled"], ["启动方式", B(SD.seg(["模拟器", "客户端", "URL 协议"], gameType), "Game.Type", ["Emulator", "Client", "URL"]), "Game.Type"], ["游戏路径", B(SD.path(G.Path), "Game.Path"), "Game.Path"], ["协议地址", B(SD.inp(G.URL, true), "Game.URL"), "Game.URL"], ["进程名", B(SD.inp(G.ProcessName, true), "Game.ProcessName"), "Game.ProcessName"], ["启动参数", B(SD.inp(G.Arguments, true), "Game.Arguments"), "Game.Arguments"], ["启动后等待", B(SD.num(G.WaitTime, "秒"), "Game.WaitTime"), "Game.WaitTime"], ["结束后强制关闭", B(SD.tog(G.IfForceClose), "Game.IfForceClose"), "Game.IfForceClose"]]),
             SD.kv("EMULATOR", [["模拟器", G.EmulatorId === "-" ? "未选择" : G.EmulatorId, "Game.EmulatorId"], ["实例", G.EmulatorIndex === "-" ? "未选择" : G.EmulatorIndex, "Game.EmulatorIndex"]])
-        ], actions: ["保存"] },
-        { name: "限制", api: save.path, save: save, blocks: [
-            SD.kv("RUN LIMIT", [["单账号总时限", B(SD.num(R.HardTimeLimit, "分钟"), "Run.HardTimeLimit"), "Run.HardTimeLimit"], ["单次运行时限", B(SD.num(R.RunTimeLimit, "分钟"), "Run.RunTimeLimit"), "Run.RunTimeLimit"], ["单次重试次数", B(SD.num(R.RunTimesLimit, "次"), "Run.RunTimesLimit"), "Run.RunTimesLimit"], ["每日代理上限", B(SD.num(R.ProxyTimesLimit, "次 · 0 为不限"), "Run.ProxyTimesLimit"), "Run.ProxyTimesLimit"]]),
-            SD.note("总时限包含等待游戏与全部重试；单次超时会先按清理清单结束进程，再按重启清单补跑。")
-        ], actions: ["保存"] },
-        { name: "账号", api: "POST /api/scripts/user/update", blocks: [
-            SD.table("USERS", ["名称", "启用", "剩余天数", "配置来源", "上次代理"], users.slice(0, 9), [1.8, 1, 1, 1.2, 1.2]),
-            SD.note(users.length > 9 ? "共 " + users.length + " 个账号，这里列出前 9 个。" : "配置来源：独立 = 账号单独一份脚本配置；共享 = 与同脚本账号共用；原生 = 直接使用脚本自身配置。")
-        ], actions: ["保存", "添加账号"] }
-    ] }
+        ], actions: ["保存"] }
+    ].concat(accounts) }
+}
+
+function previewScript(raw, id, index) {
+    const item = general(id,raw.config,raw.users,index)
+    item.live = false
+    item.en = raw.en || item.en
+    return item
 }
 
 // ── 04 调度队列 ───────────────────────────────────────────────────────
@@ -166,32 +208,26 @@ function queues(qresp, times, qitems, scriptOpts, scriptPaths) {
 }
 
 // ── 03 模拟器管理 ─────────────────────────────────────────────────────
-function emulators(eresp, sresp) {
-    var types = ["general", "mumu", "ldplayer", "emulator2"]
-    return eresp.index.map(function (e, i) {
-        var eid = e.uid, I = eresp.data[eid].Info
-        var save = { path: "/api/emulator/update", base: { emulatorId: eid } }
-        var devs = sresp && sresp.code === 200 && sresp.data[eid] ? sresp.data[eid] : null
-        var rows = devs ? Object.keys(devs).map(function (k) {
-            var d = devs[k], running = d.status === 0 || d.status === 2
-            return [d.title, [OK, ERR, RUN, WAIT][d.status] || WAIT, SD.inp(d.adb_address, true),
-                    { c: "mini", names: [running ? "关闭" : "启动", "显示"], ops: [
-                        { path: "/api/emulator/operate", body: { emulatorId: eid, operate: running ? "close" : "open", index: k }, reload: true },
-                        { path: "/api/emulator/operate", body: { emulatorId: eid, operate: "show", index: k } }] }]
-        }) : []
-        var cfg = [["名称", B(SD.inp(I.Name), "Info.Name"), "Info.Name"], ["类型", B(SD.seg(["通用", "MuMu", "雷电", "2.0"], idx(types, I.Type)), "Info.Type", types), "Info.Type"], ["安装路径", B(SD.path(I.Path), "Info.Path"), "Info.Path"], ["最大等待", B(SD.num(I.MaxWaitTime, "秒"), "Info.MaxWaitTime"), "Info.MaxWaitTime"], ["关闭时清理残留", B(SD.tog(I.ForceKillOnClose), "Info.ForceKillOnClose"), "Info.ForceKillOnClose"], ["启动前关闭全部", B(SD.tog(I.ForceKillBeforeLaunch), "Info.ForceKillBeforeLaunch"), "Info.ForceKillBeforeLaunch"]]
-        if (I.Type === "emulator2") cfg.push(["稳定模式", B(SD.tog(I.StableMode), "Info.StableMode"), "Info.StableMode"], ["配置守卫", B(SD.tog(I.ConfigGuard), "Info.ConfigGuard"), "Info.ConfigGuard"])
-        return { name: I.Name.replace(/\s*\(.*\)$/, ""), en: "EMULATOR · " + I.Type.toUpperCase(), live: true, uid: eid,
-            ops: { "删除": { confirm: "将删除模拟器配置「" + I.Name + "」（不会卸载模拟器本体）。", path: "/api/emulator/delete", body: { emulatorId: eid }, reload: true }, "刷新设备": { reload: true } },
-            tabs: [
-            { name: "设备", api: "POST /api/emulator/operate", blocks: devs ? [
-                SD.table("DEVICES", ["名称", "状态", "ADB 地址", "操作"], rows.slice(0, 9)),
-                SD.stats("SUMMARY", [["实例", String(rows.length)], ["运行中", String(rows.filter(function (r) { return r[1] === OK || r[1] === RUN }).length)], ["类型", I.Type]])
-            ] : [SD.kv("STATUS", [["设备状态", [ERR, "读取失败"]]]), SD.note(sresp && sresp.message ? sresp.message : "无法读取设备状态", true)],
-              actions: ["刷新设备"] },
-            { name: "配置", api: save.path, save: save, blocks: [SD.kv("CONFIG", cfg)], actions: ["保存", "删除"] }
-        ] }
-    })
+function emulatorRecord(uid, info) {
+    const types = ["general", "mumu", "ldplayer", "emulator2"]
+    const save = {path:"/api/emulator/update", base:{emulatorId:uid}}
+    let shortcuts = []
+    try { shortcuts = JSON.parse(info.BossKey || "[]") } catch (e) {}
+    const boss = B(Object.assign(SD.inp(shortcuts[0] || ""),{bossKey:true}),"Info.BossKey")
+    const rows = [
+        ["模拟器名称", B(SD.inp(info.Name), "Info.Name")],
+        ["模拟器类型", B(SD.seg(["通用","MuMu","雷电","2.0"],idx(types,info.Type)), "Info.Type",types)],
+        ["模拟器路径", B(SD.path(info.Path), "Info.Path")],
+        ["最大等待时间", B(Object.assign(SD.num(info.MaxWaitTime ?? 300,"秒"),{min:10,max:9999}), "Info.MaxWaitTime")],
+        ["老板键", boss, "", ["general","ldplayer"]],
+        ["老板键", "MuMu 模拟器无需配置老板键", "", ["mumu"]],
+        ["强力关闭", B(SD.tog(info.ForceKillOnClose), "Info.ForceKillOnClose")],
+        ["启动前强力清理", B(SD.tog(info.ForceKillBeforeLaunch), "Info.ForceKillBeforeLaunch")],
+        ["稳定模式", B(SD.tog(info.StableMode), "Info.StableMode"), "", ["emulator2"]],
+        ["配置守卫", B(SD.tog(info.ConfigGuard), "Info.ConfigGuard"), "", ["emulator2"]]
+    ]
+    return {uid:uid, name:info.Name || "未命名模拟器", en:"EMULATOR · "+info.Type.toUpperCase(),
+            live:true, api:save.path, save:save, blocks:[SD.kv("模拟器配置",rows)], actions:["搜索","添加","删除","保存"]}
 }
 
 // ── 10 设置 / 06 本地控制（GlobalConfig） ─────────────────────────────
@@ -289,21 +325,31 @@ function history(resp, filter) {
 }
 
 // ── 01 主页 / 05 调度中心 ─────────────────────────────────────────────
-function home(taskOpts, snapshot, power) {
-    var opts = taskOpts.filter(function (o) { return o.value })
-    var labels = opts.map(function (o) { return o.label }), values = opts.map(function (o) { return o.value })
-    var tasks = snapshot && snapshot.tasks ? snapshot.tasks : []
-    return [
-        { name: "快速启动", en: "QUICK START", live: true, api: "POST /api/dispatch/start", blocks: [
-            SD.kv("START", [["任务对象", { c: "sel", opts: labels.length ? labels : ["没有可运行的任务"], v: 0, k: "task", enum: values }, "taskId"], ["运行模式", { c: "seg", opts: ["自动代理", "设置脚本", "循环运行"], v: 0, k: "mode", enum: ["AutoProxy", "ScriptConfig", "CycleRun"] }, "mode"], ["完成后", { c: "sel", opts: SD.POWER, v: idx(POWER_EN, power), k: "power", enum: POWER_EN }, "POST /api/dispatch/set/power"]]),
-            SD.stats("NOW", [["运行中任务", String(tasks.length)], ["可运行对象", String(opts.length)], ["完成后", SD.POWER[idx(POWER_EN, power)]]]),
-            { t: "run", title: "RUN STATUS" }
-        ], ops: { "开始执行": { start: true }, "停止": { stopAll: true } }, actions: ["开始执行", "停止"] },
-        { name: "代理状态", en: "PROXY STATUS", live: true, api: "GET /api/dispatch/runtime-snapshot", blocks: [
-            SD.stats("NOW", [["运行中任务", String(tasks.length)], ["定时关联脚本", String((snapshot.scheduledScripts || []).length)], ["正在停止", String(tasks.filter(function (t) { return t.stopping }).length)]]),
-            tasks.length ? SD.table("TASKS", ["任务", "模式", "状态"], tasks.slice(0, 9).map(function (t) { return [t.taskId.slice(0, 8), t.mode, t.stopping ? WAIT : RUN] })) : SD.note("当前没有运行中的任务。")
-        ], ops: { "刷新": { reload: true } }, actions: ["刷新"] }
-    ]
+function quickStart(taskOpts, power) {
+    var opts = taskOpts.filter(o => o.value)
+    return { name: "快速启动", en: "QUICK START", live: true, api: "POST /api/dispatch/start", blocks: [
+        { t: "taskPicker", title: "任务对象", options: opts },
+        SD.kv("START", [["运行模式", { c: "seg", opts: ["自动代理", "设置脚本", "循环运行"], v: 0, k: "mode", enum: ["AutoProxy", "ScriptConfig", "CycleRun"] }, "mode"], ["完成后", { c: "sel", opts: SD.POWER, v: idx(POWER_EN, power), k: "power", enum: POWER_EN }, "POST /api/dispatch/set/power"]]),
+        SD.stats("NOW", [["运行中任务", "—", "activeTasks"], ["可运行对象", String(opts.length)], ["完成后", SD.POWER[idx(POWER_EN, power)]]]),
+        { t: "run", title: "RUN STATUS" }
+    ], ops: { "开始执行": { start: true }, "停止": { stopAll: true } }, actions: ["开始执行", "停止"] }
+}
+
+function proxyOverview(proxy) {
+    const rows = Object.entries(proxy).map(([name, entry]) => [
+        name, entry.LastProxyDate, String(entry.ProxyTimes), String(entry.ErrorTimes)
+    ])
+    const table = SD.table("ACCOUNTS", ["账号", "最后运行时间", "运行次数", "错误次数"], rows, [1.4, 1.9, 0.85, 0.85])
+    table.all = rows
+    return { name: "代理状态", en: "PROXY STATUS", live: true, api: "POST /api/info/get/overview",
+             blocks: rows.length ? [table] : [SD.note("今天暂无代理记录。", true)],
+             ops: { "刷新": { overview: true } }, actions: ["刷新"] }
+}
+
+function homePlaceholder(index, message, retry) {
+    return { name: index ? "代理状态" : "快速启动", en: index ? "PROXY STATUS" : "QUICK START",
+             live: true, placeholder: true, blocks: [SD.note(message, true)],
+             ops: { "重试": { homeRetry: true } }, actions: retry ? ["重试"] : [] }
 }
 // ── 05 调度中心：每个运行中的任务（通常是一条队列）一张卡，第一张是总览 ──────────
 var STATUS_TAG = { "完成": OK, "运行": RUN, "等待": WAIT, "异常": ERR, "跳过": SD.tag("跳过", "idle"), "已暂停": SD.tag("已暂停", "idle"), "外部占用，等待释放": SD.tag("外部占用", "idle"), "任务被用户手动中止": SD.tag("已中止", "err") }

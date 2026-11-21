@@ -24,7 +24,7 @@ Window {
     minimumWidth: 960
     minimumHeight: 540
     visible: true
-    title: "AUTO-MAS"
+    title: "AUTO-MASS"
     color: Theme.bg
 
     // 启动进度的数据源：真实后端 / 模拟后端 / 无（离线预览）
@@ -166,6 +166,7 @@ Window {
             hub: hub
             enhanced: root.enhanced
             arrayHostItem: arrayLoader.status === Loader.Ready ? arrayLoader.item : null
+            onlineHome: root.backendEnabled
             api: root.backendEnabled && root.backend && root.backend.status === "ready" ? root.backend : null
             onClosed: hub.focusCurrent()
         }

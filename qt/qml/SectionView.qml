@@ -25,12 +25,24 @@ FocusScope {
     readonly property var arrayItem: arrayMode ? arrayHostItem : null
     readonly property bool arrayDetail: !!arrayItem && arrayItem.detailOpen
     readonly property var arrayColumns: arrayMode ? items.map(it => ({ name: it.name, en: it.en, icon: it.icon || "", accounts: it.accounts || [], rowIcons: it.rowIcons || null, configRow: it.configRow !== false })) : []
-    onApiChanged: if (opened && d) fetchLive(d.key)
+    property bool onlineHome: false
+    readonly property bool isHome: !!d && d.key === "home"
+    readonly property bool showingOnlineHome: onlineHome && isHome
+    property var homeCards: [Live.homePlaceholder(0, "等待后端连接…", false), Live.homePlaceholder(1, "等待后端连接…", false)]
+    property int quickRequest: 0
+    property int overviewRequest: 0
+    onApiChanged: {
+        quickRequest++
+        overviewRequest++
+        if (!api) homeCards = [Live.homePlaceholder(0, "等待后端连接…", false), Live.homePlaceholder(1, "等待后端连接…", false)]
+        if (opened && d) fetchLive(d.key)
+    }
     property var live: ({})                 // 部门 key → 条目
     property string liveState: ""           // loading / ok / error
     property string liveMessage: ""
-    readonly property bool isLive: !!(d && live[d.key])
-    readonly property var items: d && live[d.key] ? live[d.key] : conf ? conf.items : []
+    readonly property bool isLive: showingOnlineHome ? !!api && !homeCards[target].placeholder : !!(d && live[d.key])
+    readonly property bool emulatorPage: !!d && d.key === "emulators"
+    readonly property var items: emulatorPage ? emulatorConfigs.records : showingOnlineHome ? homeCards : d && d.key === "scripts" ? scriptShelf.filtered : d && live[d.key] ? live[d.key] : conf ? conf.items : []
     onItemsChanged: {
         if (!opened) return
         target = Math.min(target, Math.max(0, items.length - 1))
@@ -70,8 +82,53 @@ FocusScope {
         liveMessage = ""
     }
     function fail(r) { liveState = "error"; liveMessage = r && r.message ? r.message : "读取失败" }
+    HomeRuns {
+        id: liveHomeRuns
+        api: view.api
+        watching: view.opened && !!view.d && view.d.key === "home" && view.target === 0
+        onMessage: text => toast.show(text)
+    }
+    HomeRuns { id: previewRuns; api: null; watching: false }
+    function setHomeCard(index, card) {
+        const next = homeCards.slice()
+        next[index] = card
+        homeCards = next
+    }
+    function loadOverview() {
+        if (!api) return
+        const request = ++overviewRequest
+        call("/api/info/get/overview", {}, result => {
+            if (request !== overviewRequest) return
+            const proxy = result.data && result.data.Proxy
+            setHomeCard(1, result.code === 200 && proxy && typeof proxy === "object" && !Array.isArray(proxy)
+                ? Live.proxyOverview(proxy)
+                : Live.homePlaceholder(1, result.message || "账号统计读取失败", true))
+        })
+    }
+    function loadQuickStart() {
+        if (!api) return
+        const request = ++quickRequest
+        call("/api/info/combox/task", {}, tasks => {
+            if (request !== quickRequest) return
+            if (tasks.code !== 200 || !Array.isArray(tasks.data)) {
+                setHomeCard(0, Live.homePlaceholder(0, tasks.message || "任务列表读取失败", true))
+                return
+            }
+            call("/api/dispatch/get/power", {}, power => {
+                if (request !== quickRequest) return
+                if (power.code !== 200 || !Live.POWER_EN.includes(power.signal)) {
+                    setHomeCard(0, Live.homePlaceholder(0, power.message || "电源动作读取失败", true))
+                    return
+                }
+                liveHomeRuns.options = tasks.data
+                setHomeCard(0, Live.quickStart(tasks.data, power.signal))
+                liveHomeRuns.poll()
+            })
+        })
+    }
     function fetchLive(key) {
         if (!api) { liveState = ""; return }
+        if (key === "home") { loadQuickStart(); loadOverview(); return }
         const supported = ["home", "scripts", "emulators", "queue", "scheduler", "localControls", "gamesign", "history", "settings"]
         if (supported.indexOf(key) < 0) { liveState = ""; return }
         liveState = "loading"
@@ -92,7 +149,7 @@ FocusScope {
                 })
             })
         } else if (key === "emulators") {
-            callAll([["e", "/api/emulator/get", {}], ["st", "/api/emulator/status", {}]], m => m.e.code === 200 ? setLive(key, Live.emulators(m.e, m.st)) : fail(m.e))
+            emulatorConfigs.load()
         } else if (key === "settings" || key === "localControls") {
             callAll([["g", "/api/setting/get", {}], ["v", "/api/info/version", {}]], m => {
                 if (m.g.code !== 200) { fail(m.g); return }
@@ -105,32 +162,42 @@ FocusScope {
             if (!historyFilter.start) historyFilter = { start: today(-6), end: today(0), mode: 0 }
             const f = historyFilter
             call("/api/history/search", { mode: ["DAILY", "WEEKLY", "MONTHLY"][f.mode], start_date: f.start, end_date: f.end }, r => r.code === 200 ? setLive(key, Live.history(r, f)) : fail(r))
-        } else if (key === "home" || key === "scheduler") {
-            callAll([["c", "/api/info/combox/task", {}], ["p", "/api/dispatch/get/power", {}], ["q", "/api/queue/get", {}]], m => {
+        } else if (key === "scheduler") {
+            call("/api/queue/get", {}, queues => {
+                if (!api) return
                 api.get("/api/dispatch/runtime-snapshot", text => {
                     let snap = { tasks: [], scheduledScripts: [] }
                     try { snap = JSON.parse(text) } catch (e) {}
                     if (demoSnapshot) snap = demoSnapshot
                     lastSnapshot = snap
-                    // 队列 ID → 名称：调度中心按队列名显示每个运行中的任务
                     const names = {}
-                    if (m.q.code === 200) m.q.index.forEach(q => { const d = m.q.data[q.uid]; if (d && d.Info) names[q.uid] = d.Info.Name })
+                    if (queues.code === 200) queues.index.forEach(q => { const d = queues.data[q.uid]; if (d && d.Info) names[q.uid] = d.Info.Name })
                     if (demoSnapshot && demoSnapshot.queueNames) Object.assign(names, demoSnapshot.queueNames)
-                    setLive(key, key === "home" ? Live.home(m.c.code === 200 ? m.c.data : [], snap, m.p.signal || "NoAction") : Live.dispatchCenter(snap, names))
+                    setLive(key, Live.dispatchCenter(snap, names))
                 })
             })
         }
     }
     // 保存：只提交改过的字段，同一接口的字段合并成一个请求
+    property bool saving: false
     function save(then) {
+        if (saving) return
         const it = item
         if (!it || !it.live) return
         const reqs = Live.collect(it)
         if (!reqs.length) { toast.show("没有需要保存的改动"); if (then) then(); return }
+        const snapshot = []
+        Live.eachSpec(it, spec => {
+            if (spec.dirty && spec.key) snapshot.push({ spec: spec, value: JSON.stringify(Live.valueOf(spec)) })
+        })
+        saving = true
         let i = 0
         const next = () => {
             if (i >= reqs.length) {
-                Live.clearDirty(it)
+                snapshot.forEach(saved => {
+                    if (JSON.stringify(Live.valueOf(saved.spec)) === saved.value) saved.spec.dirty = false
+                })
+                saving = false
                 panel.edits++
                 toast.show("已保存到后端 · " + reqs.length + " 个请求")
                 if (then) then()
@@ -139,7 +206,7 @@ FocusScope {
             const q = reqs[i++]
             call(q.path, q.body, r => {
                 if (r.code === 200) next()
-                else toast.show("保存失败：" + (r.message || q.path))
+                else { saving = false; toast.show("保存失败：" + (r.message || q.path)) }
             })
         }
         next()
@@ -154,6 +221,11 @@ FocusScope {
     }
     function runOp(op) {
         if (!op) return
+        if (op.overview || op.homeRetry) {
+            if (op.overview || target === 1) loadOverview()
+            else loadQuickStart()
+            return
+        }
         if (op.query) {
             const f = Object.assign({}, historyFilter)
             const s = Live.pick(item, "start"), e = Live.pick(item, "end"), m = Live.pick(item, "mode")
@@ -165,26 +237,28 @@ FocusScope {
             return
         }
         if (op.start) {
-            const taskId = Live.pick(item, "task"), mode = Live.pick(item, "mode"), power = Live.pick(item, "power")
-            if (!taskId) { toast.show("没有可运行的任务"); return }
-            modal.ask("开始执行", "将以「" + ({ AutoProxy: "自动代理", ScriptConfig: "设置脚本", CycleRun: "循环运行" })[mode] + "」模式立即开始所选任务，完成后执行「" + SD.POWER[Live.POWER_EN.indexOf(power)] + "」。",
-                "POST /api/dispatch/start", "开始执行", false, () => {
-                    call("/api/dispatch/set/power", { signal: power }, () => {
-                        call("/api/dispatch/start", { taskId: taskId, mode: mode }, r => {
-                            if (r.code === 200) { toast.show("已开始执行 · 任务 " + (r.taskId || "").slice(0, 8)); fetchLive(d.key) }
-                            else toast.show("开始失败：" + (r.message || ""))
-                        })
-                    })
-                })
+            const tasks = panel.selectedTasks.slice()
+            if (!tasks.length || liveHomeRuns.submitting) return
+            const mode = tasks.length > 1 ? "AutoProxy" : Live.pick(item, "mode")
+            const power = Live.pick(item, "power")
+            const modeName = {AutoProxy:"自动代理", ScriptConfig:"设置脚本", CycleRun:"循环运行"}[mode]
+            modal.ask("开始执行", "将以「" + modeName + "」启动 " + tasks.length + " 个任务，完成后执行「" + SD.POWER[Live.POWER_EN.indexOf(power)] + "」。",
+                "POST /api/dispatch/start", "开始执行", false, () => liveHomeRuns.launch(tasks, mode, power))
             return
         }
         if (op.stopAll) {
-            const tasks = lastSnapshot && lastSnapshot.tasks ? lastSnapshot.tasks : []
+            const tasks = liveHomeRuns.activeTasks
+            if (!liveHomeRuns.snapshotReady || liveHomeRuns.snapshotError) { liveHomeRuns.poll(); toast.show("正在同步运行状态，请稍后重试"); return }
             if (!tasks.length) { toast.show("当前没有运行中的任务"); return }
             modal.ask("停止任务", "将停止 " + tasks.length + " 个运行中的任务。", "POST /api/dispatch/stop", "停止", true, () => {
-                tasks.forEach(t => call("/api/dispatch/stop", { taskId: t.taskId }, () => {}))
-                toast.show("已发送停止指令")
-                fetchLive(d.key)
+                let replies = 0, failures = []
+                tasks.forEach(t => call("/api/dispatch/stop", { taskId: t.taskId }, r => {
+                    if (r.code !== 200) failures.push(r.message || "请求失败")
+                    if (++replies === tasks.length) {
+                        toast.show(failures.length ? "停止失败：" + failures.join("；") : "已发送停止指令")
+                        liveHomeRuns.poll()
+                    }
+                }))
             })
             return
         }
@@ -200,8 +274,15 @@ FocusScope {
         if (ops[name]) { runOp(ops[name]); return }
         toast.show("「" + name + "」尚未接入后端")
     }
+    EmulatorConfigs {
+        id: emulatorConfigs
+        objectName: "emulatorConfigs"
+        host: view
+        onMessage: text => toast.show(text)
+        onConfirmRemoval: (label, callback) => modal.ask("删除模拟器配置","删除「"+label+"」的配置？","POST /api/emulator/delete","删除",true,callback)
+    }
     property int target: 0
-    readonly property var item: items.length ? items[Math.min(target, items.length - 1)] : null
+    readonly property var item: items.length ? items[Math.min(target, items.length - 1)] : emulatorPage ? emulatorConfigs.empty : null
 
     property var hub: null          // 一级索引：取方块实时位置、在飞行期间隐藏对应方块
     property bool returning: false  // 正在飞回：索引提前淡入，与飞回并行
@@ -270,6 +351,7 @@ FocusScope {
     function go(next, d) {
         dir = d
         target = next
+        if (showingOnlineHome && next === 1) loadOverview()
         memory[view.d.key] = next
         // 记忆：每个条目保留自己的功能分页
         panel.tab = items[next] && items[next]._tab ? items[next]._tab : 0
@@ -284,6 +366,7 @@ FocusScope {
 
     Keys.onPressed: event => {
         if (!opened) return
+        if (scriptShelf.typing) return
         let k = event.key
         if (modal.shown) { if (k === Qt.Key_Escape) modal.close(); event.accepted = true; return }
         // WASD 与方向键等价
@@ -317,10 +400,52 @@ FocusScope {
         enabled: view.opened
         acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
         onWheel: event => {
+            if (scriptShelf.visible && scriptShelf.sortableMode && scriptShelf.overDock(Qt.point(event.x,event.y))) {
+                scriptShelf.scrollDock(event.pixelDelta.y ? -event.pixelDelta.y : -event.angleDelta.y / 2)
+                event.accepted = true
+                return
+            }
+            if (panel.scripts) {
+                const dy=event.pixelDelta.y ? -event.pixelDelta.y : -event.angleDelta.y/2
+                for (const surface of [panel.tabViewport,panel.formViewport]) {
+                    const at = surface.mapFromItem(view,event.x,event.y)
+                    if (!surface.contains(at)) continue
+                    if (surface === panel.tabViewport && surface.contentWidth>surface.width)
+                        surface.contentX=Math.max(0,Math.min(surface.contentWidth-surface.width,surface.contentX+dy))
+                    else if (surface === panel.formViewport && surface.contentHeight>surface.height)
+                        surface.contentY=Math.max(0,Math.min(surface.contentHeight-surface.height,surface.contentY+dy))
+                    else continue
+                    event.accepted=true
+                    return
+                }
+            }
+            const picker = panel.taskPickerArea
+            if (picker && picker.visible) {
+                const point = picker.mapFromItem(view, event.x, event.y)
+                // 包括同一数据块上方 24 像素的标题和 8 像素的间距。
+                if (point.x >= 0 && point.x < picker.width && point.y >= -32 && point.y < picker.height) {
+                    picker.turnWheel(event.pixelDelta.y, event.angleDelta.y)
+                    event.accepted = true
+                    return
+                }
+            }
+            const area = panel.runArea
+            if (area && area.visible) {
+                const p = area.mapFromItem(view, event.x, event.y)
+                if (p.x >= 0 && p.y >= -32 && p.x < area.width && p.y < area.height) {
+                    area.scrollBy(event.pixelDelta.y ? -event.pixelDelta.y : -event.angleDelta.y * 0.5)
+                    event.accepted = true
+                    return
+                }
+            }
             // 鼠标在档案卡上、且当前页有可滚动的表格（队列项）：滚轮滚表格，不切换条目
             if (panel.hovered && panel.scrollTable && panel.scrollTable.scroll(event.angleDelta.y < 0 ? 1 : -1)) return
             if (view.arrayItem) { if (!view.arrayItem.detailOpen) view.arrayItem.nav("row", event.angleDelta.y < 0 ? 1 : -1); return }
-            view.select(view.target + (event.angleDelta.y < 0 ? 1 : -1))
+            const delta = event.pixelDelta.y || event.angleDelta.y
+            // 在改变选中档案前丢弃溢出的输入，让录像盒与右侧档案始终指向同一项。
+            if (delta && chain.queue.length + Number(chain.stepping) < 3)
+                view.select(view.target + (delta < 0 ? 1 : -1))
+            event.accepted = true
         }
     }
     HoverHandler {
@@ -510,7 +635,7 @@ FocusScope {
             const queue = view.d && view.d.key === "queue"
             // 调度队列没有「队列配置」那一盒：每一盒都是队列项，表格滚到它附近的 12 项
             if (queue) view.focusQueueRow(it, row)
-            const k = pages.findIndex(p => p.name === (queue ? "队列项" : "账号"))
+            const k = pages.findIndex(p => p.name === (queue ? "队列项" : "账号" + row))
             panel.tab = (queue || row > 0) && k >= 0 ? k : 0
             if (queue) panel.rebuild()
         }
@@ -540,6 +665,7 @@ FocusScope {
     // ── 左下：录像带串 + 访问等级 ───────────────────────────────────────────
     CassetteChain {
         id: chain
+        shelf: scriptShelf.visible ? scriptShelf : null
         objectName: "chain"
         visible: !view.arrayMode
         x: 0
@@ -565,6 +691,7 @@ FocusScope {
 
     // ── 数据来源标记：实时数据 / 演示数据 ─────────────────────────────────
     Row {
+        visible: !view.isHome
         x: 1150
         y: 26
         z: 5
@@ -596,7 +723,7 @@ FocusScope {
         z: 5
         spacing: 4
         opacity: view.reveal
-        readonly property int maxDots: 12
+        readonly property int maxDots: scriptShelf.visible ? 7 : 12
         readonly property int first: view.items.length <= maxDots ? 0
             : Math.max(0, Math.min(view.items.length - maxDots, view.target - Math.floor(maxDots / 2)))
         Text {
@@ -669,6 +796,9 @@ FocusScope {
         }
         ArchivePanel {
             id: panel
+            visible: !!view.item
+            host: view
+            homeRuns: view.isLive ? liveHomeRuns : previewRuns
             objectName: "archivePanel"
             x: 30
             y: 20
@@ -678,9 +808,11 @@ FocusScope {
             item: view.item
             itemIndex: view.target
             // 后端还在读取本部门数据时，档案卡停在合拢状态；读取完成（或失败）立即揭开
+            saving: view.saving
             loading: view.liveState === "loading"
             onToast: text => toast.show(text)
             onConfirmDelete: (name, api) => modal.open(name, api)
+            emulatorManager: view.emulatorPage ? emulatorConfigs : null
             onLiveAction: name => view.liveAction(name)
             onLiveOp: op => view.runOp(op)
             onRequestEnhanced: {
@@ -745,13 +877,21 @@ FocusScope {
         y: 1044
         spacing: 40
         opacity: view.reveal
-        Text { anchors.verticalCenter: parent.verticalCenter; text: "滚轮 / ↑↓ 切换条目 · 1–9 切换分页 · ESC 返回"; color: Theme.muted; font.family: Theme.font; font.pixelSize: 11; font.letterSpacing: 2 }
+        Text { visible: !view.isHome; anchors.verticalCenter: parent.verticalCenter; text: "滚轮 / ↑↓ 切换条目 · 1–9 切换分页 · ESC 返回"; color: Theme.muted; font.family: Theme.font; font.pixelSize: 11; font.letterSpacing: 2 }
         Row {
             Text { text: "POWERED BY "; color: Theme.ink; font.family: Theme.font; font.pixelSize: 14; font.letterSpacing: 0.6 }
             Text { text: "AUTO-MAS"; color: Theme.ink; font.family: Theme.font; font.pixelSize: 14; font.weight: Font.Bold; font.letterSpacing: 0.6 }
         }
     }
 
+    ScriptShelf {
+        id: scriptShelf
+        objectName: "scriptShelf"
+        view: view; chain: chain; backButton: back
+        anchors.fill: parent; z: 7
+        visible: view.opened && !!view.d && view.d.key === "scripts"
+        onMessage: text => toast.show(text)
+    }
     Rectangle {
         id: back
         anchors.right: parent.right

@@ -37,35 +37,6 @@ function list(title, rows) { return { t: "list", title: title, rows: rows } }
 // 通用脚本：程序 / 判定 / 游戏 / 限制 / 账号。c 为后端 GeneralConfig 结构 {Info, Script, Game, Run}，
 // users 为 [{name, status, remained, base, last}]；字段键与 /api/scripts/get 返回一致。
 function idx(list, v, d) { var i = list.indexOf(v); return i < 0 ? (d || 0) : i }
-function general(name, en, c, users, live) {
-    var api = "POST /api/scripts/update"
-    var I = c.Info, S = c.Script, G = c.Game, R = c.Run
-    var gameType = idx(["Emulator", "Client", "URL"], G.Type, 1)
-    return { name: name, en: en, live: !!live, icon: c.Script.ScriptPath || "", accounts: users.map(function (u) { return u.name }), tabs: [
-        { name: "程序", api: api, blocks: [
-            kv("SCRIPT", [["脚本名称", inp(I.Name), "Info.Name"], ["根目录", path(I.RootPath), "Info.RootPath"], ["启动程序", path(S.ScriptPath), "Script.ScriptPath"], ["启动参数", inp(S.Arguments, true), "Script.Arguments"], ["配置路径", path(S.ConfigPath), "Script.ConfigPath"], ["路径类型", seg(["文件", "文件夹"], idx(["File", "Folder"], S.ConfigPathMode)), "Script.ConfigPathMode"], ["回写配置", seg(["从不", "成功时", "失败时", "总是"], idx(["Never", "Success", "Failure", "Always"], S.UpdateConfigMode)), "Script.UpdateConfigMode"]]),
-            kv("PROCESS", [["追踪进程", tog(S.IfTrackProcess), "Script.IfTrackProcess"], ["进程名", inp(S.TrackProcessName, true), "Script.TrackProcessName"], ["清理范围", seg(["跨会话强力", "仅本轮", "当前会话"], idx(["Force", "Tracked", "Session"], S.TaskKillMode)), "Script.TaskKillMode"]])
-        ], actions: ["保存", "复制脚本", "删除脚本"] },
-        { name: "判定", api: api, blocks: [
-            kv("LOG FILE", [["日志路径", path(S.LogPath), "Script.LogPath"], ["路径日期格式", inp(S.LogPathFormat, true), "Script.LogPathFormat"], ["时间戳位置", [num(S.LogTimeStart), unit("至"), num(S.LogTimeEnd), unit("列")], "Script.LogTimeStart / LogTimeEnd"], ["时间格式", inp(S.LogTimeFormat, true), "Script.LogTimeFormat"]]),
-            kv("MATCH", [["成功判定", [inp(S.SuccessLog), seg(["关键字", "正则"], idx(["Split", "Regex"], S.SuccessLogMode))], "Script.SuccessLog / SuccessLogMode"], ["失败判定", [inp(S.ErrorLog), seg(["关键字", "正则"], idx(["Split", "Regex"], S.ErrorLogMode))], "Script.ErrorLog / ErrorLogMode"], ["日志预处理", tog(S.LogHookEnabled), "Script.LogHookEnabled"], ["推送日志", tog(S.PushLogEnabled), "Script.PushLogEnabled"]]),
-            note("关键字模式用「|」分隔多个子串，任一命中即判定；正则模式按整行匹配。预处理先于判定执行。")
-        ], actions: ["保存", "测试匹配"] },
-        { name: "游戏", api: api, blocks: [
-            kv("GAME", [["随脚本启动游戏", tog(G.Enabled), "Game.Enabled"], ["启动方式", seg(["模拟器", "客户端", "URL 协议"], gameType), "Game.Type"], [gameType === 2 ? "协议地址" : "游戏路径", gameType === 2 ? inp(G.URL, true) : path(G.Path), gameType === 2 ? "Game.URL" : "Game.Path"], ["进程名", inp(G.ProcessName, true), "Game.ProcessName"], ["启动参数", inp(G.Arguments, true), "Game.Arguments"], ["启动后等待", num(G.WaitTime, "秒"), "Game.WaitTime"], ["结束后强制关闭", tog(G.IfForceClose), "Game.IfForceClose"]]),
-            kv("EMULATOR", [["模拟器", G.EmulatorId === "-" ? "未选择" : G.EmulatorId, "Game.EmulatorId"], ["实例", G.EmulatorIndex === "-" ? "未选择" : G.EmulatorIndex, "Game.EmulatorIndex"]])
-        ], actions: ["保存"] },
-        { name: "限制", api: api, blocks: [
-            kv("RUN LIMIT", [["单账号总时限", num(R.HardTimeLimit, "分钟"), "Run.HardTimeLimit"], ["单次运行时限", num(R.RunTimeLimit, "分钟"), "Run.RunTimeLimit"], ["单次重试次数", num(R.RunTimesLimit, "次"), "Run.RunTimesLimit"], ["每日代理上限", num(R.ProxyTimesLimit, "次 · 0 为不限"), "Run.ProxyTimesLimit"]]),
-            note("总时限包含等待游戏与全部重试；单次超时会先按清理清单结束进程，再按重启清单补跑。")
-        ], actions: ["保存", "恢复默认"] },
-        { name: "账号", api: "POST /api/scripts/user/update", blocks: [
-            table("USERS", ["名称", "启用", "剩余天数", "配置来源", "上次代理"], users.slice(0, 8).map(function (u) { return [u.name, tog(u.status), u.remained, sel(["独立", "共享", "原生"], u.base), u.last] })),
-            note(users.length > 8 ? "共 " + users.length + " 个账号，这里列出前 8 个。" : "配置来源：独立 = 账号单独一份脚本配置；共享 = 与同脚本账号共用；原生 = 直接使用脚本自身配置。")
-        ], actions: ["添加账号", "设置脚本", "删除所选"] }
-    ] }
-}
-
 // 演示数据转成后端结构
 function demoGeneral(o) {
     var c = {
@@ -78,24 +49,17 @@ function demoGeneral(o) {
                 ProcessName: o.gameProc || "", Arguments: "", WaitTime: 30, IfForceClose: true, EmulatorId: "-", EmulatorIndex: "-" },
         Run: { HardTimeLimit: 120, RunTimeLimit: o.limit || 60, RunTimesLimit: 3, ProxyTimesLimit: 0 }
     }
-    var users = o.users.map(function (u) { return { name: u[0], status: u[1], remained: u[2], base: u[3], last: u[4] } })
-    return general(o.name, o.en, c, users, false)
+    const users = {index:[],data:{}}
+    o.users.forEach((u,i) => {
+        const id = String(i)
+        users.index.push({uid:id})
+        users.data[id] = {Info:{Name:u[0],Status:u[1],RemainedDay:parseInt(u[2]) || -1,Base:["independent","shared","native"][u[3]]}}
+    })
+    return {name:o.name,en:o.en,config:c,users:users}
+
 }
 
 // 模拟器：设备 / 配置（EmulatorConfig，/api/emulator/operate）
-function emulator(o) {
-    var cfg = [["名称", inp(o.name), "Info.Name"], ["类型", seg(["通用", "MuMu", "雷电", "2.0"], o.type), "Info.Type"], ["安装路径", path(o.path), "Info.Path"], ["最大等待", num(300, "秒"), "Info.MaxWaitTime"], ["老板键", inp("Alt+Q", true), "Info.BossKey"], ["关闭时清理残留", tog(false), "Info.ForceKillOnClose"], ["启动前关闭全部", tog(false), "Info.ForceKillBeforeLaunch"]]
-    if (o.type === 3) cfg.push(["稳定模式", tog(true), "Info.StableMode"], ["配置守卫", tog(true), "Info.ConfigGuard"])
-    var running = o.devices.filter(function (d) { return d[1] === RUN }).length
-    return { name: o.name, en: o.en, tabs: [
-        { name: "设备", api: "POST /api/emulator/operate", blocks: [
-            table("DEVICES", ["名称", "状态", "ADB 地址", "操作"], o.devices.map(function (d) { return [d[0], d[1], inp(d[2], true), mini([d[1] === RUN ? "关闭" : "启动", "显示"])] })),
-            stats("SUMMARY", [["实例", String(o.devices.length)], ["运行中", String(running)], ["被任务占用", running ? "1" : "0"]])
-        ], actions: ["刷新设备", "全部关闭"] },
-        { name: "配置", api: "POST /api/emulator/update", blocks: [kv("CONFIG", cfg)], actions: ["保存", "自动搜索", "删除"] }
-    ] }
-}
-
 // 调度队列：调度 / 定时 / 队列项（QueueConfig、TimeSet、QueueItem）
 var SCRIPTS = ["BGI 每日", "鸣潮日常", "星铁清体力", "自定义脚本"]
 function queue(o) {
@@ -118,10 +82,18 @@ function queue(o) {
 
 var TASKS = ["日常托管 · 队列", "周常收尾 · 队列", "夜间循环 · 循环队列", "BGI 每日 · 脚本"]
 
+var emulatorExamples = [
+        {Name:"MuMu 12", Type:"mumu", Path:"D:/MuMuPlayer-12.0/MuMuManager.exe"},
+        {Name:"雷电 9", Type:"ldplayer", Path:"D:/leidian/LDPlayer9/ldconsole.exe"},
+        {Name:"Android AVD", Type:"emulator2", Path:"C:/Android/Sdk"}
+
+    ]
+
 var sections = {
     "01": { caption: "主页：快速启动队列或脚本，查看各账号的代理状态。", items: [
         { name: "快速启动", en: "QUICK START", api: "POST /api/dispatch/start", blocks: [
-            kv("START", [["任务对象", sel(TASKS, 0, "queue"), "taskId"], ["运行模式", seg(["自动代理", "设置脚本", "循环运行"], 0), "mode"], ["完成后", sel(POWER, 0), "POST /api/dispatch/set/power"], ["上次运行", "今天 06:00 · 全部完成"], ["下次定时", "今天 18:00 · 日常托管"]]),
+            { t: "taskPicker", title: "任务对象", options: TASKS.map(name => ({label:name, value:name})) },
+            kv("START", [["运行模式", segk(["自动代理", "设置脚本", "循环运行"], 0, "mode"), "mode"], ["完成后", sel(POWER, 0, "power"), "POST /api/dispatch/set/power"], ["上次运行", "今天 06:00 · 全部完成"], ["下次定时", "今天 18:00 · 日常托管"]]),
             stats("TODAY", [["今日已代理", "6", "done"], ["待运行", "2", "left"], ["异常", "0"]]),
             { t: "run", title: "RUN STATUS" }
         ], actions: ["开始执行", "停止"] },
@@ -136,11 +108,7 @@ var sections = {
         demoGeneral({ name: "星铁清体力", en: "GENERAL", root: "D:\\M7A", exe: "D:\\M7A\\March7th Assistant.exe", cfg: "D:\\M7A\\config.yaml", track: "March7th Assistant.exe", log: "D:\\M7A\\logs\\%Y-%m-%d.log", ok: "任务完成", err: "ERROR", game: "D:\\Star Rail\\StarRail.exe", gameProc: "StarRail.exe", limit: 45, users: [["星铁", true, "12 天", 0, "今天 06:52"], ["星铁小号", false, "—", 0, "—"]] }),
         demoGeneral({ name: "自定义脚本", en: "GENERAL", root: "C:\\Tools", exe: "C:\\Tools\\daily.bat", cfg: "", log: "C:\\Tools\\daily.log", ok: "done", err: "fail", gameType: 2, users: [["默认", true, "永久", 0, "周日 22:10"]] })
     ] },
-    "03": { caption: "模拟器：实例启动、关闭、显示与设备检测；配置与 2.0 稳定模式。", items: [
-        emulator({ name: "MuMu 12", en: "EMULATOR", type: 1, path: "D:\\MuMuPlayer-12.0", devices: [["MuMu-0", RUN, "127.0.0.1:16384"], ["MuMu-1", WAIT, "127.0.0.1:16416"], ["MuMu-2", WAIT, "127.0.0.1:16448"]] }),
-        emulator({ name: "雷电 9", en: "EMULATOR", type: 2, path: "D:\\leidian\\LDPlayer9", devices: [["雷电-0", WAIT, "emulator-5554"]] }),
-        emulator({ name: "Android AVD", en: "EMULATOR 2.0", type: 3, path: "C:\\Android\\Sdk", devices: [["Pixel_7", WAIT, "emulator-5556"], ["Tablet", WAIT, "emulator-5558"]] })
-    ] },
+    "03": { caption: "模拟器配置：搜索、添加、编辑和删除本机模拟器。", items: [] },
     "04": { caption: "调度队列：定时与循环、启动时运行、完成后动作与队列项。", items: [
         queue({ name: "日常托管", en: "QUEUE", startup: 2, afterScript: "C:\\Tools\\after.bat", times: [[true, "1111111", "06:00"], [true, "1111111", "18:00"]], items: [[0, true, 0, "06:00", "今天 18:00"], [1, true, 0, "06:30", "明天 06:30"], [2, true, 0, "06:45", "明天 06:45"]] }),
         queue({ name: "周常收尾", en: "QUEUE", after: 3, times: [[true, "0000001", "22:00"]], items: [[3, true, 0, "22:00", "周日 22:00"]] }),

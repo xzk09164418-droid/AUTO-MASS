@@ -8,6 +8,20 @@ import "."
 // 只在滑动 / 入场时更新，静止后不再重绘。
 Item {
     id: chain
+    property var shelf: null
+
+    function insertSide(stage, point) {
+        let selected = null, overList = false
+        for (let i = 0; i < tapes.count; i++) {
+            const tape = tapes.itemAt(i)
+            if (!tape || !tape.visible) continue
+            const face = tape.surface
+            if (tape.m === Math.round(chain.pos)) selected = face
+            if (face.contains(face.mapFromItem(stage, point))) overList = true
+        }
+        if (!selected || !overList) return 0
+        return selected.mapFromItem(stage, point).y < selected.height / 2 ? -1 : 1
+    }
 
     property var items: []
     property string deptN: ""
@@ -51,7 +65,7 @@ Item {
     //   · 普通一步：快速贴靠（指数逼近，不回弹）；
     //   · 越过首尾的一步：只有它是队列里最后一步时，才用非线性减速 + 末尾小回弹（类 iOS），
     //     连续滚动途中越过首尾的那步和普通一步一样，不打断节奏；
-    //   · 积压超过 2 步时后面每步走得更快，不丢格、尽快追上。
+    //   · 积压时加快贴靠；滚轮入口限制同时在途的切换数。
     property int pickedSlot: -10000
     property var queue: []                  // 待走的绝对槽位
     property real dest: 0                   // 正在走的这一步的落点
@@ -206,9 +220,11 @@ Item {
     }
 
     Repeater {
+        id: tapes
         model: chain.count > 0 ? chain.before + chain.after + 2 : 0
         Item {
             id: cas
+            property alias surface: front
             required property int index
             // 绝对槽位：以当前位置为基准向两侧展开；k 为实际条目
             readonly property int m: Math.floor(chain.cur) - chain.before + index
@@ -235,76 +251,25 @@ Item {
             }
             // 正面：磨砂外壳 + 内窗 + 标志 + 编号与名称
             Item {
+                id: front
                 width: chain.cw
                 height: chain.ch
                 transform: Matrix4x4 { matrix: cas.visible ? chain.matrix(cas.p, 0.13) : Qt.matrix4x4() }
 
-                Rectangle {
-                    anchors.fill: parent
-                    radius: 7
-                    color: Theme.dark ? "#3a474c" : "#f3f1ec"
-                    border.width: 1.5
-                    border.color: cas.hot ? Theme.accent : Theme.dark ? "#6d7b80" : "#9e9a90"
-                    opacity: Math.min(0.8, 0.32 + 0.48 * cas.p.focus + (cas.hot ? 0.12 : 0)) * cas.fade
+                CassetteFace {
+                    record: chain.items[cas.k] || null
+                    code: chain.deptN + "-" + String(cas.k + 1).padStart(2, "0")
+                    highlighted: cas.hot; emphasis: cas.p.focus; alpha: cas.fade
                 }
-                Item {
-                    anchors.fill: parent
-                    opacity: (cas.real ? 0.75 + 0.25 * cas.p.focus : 0.5) * cas.fade
-                    Rectangle {
-                        x: 7; y: 7
-                        width: parent.width - 14; height: parent.height - 14
-                        color: Qt.rgba(1, 1, 1, Theme.dark ? 0.08 : 0.35)
-                        border.width: 1
-                        border.color: Qt.rgba(0.16, 0.16, 0.14, 0.28)
-                    }
-                    Repeater {
-                        model: [Qt.point(15, 15), Qt.point(245, 15), Qt.point(15, 155), Qt.point(245, 155)]
-                        Rectangle { required property point modelData; x: modelData.x - 2.5; y: modelData.y - 2.5; width: 5; height: 5; radius: 2.5; color: Qt.rgba(0.16, 0.16, 0.14, 0.5) }
-                    }
-                    // 有启动程序时显示程序图标唱片，否则显示档案章
-                    readonly property string iconPath: cas.real && chain.items[cas.k] && chain.items[cas.k].icon ? chain.items[cas.k].icon : ""
-                    IconDisc { visible: parent.iconPath !== ""; x: 20; y: 30; width: 100; height: 100; path: parent.iconPath }
-                    Emblem {
-                        face: Emblem.Tape
-                        visible: parent.iconPath === ""
-                        x: 34; y: 44
-                        width: 72; height: 72
-                        ink: Theme.dark ? "#e0e3dc" : "#ffffff"
-                        core: Theme.accent
-                        curve: false
-                        Rectangle { anchors.fill: parent; anchors.margins: -10; z: -1; color: Theme.dark ? "#11181b" : "#2a2b2a"; opacity: 0.85 }
-                    }
-                    Column {
-                        visible: cas.real
-                        x: 134; y: 48
-                        spacing: 6
-                        Text { text: chain.deptN + "-" + String(cas.k + 1).padStart(2, "0"); color: Theme.ink; opacity: 0.85; font.family: Theme.font; font.pixelSize: 15; font.weight: Font.Bold }
-                        Text {
-                            width: 116
-                            elide: Text.ElideRight
-                            text: cas.real ? chain.items[cas.k].name : ""
-                            color: Theme.ink
-                            font.family: Theme.font
-                            font.pixelSize: 19
-                            font.weight: Font.Bold
-                        }
-                        Rectangle { width: 96; height: 2; color: Theme.ink; opacity: 0.45 }
-                    }
-                    Column {
-                        visible: !cas.real
-                        x: 134; y: 68
-                        spacing: 10
-                        Rectangle { width: 86; height: 6; color: Theme.ink; opacity: 0.25 }
-                        Rectangle { width: 60; height: 4; color: Theme.ink; opacity: 0.25 }
-                    }
-                }
-                MouseArea {
+                ScriptDragArea {
+                    shelf: chain.shelf
+                    record: chain.items[cas.k] || null
                     anchors.fill: parent
                     enabled: cas.real && cas.fade > 0.3
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
                     onContainsMouseChanged: if (!chain.sliding) chain.hovered = containsMouse ? cas.m : (chain.hovered === cas.m ? -10000 : chain.hovered)
-                    onClicked: { chain.pickedSlot = cas.m; chain.picked(cas.k) }
+                    onTapped: { chain.pickedSlot = cas.m; chain.picked(cas.k) }
                 }
             }
         }

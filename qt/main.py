@@ -22,6 +22,7 @@ from PySide6.QtQml import QQmlApplicationEngine
 QT_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(QT_DIR))
 
+from automas_qt.file_locations import FileLocations
 from automas_qt.backend import BackendSupervisor  # noqa: E402
 from automas_qt.enhanced import EnhancedComponent, preload_libraries_async, saved_motion  # noqa: E402
 from automas_qt.exeicon import ExeIconProvider  # noqa: E402
@@ -65,7 +66,7 @@ def main() -> int:
     fmt.setSamples(4)
     QSurfaceFormat.setDefaultFormat(fmt)
     app = QGuiApplication(sys.argv)
-    app.setApplicationName("AUTO-MAS")
+    app.setApplicationName("AUTO-MASS")
     app.setOrganizationName("AUTO-MAS")
     icon = QT_DIR.parent / "res" / "icons" / "AUTO-MAS.ico"
     if icon.exists():
@@ -79,6 +80,8 @@ def main() -> int:
     engine.warnings.connect(
         lambda warnings: [print(w.toString(), file=sys.stderr, flush=True) for w in warnings]
     )
+    locations = FileLocations(engine)
+    engine.rootContext().setContextProperty("fileLocations", locations)
     engine.setInitialProperties(
         {
             "backend": backend,
