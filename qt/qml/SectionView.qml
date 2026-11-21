@@ -63,11 +63,48 @@ FocusScope {
         const next = () => {
             if (i >= steps.length) { done(out); return }
             const st = steps[i++]
-            call(st[1], st[2], r => { out[st[0]] = r; next() })
+            // body 为 null 表示 GET 接口
+            if (st[2] === null) api.get(st[1], text => { let r = { code: 0 }; try { r = JSON.parse(text) } catch (e) {} out[st[0]] = r; next() })
+            else call(st[1], st[2], r => { out[st[0]] = r; next() })
         }
         next()
     }
+    // 会随运行状态变化的数据（远程桌面连接、热键控制队列等）：控件的可用条件与状态文字按它即时刷新
+    property var env: ({})
+    function pollDesk() {
+        if (!api) return
+        api.get("/api/child-session/status", text => {
+            let r = null; try { r = JSON.parse(text) } catch (e) {}
+            if (r && r.code === 200) env = Object.assign({}, env, { desk: r.data })
+        })
+        api.get("/api/dispatch/navigation/state", text => {
+            let r = null; try { r = JSON.parse(text) } catch (e) {}
+            if (r && r.code === 200) env = Object.assign({}, env, { nav: r.data })
+        })
+    }
+    Timer {
+        interval: 3000; repeat: true
+        running: view.opened && !!view.api && !!view.d && view.d.key === "localControls"
+        onTriggered: view.pollDesk()
+    }
+    HotkeyRecorder { id: recorder; host: view }
     property var historyFilter: ({ start: "", end: "", mode: 0 })
+    // 运行快照：托管脚本 / 循环队列运行时锁定对应配置，结束后解锁（与网页版一致）
+    property var runtimeTasks: []
+    readonly property bool runLocked: !!d && Live.itemLocked(d.key, item, runtimeTasks)
+    function pollRuntime() {
+        if (!api) return
+        api.get("/api/dispatch/runtime-snapshot", text => {
+            let snap = null
+            try { snap = JSON.parse(text) } catch (e) {}
+            if (snap && Array.isArray(snap.tasks)) runtimeTasks = demoSnapshot ? demoSnapshot.tasks : snap.tasks
+        })
+    }
+    Timer {
+        interval: 3000; repeat: true; triggeredOnStart: true
+        running: view.opened && !!view.api && !!view.d && ["scripts", "queue"].indexOf(view.d.key) >= 0
+        onTriggered: view.pollRuntime()
+    }
     property var lastSnapshot: null
     property var demoSnapshot: null         // 演示 / 自检：用模拟的运行快照代替后端返回（不启动任何真实任务）
     function today(offset) {
@@ -133,7 +170,8 @@ FocusScope {
         if (supported.indexOf(key) < 0) { liveState = ""; return }
         liveState = "loading"
         if (key === "scripts") {
-            call("/api/scripts/get", { includeUsers: true }, r => r.code === 200 ? setLive(key, Live.scripts(r)) : fail(r))
+            callAll([["s", "/api/scripts/get", { includeUsers: true }], ["e", "/api/info/combox/emulator", {}]],
+                    m => m.s.code === 200 ? setLive(key, Live.scripts(m.s, m.e.code === 200 ? m.e.data : [])) : fail(m.s))
         } else if (key === "queue") {
             callAll([["q", "/api/queue/get", {}], ["s", "/api/info/combox/script", {}], ["sc", "/api/scripts/get", {}]], m => {
                 if (m.q.code !== 200) { fail(m.q); return }
@@ -151,10 +189,17 @@ FocusScope {
         } else if (key === "emulators") {
             emulatorConfigs.load()
         } else if (key === "settings" || key === "localControls") {
-            callAll([["g", "/api/setting/get", {}], ["v", "/api/info/version", {}]], m => {
+            // 设置：QQ 机器人绑定状态决定开关能否打开；本地控制：虚拟显示驱动状态、远程桌面状态与热键控制队列
+            const extra = key === "settings" ? [["q", "/api/setting/openclaw-qq/status", {}]]
+                : [["d", "/api/setting/virtual-display/status", {}], ["n", "/api/dispatch/navigation/state", null]]
+            callAll([["g", "/api/setting/get", {}], ["v", "/api/info/version", {}]].concat(extra), m => {
                 if (m.g.code !== 200) { fail(m.g); return }
                 const ver = m.v.current_hash ? "本地 " + m.v.current_hash.slice(0, 8) : ""
-                setLive(key, key === "settings" ? Live.settings(m.g.data, ver) : Live.local(m.g.data, api.port))
+                if (key === "settings") { setLive(key, Live.settings(m.g.data, ver, m.q && m.q.code === 200 ? m.q : null)); return }
+                const vd = m.d && m.d.code === 200 ? { ready: (m.d.results || []).every(x => x.passed), message: m.d.message, holding: m.d.holding } : null
+                if (m.n && m.n.code === 200) env = Object.assign({}, env, { nav: m.n.data })
+                setLive(key, Live.local(m.g.data, api.port, vd, env.nav))
+                pollDesk()
             })
         } else if (key === "gamesign") {
             callAll([["t", "/api/tools/get", {}], ["a", "/api/tools/sign/account/list", {}]], m => m.t.code === 200 ? setLive(key, Live.sign(m.t.data, m.a.code === 200 ? m.a.data : {})) : fail(m.t))
@@ -184,6 +229,7 @@ FocusScope {
         if (saving) return
         const it = item
         if (!it || !it.live) return
+        if (runLocked && it.lockAll) { toast.show("任务运行中，配置已锁定；任务结束后可编辑"); return }
         const reqs = Live.collect(it)
         if (!reqs.length) { toast.show("没有需要保存的改动"); if (then) then(); return }
         const snapshot = []
@@ -200,6 +246,7 @@ FocusScope {
                 saving = false
                 panel.edits++
                 toast.show("已保存到后端 · " + reqs.length + " 个请求")
+                if (it.reloadOnSave) fetchLive(d.key)
                 if (then) then()
                 return
             }
@@ -212,12 +259,16 @@ FocusScope {
         next()
     }
     function exec(op) {
-        call(op.path, op.body, r => {
+        const done = r => {
             if (r.code === 200 || r.code === undefined) {
                 toast.show(op.show && r.message ? r.message : (op.done || "已完成"))
                 if (op.reload) fetchLive(d.key)
+                if (op.poll) pollDesk()
             } else toast.show("操作失败：" + (r.message || op.path))
-        })
+        }
+        const body = typeof op.body === "function" ? op.body(env) : op.body
+        if (op.get) api.get(op.path, text => { let r = { code: 0 }; try { r = JSON.parse(text) } catch (e) {} done(r) })
+        else call(op.path, body, done)
     }
     function runOp(op) {
         if (!op) return
@@ -260,6 +311,11 @@ FocusScope {
                     }
                 }))
             })
+            return
+        }
+        if (op.captureHotkey) {
+            const field = op.captureHotkey
+            recorder.begin(value => { field.v = value; field.dirty = true; panel.edits++; panel.rebuild(); toast.show("热键已录入，请保存配置后生效") })
             return
         }
         if (op.saveFirst) { save(() => exec(op)); return }
@@ -806,6 +862,8 @@ FocusScope {
             itemIndex: view.target
             // 后端还在读取本部门数据时，档案卡停在合拢状态；读取完成（或失败）立即揭开
             saving: view.saving
+            runLocked: view.runLocked
+            env: view.env
             loading: view.liveState === "loading"
             onToast: text => toast.show(text)
             onConfirmDelete: (name, api) => modal.open(name, api)

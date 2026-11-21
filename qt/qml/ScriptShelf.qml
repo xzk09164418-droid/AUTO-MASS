@@ -50,9 +50,8 @@ Item {
             message(copy ? "已复制脚本" : "已新建脚本")
         }
         if (!online) {
-            const entry = copy ? JSON.parse(JSON.stringify(source)) : Live.previewScript(SD.demoGeneral({name:"新脚本",exe:"",root:"",cfg:"",users:[]}),"",records.length)
+            const entry = copy ? Live.copyScript(source) : Live.previewScript(SD.demoGeneral({name:"新脚本",exe:"",root:"",cfg:"",users:[]}),"",records.length)
             entry.uid = "preview-" + Date.now()
-            if (copy) entry.name += " · 副本"
             finish(entry)
             return
         }

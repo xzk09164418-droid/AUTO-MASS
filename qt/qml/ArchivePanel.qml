@@ -34,6 +34,11 @@ Item {
     signal liveAction(string name)
     signal liveOp(var op)
     property bool saving: false
+    // 当前条目是否因任务运行而锁定（托管脚本运行中 / 循环队列运行中），结束后自动恢复
+    property bool runLocked: false
+    // 随运行状态变化的数据（远程桌面连接等），控件可用条件与状态文字按它即时刷新
+    property var env: ({})
+    readonly property var mergedOps: item ? Object.assign({}, item.ops || {}, shown && shown.ops || {}) : ({})
     property int edits: 0                   // 控件改动计数（驱动「未保存 N 处」）
     readonly property int unsaved: { edits; return item && item.live ? Live.dirtyCount(item) : 0 }
     signal motionChosen(string motion)      // 用户切换了动态效果挡位（记住选择；离开增强挡位时标记延后删除）
@@ -327,6 +332,8 @@ Item {
         font.family: Theme.font
         font.pixelSize: 15
         onActivated: {
+            // onPick：选择即执行（如切换热键控制的队列），不进入保存
+            if (spec.onPick) { spec.v = currentIndex; panel.liveOp(spec.onPick(currentIndex)); return }
             if (spec.v !== currentIndex) { spec.v = currentIndex; spec.dirty = true; panel.edits++ }
         }
         Component.onCompleted: {
@@ -425,6 +432,13 @@ Item {
         id: ctl
         property var spec
         readonly property bool stretch: typeof spec === "object" && (spec.c === "inp" || spec.c === "path")
+        // 依赖的控件取值不满足、或条目运行锁定时置灰（与网页版的禁用条件一致）
+        readonly property bool off: { panel.edits; return Live.isOff(panel.item, spec, panel.runLocked, panel.env) }
+        enabled: !off
+        // spec.show：同一格里按另一个控件的取值只显示其中一个（如循环项的「时间」与「间隔」）
+        visible: { panel.edits; return typeof spec !== "object" || spec === null || !spec.show || spec.show(panel.env) }
+        opacity: off ? 0.35 : 1
+        Behavior on opacity { NumberAnimation { duration: 150 } }
         Layout.fillWidth: stretch
         Layout.alignment: Qt.AlignVCenter
         sourceComponent: typeof spec !== "object" ? cText
@@ -433,9 +447,11 @@ Item {
             : spec.c === "time" || spec.c === "date" ? cTime : spec.c === "path" ? cPath
             : spec.k === "power" && spec.c === "sel" ? powerSelect
             : spec.c === "seg" ? cSeg : spec.c === "sel" ? cSel : spec.c === "chips" ? cChips
-            : spec.c === "tag" ? cTag : spec.c === "mini" ? cMini : spec.c === "unit" ? cUnit : cText
+            : spec.c === "tag" ? cTag : spec.c === "mini" ? cMini : spec.c === "unit" ? cUnit : spec.c === "dyn" ? cDyn : cText
         Component { id: autoMode; Label { text: "自动代理" } }
         Component { id: cText; Label { text: String(ctl.spec); elide: Text.ElideRight } }
+        // 状态文字：按 panel.env 即时计算（如远程桌面连接状态）
+        Component { id: cDyn; Label { text: ctl.spec.f(panel.env || {}); elide: Text.ElideRight; color: ctl.spec.tone ? ctl.spec.tone(panel.env || {}) : Theme.ink } }
         Component { id: cUnit; Text { text: ctl.spec.t; color: Theme.muted; font.family: Theme.font; font.pixelSize: 13 } }
         Component { id: cTog; Tog { spec: ctl.spec } }
         Component { id: cEntries; Btn { text: "编辑清单"; onClicked: entryEditor.edit(ctl.spec, () => panel.edits++) } }
@@ -491,6 +507,8 @@ Item {
                         required property int index
                         text: modelData
                         small: true
+                        enabled: !(ctl.spec.ops && Live.opOff(ctl.spec.ops[index], panel.runLocked, panel.env))
+                        opacity: enabled ? 1 : 0.35
                         onClicked: {
                             if (ctl.spec.commands) panel.act(text)
                             else if (ctl.spec.ops && ctl.spec.ops[index]) panel.liveOp(ctl.spec.ops[index])
@@ -529,9 +547,12 @@ Item {
                 readonly property var modelData: kvb.b.rows[index]
                 width: parent.width
                 visible: {
-                    if (!modelData[3] || !panel.emulatorManager) return true
+                    const when = modelData[3]
+                    if (!when) return true
                     panel.edits
-                    return modelData[3].includes(Live.fieldValue(panel.item,"Info.Type"))
+                    if (typeof when === "function") return when(panel.env)
+                    if (!panel.emulatorManager) return true
+                    return when.includes(Live.fieldValue(panel.item,"Info.Type"))
                 }
                 height: 42
                 Text {
@@ -908,6 +929,16 @@ Item {
             width: parent.width
             height: 56
             Rectangle { width: parent.width; height: 1; color: Theme.hair }
+            // 运行锁定提示（放在操作栏右侧，不占正文高度）：任务结束后自动消失，控件随之恢复可用
+            Row {
+                visible: panel.runLocked && !!panel.item && !!panel.item.lockNote
+                anchors.right: parent.right
+                anchors.bottom: parent.bottom
+                anchors.bottomMargin: 10
+                spacing: 8
+                Rectangle { width: 8; height: 8; anchors.verticalCenter: parent.verticalCenter; color: Theme.accent }
+                Text { width: Math.min(implicitWidth, panel.width * 0.42); wrapMode: Text.Wrap; horizontalAlignment: Text.AlignRight; text: panel.item ? panel.item.lockNote || "" : ""; color: Theme.accent; font.family: Theme.font; font.pixelSize: 12; font.weight: Font.Bold }
+            }
             Row {
                 anchors.bottom: parent.bottom
                 spacing: 10
@@ -919,7 +950,9 @@ Item {
                         text: modelData
                         primary: panel.emulatorManager ? modelData === "保存" : index === 0
                         danger: /删除|停止|注销|卸下/.test(modelData)
-                        enabled: (!panel.emulatorManager || panel.emulatorManager.canAct(modelData,panel.item)) && !(panel.saving && modelData === "保存") && !(modelData === "开始执行" && panel.item.en === "QUICK START" && (!panel.selectedTasks.length || panel.homeRuns.submitting))
+                        enabled: { panel.edits; return (!panel.emulatorManager || panel.emulatorManager.canAct(modelData,panel.item)) && !(panel.saving && modelData === "保存") && !(modelData === "开始执行" && panel.item.en === "QUICK START" && (!panel.selectedTasks.length || panel.homeRuns.submitting))
+                            && !(modelData === "保存" && panel.runLocked && panel.item.lockAll) && !Live.opOff(panel.mergedOps[modelData], panel.runLocked, panel.env) }
+                        opacity: enabled ? 1 : 0.35
                         onClicked: panel.act(modelData)
                     }
                 }
