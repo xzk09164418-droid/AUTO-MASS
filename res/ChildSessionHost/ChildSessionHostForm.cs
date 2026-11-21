@@ -181,8 +181,10 @@ namespace BetterGenshinImpact.Service.ChildSession
         {
             _trayMenu = new ContextMenuStrip
             {
-                BackColor = Color.FromArgb(34, 34, 34),
-                ForeColor = TextPrimary
+                BackColor = Color.FromArgb(28, 39, 44),
+                ForeColor = TextPrimary,
+                Font = new Font("Microsoft YaHei UI", 9F),
+                Renderer = new RhineTrayRenderer()
             };
 
             _trayToggleVisibleItem = new ToolStripMenuItem("显示 automass桌面分身窗口")
@@ -260,6 +262,8 @@ namespace BetterGenshinImpact.Service.ChildSession
             _trayMenu.Items.Add(new ToolStripSeparator());
             _trayMenu.Items.Add(trayLogoffItem);
             _trayMenu.Items.Add(trayExitItem);
+            foreach (ToolStripItem item in _trayMenu.Items)
+                if (item is ToolStripMenuItem) item.Padding = new Padding(3, 4, 12, 4);
 
             _trayMenu.Opening += delegate
             {

@@ -105,7 +105,10 @@ def main():
             if not source.is_relative_to(base) or not source.is_file():
                 continue
             relative = source.relative_to(base)
-            if relative.parts[:2] in (("Crypto", "SelfTest"), ("Cryptodome", "SelfTest")):
+            if relative.parts[:2] in (
+                ("Crypto", "SelfTest"),
+                ("Cryptodome", "SelfTest"),
+            ):
                 continue
             if (
                 "__pycache__" in source.parts
@@ -130,12 +133,17 @@ def main():
         "/r:System.Windows.Forms.dll",
     ]
     jobs = [
-        ("AUTO-MASS.exe", [root / "res/Launcher/AutoMassQtLauncher.cs"], []),
+        (
+            "AUTO-MASS.exe",
+            [root / "res/Launcher/AutoMassQtLauncher.cs"],
+            [f"/win32icon:{root / 'res/icons/AUTO-MAS.ico'}"],
+        ),
         (
             "res/ChildSessionHost/AutoMas.ChildSessionHost.exe",
             sorted((root / "res/ChildSessionHost").glob("*.cs")),
             [
                 "/r:Microsoft.CSharp.dll",
+                f"/win32icon:{root / 'res/icons/AUTO-MAS.ico'}",
                 f"/win32manifest:{root / 'res/ChildSessionHost/app.manifest'}",
             ],
         ),
