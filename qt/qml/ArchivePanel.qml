@@ -38,6 +38,47 @@ Item {
     property bool runLocked: false
     // 随运行状态变化的数据（远程桌面连接等），控件可用条件与状态文字按它即时刷新
     property var env: ({})
+    // 通用暂存区（SectionView 的 SortDock）：表格行、账号页签拖进暂存区后再拖回目标位置
+    property var sortDock: null
+    function sortCommit(sort, ids, done) {
+        host.call(sort.path, sort.body(ids), r => {
+            done(r.code === 200)
+            if (r.code === 200) { toast("已调整顺序"); host.fetchLive(dept.key) }
+            else toast("排序保存失败：" + (r.message || ""))
+        })
+    }
+    // 托管脚本的账号页签：注册排序组（运行中锁定）
+    property var tabGroup: null
+    property string tabGroupName: ""
+    function syncTabGroup() {
+        if (sortDock && tabGroup) sortDock.unregister(tabGroupName, tabGroup)
+        tabGroup = null
+        const acc = pages.filter(p => p.sortId)
+        if (!sortDock || !item || !item.live || !acc.length) return
+        const it = item
+        tabGroupName = acc[0].sortGroup
+        tabGroup = {
+            ids: () => acc.map(p => p.sortId),
+            label: id => (acc.find(p => p.sortId === id) || {}).sortLabel || "",
+            locked: () => panel.runLocked && !!it.lockAll,
+            target: pt => tabTarget(pt),
+            commit: (ids, done) => sortCommit({ path: "/api/scripts/user/order", body: list => ({ scriptId: it.uid, indexList: list }) }, ids, done)
+        }
+        sortDock.register(tabGroupName, tabGroup)
+    }
+    onPagesChanged: syncTabGroup()
+    onSortDockChanged: syncTabGroup()
+    Component.onDestruction: if (sortDock && tabGroup) sortDock.unregister(tabGroupName, tabGroup)
+    function tabTarget(pt) {
+        const local = tabStrip.mapFromItem(sortDock, pt)
+        if (local.y < -10 || local.y > tabStrip.height + 10) return null
+        for (let i = 0; i < tabRep.count; i++) {
+            const t = tabRep.itemAt(i)
+            if (!t || !t.modelData.sortId) continue
+            if (local.x >= t.x && local.x <= t.x + t.width) return { id: t.modelData.sortId, side: local.x < t.x + t.width / 2 ? -1 : 1 }
+        }
+        return null
+    }
     readonly property var mergedOps: item ? Object.assign({}, item.ops || {}, shown && shown.ops || {}) : ({})
     property int edits: 0                   // 控件改动计数（驱动「未保存 N 处」）
     readonly property int unsaved: { edits; return item && item.live ? Live.dirtyCount(item) : 0 }
@@ -598,8 +639,26 @@ Item {
         Component.onCompleted: {
             pager.pageIndex = Math.min(b.page || 0, pages - 1)
             if (pages > 1) panel.scrollTable = tb
+            if (sortGroup && panel.sortDock) panel.sortDock.register(b.sort.group, sortGroup)
         }
-        Component.onDestruction: if (panel.scrollTable === tb) panel.scrollTable = null
+        Component.onDestruction: {
+            if (panel.scrollTable === tb) panel.scrollTable = null
+            if (sortGroup && panel.sortDock) panel.sortDock.unregister(b.sort.group, sortGroup)
+        }
+        // b.sort：行可拖动排序（按住行号拖进暂存区，再从暂存区拖回某一行的前半 / 后半）
+        readonly property var sortGroup: b.sort ? {
+            ids: () => b.sort.ids,
+            label: id => b.sort.labels[b.sort.ids.indexOf(id)] || "",
+            locked: () => !!b.sort.lock && panel.runLocked,
+            target: pt => tb.rowTarget(pt),
+            commit: (ids, done) => panel.sortCommit(b.sort, ids, done)
+        } : null
+        function rowTarget(pt) {
+            const local = rowsArea.mapFromItem(panel.sortDock, pt)
+            if (local.x < 0 || local.x > rowsArea.width || local.y < 0 || local.y > tb.rows.length * 44) return null
+            const i = Math.min(tb.rows.length - 1, Math.floor(local.y / 44))
+            return { id: b.sort.ids[tb.off + i], side: local.y - i * 44 < 22 ? -1 : 1 }
+        }
         readonly property var weights: b.weights && b.weights.length === b.cols.length ? b.weights : b.cols.map(() => 1)
         readonly property real wsum: weights.reduce((a, x) => a + x, 0)
         function colW(i) { return (width - 44) * weights[i] / wsum }
@@ -649,7 +708,23 @@ Item {
                 HoverHandler { id: trHover }
                 Row {
                     anchors.fill: parent
-                    Text { width: 44; height: parent.height; verticalAlignment: Text.AlignVCenter; leftPadding: 6; text: String(tb.off + tr.index + 1).padStart(2, "0"); color: tb.off + tr.index === tb.b.focus ? Theme.accent : Theme.muted; font.family: Theme.font; font.pixelSize: 14 }
+                    Text {
+                        width: 44; height: parent.height; verticalAlignment: Text.AlignVCenter; leftPadding: 6
+                        text: (tb.b.sort ? "⋮ " : "") + String(tb.off + tr.index + 1).padStart(2, "0")
+                        color: tb.off + tr.index === tb.b.focus || rowDrag.containsMouse ? Theme.accent : Theme.muted; font.family: Theme.font; font.pixelSize: 14
+                        ScriptDragArea {
+                            id: rowDrag
+                            objectName: "rowDrag"
+                            anchors.fill: parent
+                            enabled: !!tb.b.sort && !!panel.sortDock && !(tb.sortGroup && tb.sortGroup.locked())
+                            hoverEnabled: true
+                            shelf: panel.sortDock
+                            record: tb.b.sort ? { sortId: tb.b.sort.ids[tb.off + tr.index], sortGroup: tb.b.sort.group, name: tb.b.sort.labels[tb.off + tr.index] || "", code: String(tb.off + tr.index + 1).padStart(2, "0") } : null
+                            C.ToolTip.visible: containsMouse && enabled
+                            C.ToolTip.delay: 500
+                            C.ToolTip.text: "按住拖到暂存区，再拖回目标行调整顺序"
+                        }
+                    }
                     Repeater {
                         model: tr.modelData.length
                         Item {
@@ -833,6 +908,15 @@ Item {
                                 Text { id: tabName; text: tabBtn.modelData.name; color: tabBtn.on || tabMouse.containsMouse ? Theme.ink : Theme.muted; font.family: Theme.font; font.pixelSize: 15; font.weight: Font.DemiBold; font.letterSpacing: 1.2; Behavior on color { ColorAnimation { duration: 180 } } }
                             }
                             MouseArea { id: tabMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: panel.tab = tabBtn.index }
+                            // 账号页签可拖动排序：拖进暂存区，再拖回某个账号页签的左半 / 右半
+                            ScriptDragArea {
+                                anchors.fill: parent
+                                visible: !!tabBtn.modelData.sortId && !!panel.sortDock
+                                enabled: visible && !(panel.runLocked && panel.item && panel.item.lockAll)
+                                shelf: panel.sortDock
+                                record: tabBtn.modelData.sortId ? { sortId: tabBtn.modelData.sortId, sortGroup: tabBtn.modelData.sortGroup, name: tabBtn.modelData.sortLabel || tabBtn.modelData.name, code: String(tabBtn.index + 1).padStart(2, "0") } : null
+                                onTapped: panel.tab = tabBtn.index
+                            }
                         }
                     }
                 }

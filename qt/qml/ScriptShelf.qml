@@ -127,28 +127,55 @@ Item {
         Keys.onEscapePressed: { clear(); shelf.view.forceActiveFocus() }
         onAccepted: shelf.view.forceActiveFocus()
     }
+    // 新建 / 复制：放在铭牌下方右侧，与「RETURN TO INDEX」同一种按钮样式
     Row {
-        x: 755; y: 475; spacing: 8
+        x: shelf.backButton.x + shelf.backButton.width - width
+        y: 980
+        spacing: 10
+        opacity: shelf.view.reveal
         ShelfButton { text: "＋ 新建脚本"; enabled: shelf.ready && !shelf.writing; onClicked: shelf.create(false) }
         ShelfButton { text: "复制脚本"; enabled: shelf.ready && !shelf.writing && !!shelf.view.item; onClicked: shelf.create(true) }
     }
-    component ShelfButton: C.Button {
+    component ShelfButton: Rectangle {
         id: button
-        leftPadding: 14; rightPadding: 14; implicitHeight: 36
-        font.family: Theme.font; font.pixelSize: 14
-        opacity: enabled ? 1 : 0.45
-        contentItem: Text { text: button.text; font: button.font; color: Theme.ink; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
-        background: Rectangle { color: Theme.paper; border.color: button.hovered || button.activeFocus ? Theme.accent : Theme.ink }
+        property string text
+        signal clicked()
+        readonly property bool hot: buttonMouse.containsMouse || activeFocus
+        width: buttonText.implicitWidth + 32
+        height: 32
+        opacity: enabled ? 1 : 0.4
+        color: hot && enabled ? Theme.ink : "transparent"
+        border.width: 1.5
+        border.color: Theme.ink
+        activeFocusOnTab: true
+        Accessible.role: Accessible.Button
+        Accessible.name: text
+        Keys.onReturnPressed: if (enabled) clicked()
+        Keys.onSpacePressed: if (enabled) clicked()
+        Text {
+            id: buttonText
+            anchors.centerIn: parent
+            text: button.text
+            color: button.hot && button.enabled ? Theme.paper : Theme.ink
+            font.family: Theme.font
+            font.pixelSize: 13
+            font.weight: Font.Bold
+            font.letterSpacing: 2.4
+        }
+        MouseArea { id: buttonMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: if (button.enabled) button.clicked() }
     }
     Rectangle {
         id: dock
         objectName: "scriptDock"
         x: 750; y: 535; width: 342; height: 275
         visible: shelf.sortableMode
-        color: "transparent"
-        border.color: shelf.dragId && shelf.overDock(shelf.pointer) ? Theme.accent : Theme.grid
-        Text { x: 12; y: 10; text: "暂存录像卡  /  " + shelf.stack.length; color: Theme.muted; font.family: Theme.font; font.pixelSize: 14 }
-        Text { anchors.centerIn: parent; visible: shelf.stack.length === 0; text: "拖入录像卡以调整顺序"; color: Theme.muted; font.pixelSize: 15 }
+        // 暂存区常态不显示：拖动的录像卡进入范围时才用橙色小圆角矩形框出；已暂存的卡始终可见
+        readonly property bool hot: !!shelf.dragId && shelf.overDock(shelf.pointer)
+        radius: 4
+        color: hot ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.06) : "transparent"
+        border.width: hot ? 2 : 0
+        border.color: Theme.accent
+        Text { x: 12; y: 10; visible: dock.hot; text: "暂存录像卡  /  " + shelf.stack.length; color: Theme.accent; font.family: Theme.font; font.pixelSize: 14; font.weight: Font.Bold }
         ListView {
             id: stagedList
             anchors.fill: parent; anchors.margins: 12; anchors.topMargin: 38

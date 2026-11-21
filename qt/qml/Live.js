@@ -129,7 +129,7 @@ function general(uid, c, ur, i) {
         const data = ur.data[u.uid] || {}, info = data.Info || {}, notify = data.Notify || {}
         const target = {path:"/api/scripts/user/update",base:{scriptId:uid,userId:u.uid}}
         const nEnabled = B(SD.tog(notify.Enabled),"Notify.Enabled")
-        return {name:"账号" + (n+1), userId:u.uid, save:target, api:target.path, blocks:[
+        return {name:"账号" + (n+1), userId:u.uid, sortId:u.uid, sortGroup:"users:" + uid, sortLabel:info.Name || ("账号" + (n+1)), save:target, api:target.path, blocks:[
             SD.kv("基本资料",[
                 ["账号名称", B(SD.inp(info.Name),"Info.Name")], ["启用代理", B(SD.tog(info.Status),"Info.Status")],
                 ["剩余天数（-1 永久）", B(Object.assign(SD.num(info.RemainedDay ?? -1),{min:-1}),"Info.RemainedDay")],
@@ -299,6 +299,9 @@ function queues(qresp, times, qitems, scriptOpts, scriptPaths) {
             ? SD.table("队列项", ["脚本", "参与循环", "方式", "下次运行", "操作"], irows, [2.2, 1, 1.3, 1.1, 0.8])
             : SD.table("队列项", ["脚本", "执行周期", "操作"], irows, [2, 2.6, 0.8])
         itemTable.queueRows = true
+        // 拖动行号到暂存区再拖回，调整队列项顺序；循环运行中不可调整
+        itemTable.sort = { group: "item:" + qid, ids: it.index.map(function (t) { return t.uid }), labels: rowNames, lock: true,
+                           path: "/api/queue/item/order", body: function (ids) { return { queueId: qid, indexList: ids } } }
         var tabs = [
             { name: "调度", api: save.path, save: save, blocks: [
                 SD.kv("调度", [["队列名称", B(SD.inp(I.Name), "Info.Name"), "Info.Name"], ["定时启动", timeOn, "Info.TimeEnabled · 循环队列不使用定时"], ["循环队列", cycleOn, "Info.CycleEnabled · 循环运行中不能切换"], ["启动时运行", B(SD.seg(["从不", "每次", "每日首次"], idx(["Never", "Always", "DailyFirst"], I.StartUpMode)), "Info.StartUpMode", ["Never", "Always", "DailyFirst"]), "Info.StartUpMode"], ["完成后", after, "Info.AfterAccomplish"], ["延时执行", W(B(SD.num(I.AfterAccomplishDelay, "分钟"), "Info.AfterAccomplishDelay"), after, isNot("NoAction")), "Info.AfterAccomplishDelay · 完成后无动作时不可用"]]),
@@ -307,7 +310,11 @@ function queues(qresp, times, qitems, scriptOpts, scriptPaths) {
         ]
         // 定时只属于定时队列：循环队列不显示「定时」页
         if (!cycle) tabs.push({ name: "定时", api: "POST /api/queue/time/update", blocks: [
-            SD.table("定时", ["启用", "周期", "时间", "操作"], trows, [1, 2.6, 1, 0.8]),
+            (function () { var tb = SD.table("定时", ["启用", "周期", "时间", "操作"], trows, [1, 2.6, 1, 0.8])
+                // 拖动行号到暂存区再拖回，调整定时顺序
+                tb.sort = { group: "time:" + qid, ids: ts.index.map(function (t) { return t.uid }), labels: ts.index.map(function (t, k) { return "定时 " + (k + 1) + " · " + (ts.data[t.uid].Info.Time || "") }),
+                            path: "/api/queue/time/order", body: function (ids) { return { queueId: qid, indexList: ids } } }
+                return tb })(),
             SD.note("同一队列可设置多个定时；周期为空时该定时不会触发。")
         ], actions: ["保存", "添加定时"] })
         tabs.push({ name: "队列项", api: "POST /api/queue/item/update", blocks: [itemTable,
@@ -557,7 +564,8 @@ function sign(tools, accounts) {
     var groupCards = ids.map(function (a, n) {
         var d = accounts[a.uid].GameSignAccount, s = { path: "/api/tools/sign/account/update", base: { accountId: a.uid } }
         function token(v, key) { return B(Object.assign(SD.inp(v || "", true), { secret: true }), key) }
-        return { name: d.Name || ("账号组 " + (n + 1)), en: "ACCOUNT GROUP · " + String(n + 1).padStart(2, "0"), live: true, api: s.path, save: s, blocks: [
+        return { name: d.Name || ("账号组 " + (n + 1)), en: "ACCOUNT GROUP · " + String(n + 1).padStart(2, "0"), live: true, api: s.path, save: s,
+            sortId: a.uid, sortGroup: "signGroups", blocks: [
             SD.kv("账号组", [["名称", B(SD.inp(d.Name), "Name")], ["启用", B(SD.tog(d.Enabled), "Enabled")]]),
             SD.kv("平台凭据", [["米游社", [token(d.MiyousheToken, "MiyousheToken"), has(d.MiyousheToken) ? OK : WAIT]], ["森空岛", [token(d.SklandToken, "SklandToken"), has(d.SklandToken) ? OK : d.SklandToken ? ERR : WAIT]],
                 ["库街区", [token(d.KuroToken, "KuroToken"), has(d.KuroToken) ? OK : WAIT]], ["塔吉多", [token(d.TaygedoToken, "TaygedoToken"), has(d.TaygedoToken) ? OK : WAIT]]]),

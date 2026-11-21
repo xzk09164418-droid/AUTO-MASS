@@ -773,7 +773,7 @@ FocusScope {
     // ── 左下：录像带串 + 访问等级 ───────────────────────────────────────────
     CassetteChain {
         id: chain
-        shelf: scriptShelf.visible ? scriptShelf : null
+        shelf: scriptShelf.visible ? scriptShelf : sortDock
         objectName: "chain"
         visible: !view.arrayMode
         x: 0
@@ -906,6 +906,7 @@ FocusScope {
             id: panel
             visible: !!view.item
             host: view
+            sortDock: sortDock
             homeRuns: view.isLive ? liveHomeRuns : previewRuns
             objectName: "archivePanel"
             x: 30
@@ -994,6 +995,33 @@ FocusScope {
         }
     }
 
+    // 通用暂存区：签到账号组录像带、队列定时 / 队列项行、托管账号页签的拖动排序
+    SortDock {
+        id: sortDock
+        objectName: "sortDock"
+        anchors.fill: parent
+        z: 6
+        visible: view.opened && !view.arrayMode
+    }
+    // 签到账号组（录像带）的排序组：放到当前选中的账号组之前 / 之后
+    property var signSortGroup: ({
+        ids: () => (live.gamesign || []).filter(x => x.sortId).map(x => x.sortId),
+        label: id => ((live.gamesign || []).find(x => x.sortId === id) || {}).name || "",
+        target: pt => {
+            const it = view.item
+            if (!it || !it.sortId) return null
+            const side = chain.insertSide(sortDock, pt)
+            return side ? { id: it.sortId, side: side } : null
+        },
+        commit: (ids, done) => call("/api/tools/sign/account/reorder", { order: ids }, r => {
+            done(r.code === 200)
+            if (r.code === 200) { toast.show("已调整账号组顺序"); fetchLive("gamesign") }
+            else toast.show("排序保存失败：" + (r.message || ""))
+        })
+    })
+    readonly property bool signSorting: opened && !!d && d.key === "gamesign"
+    onSignSortingChanged: signSorting ? sortDock.register("signGroups", signSortGroup) : sortDock.unregister("signGroups", signSortGroup)
+    onOpenedChanged: if (!opened) sortDock.reset()
     ScriptShelf {
         id: scriptShelf
         objectName: "scriptShelf"
