@@ -10,7 +10,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 
 from PySide6.QtCore import QObject, Qt, QTimer, Signal, Slot
-from PySide6.QtGui import QIcon
+from PySide6.QtGui import QCursor, QIcon
 from PySide6.QtNetwork import QNetworkReply
 from PySide6.QtWidgets import QApplication, QMenu, QMessageBox, QSystemTrayIcon
 
@@ -68,6 +68,7 @@ class ClientController(QObject):
         )
         self.tray.setToolTip("AUTO-MAS")
         self.menu = QMenu()
+        self._menu_dark = None
         self.actions = {}
         self._add("show", "打开 AUTO-MAS Qt 控制台", self.show_window)
         self.menu.addSeparator()
@@ -106,12 +107,39 @@ class ClientController(QObject):
         )
         self._add("restart", "强制重启 MAS（清空运行状态）", self.force_restart)
         self._add("exit", "完全退出", self.shutdown_all)
-        self.tray.setContextMenu(self.menu)
+        # Windows 的原生 HMENU 不绘制 Qt 样式，右键时弹出实际的 QMenu。
+        if sys.platform != "win32":
+            self.tray.setContextMenu(self.menu)
+        self.menu.aboutToShow.connect(self._style_menu)
         self.menu.aboutToShow.connect(self._refresh_hotkeys)
         self.tray.activated.connect(self._activated)
         self.tray.show()
         self.errorOccurred.connect(self._show_error)
         backend.eventReceived.connect(self._event)
+
+    def _style_menu(self) -> None:
+        dark = (
+            self.window.property("trayDark")
+            if self.window is not None
+            else QApplication.styleHints().colorScheme() == Qt.ColorScheme.Dark
+        )
+        if dark == self._menu_dark:
+            return
+        self._menu_dark = dark
+        paper, ink, hair, accent = (
+            ("#1c272c", "#e0e3dc", "#536166", "#e07a2c")
+            if dark
+            else ("#f6f4f1", "#0b0c0b", "#aaa59a", "#e8701f")
+        )
+        self.menu.setStyleSheet(f"""
+            QMenu {{ background: {paper}; color: {ink}; border: 1px solid {hair};
+                    border-top: 3px solid {accent}; padding: 5px 0;
+                    font-family: "Microsoft YaHei UI"; font-size: 10pt; }}
+            QMenu::item {{ padding: 6px 22px 6px 16px; border-left: 3px solid transparent; }}
+            QMenu::item:selected {{ background: {ink}; color: {paper}; border-left-color: {accent}; }}
+            QMenu::item:disabled {{ color: {hair}; }}
+            QMenu::separator {{ height: 1px; background: {hair}; margin: 4px 12px; }}
+        """)
 
     def _refresh_hotkeys(self) -> None:
         def loaded(result):
@@ -136,6 +164,13 @@ class ClientController(QObject):
         self.actions[key] = item
 
     def _activated(self, reason) -> None:
+        if (
+            sys.platform == "win32"
+            and reason == QSystemTrayIcon.ActivationReason.Context
+        ):
+            if not self.busy:
+                self.menu.popup(QCursor.pos())
+            return
         if reason in (
             QSystemTrayIcon.ActivationReason.Trigger,
             QSystemTrayIcon.ActivationReason.DoubleClick,

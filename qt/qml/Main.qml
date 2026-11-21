@@ -14,6 +14,7 @@ Window {
     property int initialSection: 0
     property int returnAfter: 0             // 自检：进入二级界面 N 毫秒后自动返回
     property string themeMode: "system"
+    readonly property bool trayDark: Theme.dark
     property string motionMode: "standard"
     property var enhanced: null             // EnhancedComponent：3D 增强组件（可选安装）
     property real simulateLoad: 0           // >0：按真实阶段模拟一次耗时 N 秒的后端启动
