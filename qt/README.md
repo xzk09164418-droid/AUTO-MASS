@@ -29,6 +29,7 @@ uv pip install --python .venv/Scripts/python.exe -r qt/requirements.txt
   调度队列沿用多列阵列，横向换队列，纵向选队列项，读取后在表格中定位。两种多列阵列显示前后各 18 行、左右各 3 列。
   模型、灯光与镜头来自 `design/qt-demo/array.html` 的视觉基线。网格与预过滤环境光随客户端提供，模型或光照源更新后运行 `python qt/tools/bake_cassette.py` 重新生成。
   各部门复用同一个异步预热的场景。切换时外壳始终保留在实例表内，标签、玻璃与唱片跟随各自的录像带升起和落回。
+  Windows x64 的 D3D11 首次启动使用与 Qt 版本匹配的预编译材质和字节码。材质或着色器更新后，在安装了增强组件的 Windows x64 环境运行 `python qt/tools/bake_array_shaders.py`，并更新 `qt/main.py` 中的缓存修订号。
   Qt Quick 3D 在 `PySide6-Addons` 里（下载约 161 MB，安装后约 420 MB），**默认不安装**：在设置里选「增强」时二次确认后下载（版本与 PySide6 一致）。
   切回其它挡位时不立即删除，只写入 `config/QtEnhancedRemove.flag`；退出程序、下次启动加载完毕并空闲后在后台删除；删除前切回增强则取消。
 - 选择的挡位保存在 `config/QtClient.json`，下次启动沿用（`--motion` 可临时指定）。
