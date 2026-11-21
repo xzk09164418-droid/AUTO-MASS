@@ -162,7 +162,11 @@ Item {
 
     // 换条目：淡出后重新解密；换页签：只换正文与操作并 150ms 淡入
     function refresh() {
-        if (!page) return
+        if (!page) {
+            swapOut.stop()
+            blockCount = 0; shown = null; lastItem = null
+            return
+        }
         if (shown === null) { lastItem = item; apply(); startDec(); return }
         if (item !== lastItem && item?.runtimeKey && item.runtimeKey === lastItem?.runtimeKey) {
             const priorY = logViewport?.contentY || 0

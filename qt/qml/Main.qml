@@ -116,17 +116,6 @@ Window {
         scale: Math.min(root.width / 1920, root.height / 1080)
         clip: true
 
-        // 任何指针移动 / 按键都算「有操作」：推迟 3D 组件的后台预加载
-        // （动画在静止的指针下移动时 Qt 也会补发悬停事件，所以只认指针位置真的变化）
-        HoverHandler {
-            property point last: Qt.point(-1, -1)
-            onPointChanged: {
-                const p = point.scenePosition
-                if (Math.abs(p.x - last.x) + Math.abs(p.y - last.y) > 1) { last = p; arrayHost.poke() }
-            }
-        }
-        Keys.onPressed: event => { arrayHost.poke(); event.accepted = false }
-
         DepartmentHub {
             id: hub
             objectName: "hub"
@@ -139,47 +128,29 @@ Window {
             onOpenRequested: (i, r) => sections.open(i, r, hub.tileItem(i))
         }
 
-        // 增强挡位的 3D 档案阵列：托管管理与调度队列共用一份常驻实例。
-        // 启动完成、程序空闲后异步预加载，并在索引之下先渲染约一秒，让模型、着色器与管线提前就绪，进入时不再卡顿。
+        // 各部门共享场景；首次加载后在索引背后短暂预渲染。
         Item {
             id: arrayHost
             anchors.fill: parent
             readonly property bool wanted: Theme.motion === "enhanced" && Theme.enhancedAvailable
             readonly property bool showing: sections.arrayMode && sections.busy
-            // 后台预加载分步进行，每一步都要等用户在索引页空闲一段时间才开始（期间有任何操作就顺延）：
-            //   1 编译组件并解析阵列模型 → 2 在索引之下预渲染（着色器、环境光照、阴影就绪）→ 3 解析选中的那盒并预渲染
-            // 每步只占主线程一次，且不与交互重叠；用户提前点开托管管理 / 调度队列时直接全部就绪
-            property int stage: 0
-            property real lastInput: Date.now()
+            // 组件异步孵化。预过滤光照与预转换网格可直接上传，索引下预热的场景随后复用。
             readonly property bool ready: arrayLoader.status === Loader.Ready
-            function poke() { lastInput = Date.now() }
-            Timer {
-                interval: 250
-                repeat: true
-                running: root.booted && arrayHost.wanted && arrayHost.stage < 3 && !sections.busy
-                onTriggered: {
-                    const idle = Date.now() - arrayHost.lastInput
-                    if (arrayHost.stage === 0 && idle > 2500) arrayHost.stage = 1
-                    else if (arrayHost.stage === 1 && arrayHost.ready && idle > 1000) { arrayHost.stage = 2; arrayHost.lastInput = Date.now() - 400; arrayLoader.item.prime() }
-                    else if (arrayHost.stage === 2 && idle > 1000) arrayHost.stage = 3
-                }
-            }
-            // 预渲染之后一直留在索引之下（被不透明的索引底色挡住）：画面静止时不重绘，几乎不占资源，
-            // 渲染目标与管线保持就绪，点开时不再卡一下
             z: showing ? 0 : -1
-            visible: ready && (showing || (stage >= 2 && !sections.busy))
+            visible: ready && (showing || warmup.running)
+            Timer { id: warmup; interval: 500 }
             Loader {
                 id: arrayLoader
                 anchors.fill: parent
                 asynchronous: true
-                active: arrayHost.wanted && (arrayHost.stage >= 1 || arrayHost.showing)
+                active: arrayHost.wanted
                 source: active ? Qt.resolvedUrl("ArchiveArray3D.qml") : ""
                 onLoaded: {
                     if (root.enhanced) root.enhanced.markLoaded()
                     item.enabled = Qt.binding(() => arrayHost.showing)
                     // 只在显示时逐帧推进；预渲染与停靠期间画面静止，不占用 CPU
                     item.active = Qt.binding(() => arrayHost.showing)
-                    item.allowSelected = Qt.binding(() => arrayHost.showing || arrayHost.stage >= 3)
+                    if (!arrayHost.showing) { warmup.restart(); item.prime() }
                 }
             }
         }

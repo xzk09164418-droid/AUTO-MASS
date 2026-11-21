@@ -19,12 +19,37 @@ FocusScope {
     // 仅离线预览使用示例；联网模式在首次读取完成前显示连接状态。
     property var api: null                  // BackendSupervisor（后端就绪时）
     property var enhanced: null             // EnhancedComponent
-    // 增强挡位 + 已装 3D 组件 + 托管管理 / 调度队列：以多列档案阵列取代标准版式
-    readonly property bool arrayMode: Theme.motion === "enhanced" && Theme.enhancedAvailable && !!d && (d.key === "scripts" || d.key === "queue")
+    // 增强挡位复用同一场景，按部门组织行列。
+    readonly property bool arrayMode: Theme.motion === "enhanced" && Theme.enhancedAvailable && !!d
     property var arrayHostItem: null        // Main.qml 里常驻的 ArchiveArray3D（未加载完时为 null）
     readonly property var arrayItem: arrayMode ? arrayHostItem : null
     readonly property bool arrayDetail: !!arrayItem && arrayItem.detailOpen
-    readonly property var arrayColumns: arrayMode ? items.map(it => ({ name: it.name, en: it.en, icon: it.icon || "", accounts: it.accounts || [], rowIcons: it.rowIcons || null, configRow: it.configRow !== false })) : []
+    readonly property var arrayColumns: {
+        if (!arrayMode) return []
+        if (!items.length) return emulatorPage ? [{name:d.zh, rows:[emulatorConfigs.empty.name]}] : []
+        if (d.key === "queue")
+            return items.map(it => ({name:it.name, en:it.en, accounts:it.accounts || [],
+                rowIcons:it.rowIcons || null, configRow:it.configRow !== false, icon:it.icon || ""}))
+        if (d.key === "scripts")
+            return items.map(it => ({uid:it.uid,name:it.name, icon:it.icon || "", rows:SD.pages(it).map(p => p.name)}))
+        return [{name:d.zh, rows:items.map(it => it.name), rowIcons:items.map(it => it.icon || "")}]
+    }
+    property bool arrayPanelUsed: false
+    property bool syncingArray: false
+    function syncArray() {
+        if (syncingArray || !opened || !arrayItem || arrayItem.mode !== d.key || d.key === "queue" || workspace.record) return
+        const a = arrayItem
+        if (!items.length) {
+            if (d.key === "scripts" && a.detailOpen) a.close()
+            return
+        }
+        const lane = a.singleColumn ? 0 : target
+        const row = a.singleColumn ? target : Math.max(0, Math.min(panel.tab, SD.pages(item).length - 1))
+        syncingArray = true
+        if (!a.singleColumn && panel.tab !== row) panel.tab = row
+        if (lane !== a.lane || row !== a.row) a.moveTo(a.cellLane + lane - a.lane, 12 + row)
+        syncingArray = false
+    }
     property bool onlineHome: false
     readonly property bool isHome: !!d && d.key === "home"
     readonly property bool showingOnlineHome: onlineHome && isHome
@@ -57,6 +82,7 @@ FocusScope {
     onItemsChanged: {
         if (!opened) return
         target = Math.min(target, Math.max(0, items.length - 1))
+        if (arrayMode) { Qt.callLater(syncArray); return }
         if (chain.introTarget === 1) { chain.items = items; chain.goTo(target, 1) }
     }
     // ── 后端接入 ──────────────────────────────────────────────────────────
@@ -573,6 +599,7 @@ FocusScope {
     function open(i, r, tileItem) {
         if (hub) { r = hub.liveTileRect(i); hub.hiddenIndex = i }
         returning = false
+        arrayPanelUsed = false
         index = i
         fetchLive(departments[i].key)
         // 记忆：回到上次停留的条目与功能分页
@@ -586,7 +613,7 @@ FocusScope {
         else morph.start(r, tileItem, false)
         revealAnim.stop(); hideAnim.stop()
         revealAnim.start()
-        chainDelay.restart()
+        if (!arrayMode) chainDelay.restart()
         forceActiveFocus()
     }
     function close() {
@@ -627,7 +654,8 @@ FocusScope {
         memory[view.d.key] = next
         // 记忆：每个条目保留自己的功能分页
         panel.tab = items[next] && items[next]._tab ? items[next]._tab : 0
-        chain.goTo(next, d)
+        if (!arrayMode) chain.goTo(next, d)
+        else syncArray()
     }
     property int dir: 1
     property var memory: ({})               // 部门 key → 上次停留的条目
@@ -641,6 +669,9 @@ FocusScope {
         if (scriptShelf.typing) return
         let k = event.key
         if (modal.shown) { if (k === Qt.Key_Escape) modal.close(); event.accepted = true; return }
+        const editor = view.Window.window?.activeFocusItem
+        if (editor && typeof editor.cursorPosition === "number" && !editor.readOnly && k !== Qt.Key_Escape) return
+        if (arrayMode && !arrayItem && k !== Qt.Key_Escape) return
         // WASD 与方向键等价
         if (k === Qt.Key_W) k = Qt.Key_Up
         else if (k === Qt.Key_S) k = Qt.Key_Down
@@ -650,12 +681,18 @@ FocusScope {
         if (arrayItem) {
             // 阵列：方向键切列 / 翻档，回车读取，ESC 先退出读取再返回索引
             if (k === Qt.Key_Escape) { if (arrayItem.detailOpen) arrayItem.close(); else close(); event.accepted = true; return }
-            if (!arrayItem.detailOpen) {
+            if (!workspace.record && (!arrayItem.detailOpen || !arrayItem.isQueue)) {
                 if (k === Qt.Key_Down) arrayItem.nav("row", 1)
                 else if (k === Qt.Key_Up) arrayItem.nav("row", -1)
-                else if (k === Qt.Key_Right) arrayItem.nav("lane", 1)
-                else if (k === Qt.Key_Left) arrayItem.nav("lane", -1)
+                else if (k === Qt.Key_Right || k === Qt.Key_Left) {
+                    const delta = k === Qt.Key_Right ? 1 : -1
+                    if (arrayItem.singleColumn && arrayDetail)
+                        panel.tab = Math.max(0, Math.min(panel.pages.length - 1, panel.tab + delta))
+                    else arrayItem.nav("lane", delta)
+                }
                 else if (k === Qt.Key_Return || k === Qt.Key_Enter) arrayItem.open()
+                else if (arrayDetail && k >= Qt.Key_1 && k < Qt.Key_1 + Math.min(9, panel.pages.length)) panel.tab = k - Qt.Key_1
+                else return
                 event.accepted = true
                 return
             }
@@ -723,8 +760,14 @@ FocusScope {
             }
             // 鼠标在档案卡上、且当前页有分页的表格：滚轮翻页，不切换条目
             if (panel.hovered && panel.scrollTable && panel.scrollTable.turnWheel(event.pixelDelta.y, event.angleDelta.y)) { event.accepted = true; return }
-            if (view.arrayItem) { if (!view.arrayItem.detailOpen) view.arrayItem.nav("row", event.angleDelta.y < 0 ? 1 : -1); return }
             const delta = event.pixelDelta.y || event.angleDelta.y
+            if (view.arrayItem) {
+                if (delta && !workspace.record && (!view.arrayItem.detailOpen || !view.arrayItem.isQueue)) {
+                    view.arrayItem.nav("row", delta < 0 ? 1 : -1)
+                    event.accepted = true
+                }
+                return
+            }
             // 在改变选中档案前丢弃溢出的输入，让录像盒与右侧档案始终指向同一项。
             if (delta && chain.queue.length + Number(chain.stepping) < 3)
                 view.select(view.target + (delta < 0 ? 1 : -1))
@@ -912,18 +955,31 @@ FocusScope {
         target: view.arrayItem
         // 读取：右侧档案卡切到对应条目；选的是账号 / 队列项行时直接停在对应分页
         function onOpened(lane, row) {
+            view.arrayPanelUsed = true
+            if (view.d.key !== "queue") { view.applyArraySelection(lane,row); return }
             view.select(lane)
             const it = view.items[lane] || {}
-            const pages = SD.pages(it)
-            const queue = view.d && view.d.key === "queue"
-            // 调度队列没有「队列配置」那一盒：每一盒都是队列项，表格翻到它所在的页
-            if (queue) view.focusQueueRow(it, row)
-            const k = pages.findIndex(p => p.name === (queue ? "队列项" : "账号" + row))
-            panel.tab = (queue || row > 0) && k >= 0 ? k : 0
-            if (queue) panel.rebuild()
+            view.focusQueueRow(it,row)
+            const k = SD.pages(it).findIndex(p => p.name === "队列项")
+            panel.tab = k >= 0 ? k : 0
+            panel.rebuild()
         }
-        function onMoved(lane, row) { if (lane !== view.target) view.select(lane) }
+        function onMoved(lane, row) {
+            if (view.d.key === "queue") { if (lane !== view.target) view.select(lane); return }
+            view.applyArraySelection(lane,row)
+        }
         function onFlownOut() { if (!view.opened) view.finishClose() }
+    }
+    function applyArraySelection(lane,row) {
+        if (syncingArray || !arrayItem || !items.length) return
+        syncingArray = true
+        select(arrayItem.singleColumn ? row : lane)
+        if (!arrayItem.singleColumn) panel.tab = row
+        syncingArray = false
+    }
+    Connections {
+        target: panel
+        function onTabChanged() { if (view.arrayDetail && view.d?.key === "scripts") view.syncArray() }
     }
     // 队列项表格：翻到选中的那一项所在的页并标出它
     function focusQueueRow(it, row) {
@@ -937,10 +993,17 @@ FocusScope {
         if (!arrayItem || !d) return
         arrayItem.mode = d.key
         arrayItem.columns = Qt.binding(() => view.arrayColumns)
-        arrayItem.reset(target)
+        arrayItem.sectionCode = d.code
+        arrayItem.emptyText = Qt.binding(() => d?.key === "scripts" ? (scriptShelf.query ? "没有匹配的脚本" : "暂无脚本") : "暂无档案")
+        arrayItem.sortShelf = sortDock
+        arrayItem.sortRecord = Qt.binding(() => signSorting && item?.sortId ? item : null)
+        arrayItem.reset(target,panel.tab)
         arrayItem.flyIn()
     }
-    onArrayItemChanged: if (opened && arrayItem) setupArray()
+    onArrayItemChanged: {
+        if (opened && arrayItem) setupArray()
+        else if (opened && !arrayMode && d) chain.open(items,d.n,target)
+    }
 
     // ── 左下：录像带串 + 访问等级 ───────────────────────────────────────────
     CassetteChain {
@@ -1083,7 +1146,7 @@ FocusScope {
             width: parent.width - 60
             height: parent.height - 40
             dept: view.d
-            item: workspace.record || view.item
+            item: workspace.record || (!view.arrayMode || view.arrayDetail || view.arrayPanelUsed ? view.item : null)
             itemIndex: view.target
             // 后端还在读取本部门数据时，档案卡停在合拢状态；读取完成（或失败）立即揭开
             saving: view.saving
@@ -1172,7 +1235,7 @@ FocusScope {
         objectName: "sortDock"
         anchors.fill: parent
         z: 6
-        visible: view.opened && !view.arrayMode
+        visible: view.opened && (!view.arrayMode || !!view.arrayItem?.singleColumn)
     }
     // 签到账号组（录像带）的排序组：放到当前选中的账号组之前 / 之后
     property var signSortGroup: ({
@@ -1181,7 +1244,7 @@ FocusScope {
         target: pt => {
             const it = view.item
             if (!it || !it.sortId) return null
-            const side = chain.insertSide(sortDock, pt)
+            const side = arrayMode && arrayItem ? arrayItem.sortSide(sortDock, pt) : chain.insertSide(sortDock, pt)
             return side ? { id: it.sortId, side: side } : null
         },
         commit: (ids, done) => call("/api/tools/sign/account/reorder", { order: ids }, r => {

@@ -1,7 +1,7 @@
 """增强挡位后台预加载自检：停在索引页，记录 0–9 秒的帧间隔，打印预加载前后最长的一帧。
 
 用法：.venv/Scripts/python.exe qt/tools/selftest_preload.py <repo> [move]
-  move：1–7 秒内持续模拟鼠标移动（用户在操作），预加载应顺延到停止操作之后。
+  move：1–7 秒内持续模拟鼠标移动，用于观察索引交互期间的呈现间隔。
 """
 import sys, time
 from pathlib import Path

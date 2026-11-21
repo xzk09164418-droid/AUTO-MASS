@@ -45,7 +45,7 @@ _preloaded: list = []
 
 
 def preload_libraries_async() -> None:
-    """增强挡位：启动时在后台线程预先映射 Qt Quick 3D 的 DLL（含 QML 插件与 glTF 导入器）。
+    """增强挡位：启动时在后台线程预先映射 Qt Quick 3D 的 DLL 与 QML 插件。
 
     之后界面真正用到 3D 时，加载插件不再在主线程上读盘、重定位，后台预加载的卡顿明显变小。
     只在已选增强挡位时调用：其它挡位不加载这些 DLL，延后删除才不会被占用。
@@ -60,8 +60,7 @@ def preload_libraries_async() -> None:
     files = sorted(base.glob("Qt6Quick3D*.dll"))
     files += [p for p in (base / "qml" / "QtQuick3D").rglob("*.dll")
               if not any(x in p.parts for x in ("Xr", "SpatialAudio", "Particles3D", "ParticleEffects", "Effects"))]
-    files += sorted((base / "plugins" / "assetimporters").glob("*.dll"))
-    skip = ("Xr", "SpatialAudio", "Particle", "Effects", "IblBaker")
+    skip = ("Xr", "SpatialAudio", "Particle", "Effects", "IblBaker", "AssetImport", "AssetUtils")
     files = [p for p in files if not any(s in p.name for s in skip)]
 
     def run() -> None:
