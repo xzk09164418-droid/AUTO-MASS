@@ -521,9 +521,11 @@ FocusScope {
                 event.accepted = true
                 return
             }
+            // 卡片顶部：滚轮切换分页
+            if (panel.visible && panel.wheelTabs(view, event.x, event.y, event.pixelDelta.y, event.angleDelta.y)) { event.accepted = true; return }
             if (panel.scripts) {
                 const dy=event.pixelDelta.y ? -event.pixelDelta.y : -event.angleDelta.y/2
-                for (const surface of [panel.tabViewport,panel.formViewport]) {
+                for (const surface of [panel.formViewport]) {
                     const at = surface.mapFromItem(view,event.x,event.y)
                     if (!surface.contains(at)) continue
                     if (surface === panel.tabViewport && surface.contentWidth>surface.width)

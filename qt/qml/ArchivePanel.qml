@@ -85,7 +85,23 @@ Item {
     signal motionChosen(string motion)      // 用户切换了动态效果挡位（记住选择；离开增强挡位时标记延后删除）
     onTabChanged: {
         if (item) item._tab = tab
-        if (scripts) Qt.callLater(tabScroll.showTab)
+        Qt.callLater(tabScroll.showTab)
+    }
+    // 鼠标在卡片顶部（编号栏与分页栏）时滚轮逐格切换分页，分页栏随之滚到当前页签，账号多也能切到
+    property real tabWheelRest: 0
+    Timer { id: tabWheelReset; interval: 250; onTriggered: panel.tabWheelRest = 0 }
+    function wheelTabs(from, x, y, pixelDelta, angleDelta) {
+        if (pages.length < 2) return false
+        const p = content.mapFromItem(from, x, y)
+        if (p.x < 0 || p.x > content.width || p.y < -16 || p.y > tabBar.y + tabBar.height) return false
+        const delta = pixelDelta ? pixelDelta / 48 : angleDelta / 120
+        if (tabWheelRest * delta < 0) tabWheelRest = 0
+        tabWheelRest += delta
+        const steps = Math.trunc(tabWheelRest)
+        tabWheelRest -= steps
+        if (steps) tab = Math.max(0, Math.min(pages.length - 1, tab - steps))
+        tabWheelReset.restart()
+        return true
     }
 
     readonly property var pages: item ? SD.pages(item) : []
@@ -848,10 +864,16 @@ Item {
                 anchors.fill: parent; clip: true
                 contentWidth: tabStrip.implicitWidth; contentHeight: height
                 boundsBehavior: Flickable.StopAtBounds
+                // 当前页签滚到分页栏中间（两侧页签露出，便于看到还有更多账号），带过渡
                 function showTab() {
                     const t=tabRep.itemAt(panel.tab)
-                    if (t) contentX=Math.max(0,Math.min(contentWidth-width,Math.min(t.x,Math.max(contentX,t.x+t.width-width))))
+                    if (!t || contentWidth <= width) return
+                    const to=Math.max(0,Math.min(contentWidth-width,t.x+t.width/2-width/2))
+                    tabGlide.stop()
+                    if (!Theme.richMotion) { contentX=to; return }
+                    tabGlide.from=contentX; tabGlide.to=to; tabGlide.start()
                 }
+                NumberAnimation { id: tabGlide; target: tabScroll; property: "contentX"; duration: 240; easing.type: Easing.OutCubic }
                 C.ScrollBar.horizontal: C.ScrollBar { height: 6; policy: tabScroll.contentWidth > tabScroll.width ? C.ScrollBar.AlwaysOn : C.ScrollBar.AlwaysOff }
                 Row {
                     id: tabStrip
