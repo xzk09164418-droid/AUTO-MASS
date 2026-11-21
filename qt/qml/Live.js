@@ -454,6 +454,12 @@ function local(g, port, vd, nav, ports) {
         m.ops = payloads.map(function (pl) { return { path: "/api/child-session/window", body: pl, done: "已发送", poll: true, when: needConn ? connected : null } })
         return m
     }
+    const modes = SD.mini(["观看模式", "画面自适应", "窗口置顶"])
+    modes.ops = ["watchMode", "smartSizing", "topmost"].map(function (key) {
+        const checked = e => !!e.desk?.hostStatus?.[key]
+        return {path:"/api/child-session/window", checked:checked, when:connected,
+            body:e => ({[key]:!checked(e)}), done:"已发送", poll:true}
+    })
     var navData = nav || { queues: [], selectedQueueId: null, controls: [] }
     function navCurrent(e) { var n = e.nav || navData; var cs = n.controls || []; return cs.filter(function (c) { return c.queueId === n.selectedQueueId })[0] || cs[0] || null }
     var navQueues = navData.queues || []
@@ -503,10 +509,7 @@ function local(g, port, vd, nav, ports) {
                 ["连接", (function () { var m = SD.mini(["建立 / 恢复连接", "注销会话"]); m.ops = [
                     { path: "/api/child-session/connect", body: {}, done: "已发送连接请求", poll: true },
                     { confirm: "将注销远程桌面会话，会话中的程序会被关闭。", path: "/api/child-session/logoff", body: {}, done: "已注销远程桌面会话", poll: true }]; return m })()],
-                ["切换", deskOps(["观看模式", "画面自适应", "窗口置顶"], [
-                    function (e) { return { watchMode: !(e.desk && e.desk.hostStatus && e.desk.hostStatus.watchMode) } },
-                    function (e) { return { smartSizing: !(e.desk && e.desk.hostStatus && e.desk.hostStatus.smartSizing) } },
-                    function (e) { return { topmost: !(e.desk && e.desk.hostStatus && e.desk.hostStatus.topmost) } }], true)],
+                ["切换", modes],
                 ["发送按键", deskOps(["Win+Tab", "Win+D"], [{ shortcut: "Win+Tab" }, { shortcut: "Win+D" }], true)]
             ])
         ], ops: { "刷新": { get: true, path: "/api/child-session/status", poll: true, done: "已刷新" } }, actions: ["刷新"] },
@@ -599,6 +602,19 @@ function sign(tools, accounts) {
 }
 
 // ── 08 历史记录 ───────────────────────────────────────────────────────
+function replayArchive(response) {
+    const ready = response?.code === 200 && Array.isArray(response.replays)
+    const rows = ready ? response.replays.map(record => {
+        const play = SD.mini(["播放"])
+        play.ops = [{replayPath:record.filePath, off:!record.filePath}]
+        return [record.failedAt, record.scriptName || "—", record.userName || "—", record.reason || "—", play]
+    }) : []
+    const table = SD.table("失败回放", ["失败时间", "托管", "账号", "原因", "操作"], rows, [1.6,1.3,1,1.7,0.8])
+    return {name:"失败回放", en:"REPLAY ARCHIVE", live:true, api:"GET /api/history/replays",
+        blocks:rows.length ? [table] : [SD.note(ready ? "暂无失败回放。" : (response?.message || "读取失败，请刷新重试。"), true)],
+        ops:{"刷新":{refreshReplays:true}}, actions:["刷新"]}
+}
+
 function history(resp, filter) {
     var data = resp && resp.data ? resp.data : {}
     var dates = Object.keys(data).sort().reverse()
@@ -694,30 +710,54 @@ function launchCard(launch) {
     var power = { c: "sel", opts: SD.POWER, v: idx(POWER_EN, launch.power), onPick: function (i) { return { path: "/api/dispatch/set/power", body: { signal: POWER_EN[i] }, done: "完成后：" + SD.POWER[i] } } }
     rows.push(["完成后", power, "选择即生效"])
     var blocks = [SD.kv("发起任务", rows)]
-    // 账号范围：每个脚本一张表，只显示所选脚本的
-    var scopes = {}
-    Object.keys(launch.users).forEach(function (sid) {
-        var list = launch.users[sid]
-        if (!list.length) return
-        var toggles = list.map(function () { return SD.tog(true) })
-        scopes[sid] = { list: list, toggles: toggles }
-        var t = SD.table("账号范围", ["账号", "本次运行"], list.map(function (u, i) { return [u.label, toggles[i]] }), [3, 1])
-        t.pageRows = 6
-        t.show = function () { return picked().value === sid }
-        blocks.push(t)
+    // 每个任务独立保存勾选草稿。同一脚本出现在不同队列中时，各队列互不影响。
+    const scopes = {}
+    tasks.forEach(option => {
+        const id = option.value
+        const scripts = launch.queueScripts[id] || [option]
+        const groupPicker = SD.sel(scripts.map(s => s.label), 0)
+        const groups = scripts.map(script => {
+            const users = (launch.users[script.value] || []).map(user => ({
+                id:user.value, name:user.label, reason:user.reason, toggle:user.reason ? null : SD.tog(true)
+            }))
+            return {id:script.value, users:users}
+        })
+        if (scripts.length > 1) rows.push(["账号所属托管", groupPicker, "", () => picked().value === id])
+        scopes[id] = {groups:groups, picker:groupPicker}
     })
+    function scope() { return scopes[picked().value] }
+    function currentGroup() { return scope().groups[scope().picker.v] }
+    function scopeError() { return launch.scopeErrors?.[picked().value] || "" }
+    const table = SD.table("本次运行账号", ["账号", "本次运行"], [], [3, 1])
+    table.pageRows = 4
+    table.rowSet = () => picked().value + "/" + (currentGroup()?.id || "")
+    table.rowsFn = () => {
+        const group = currentGroup()
+        if (scopeError()) return [[scopeError(), ""]]
+        if (!group?.users.length) return [["暂无账号", ""]]
+        return group.users.map(u => [u.name, u.toggle || u.reason])
+    }
+    blocks.push(table)
     function body() {
-        var p = picked(), b = { taskId: p.value, mode: valueOf(mode) }
-        var r = resumes[p.value]
+        const id = picked().value, b = {taskId:id, mode:valueOf(mode)}
+        const r = resumes[id]
         if (r && b.mode === "AutoProxy" && r.spec.v > 0) b.resumeFromScriptId = r.opts[r.spec.v - 1].value
-        var sc = scopes[p.value]
-        if (sc) {
-            var ids = sc.list.filter(function (u, i) { return !!sc.toggles[i].v }).map(function (u) { return u.value })
-            if (ids.length < sc.list.length) b.userIds = ids
-        }
+        const queueUsers = {}
+        scope().groups.forEach(group => {
+            const available = group.users.filter(u => u.toggle)
+            const ids = available.filter(u => u.toggle.v).map(u => u.id)
+            if (ids.length === available.length) return
+            if (isQueue()) queueUsers[group.id] = ids
+            else b.userIds = ids
+        })
+        if (Object.keys(queueUsers).length) b.queueUserIds = queueUsers
         return b
     }
-    function anyUser() { var sc = scopes[picked().value]; return !sc || sc.toggles.some(function (t) { return !!t.v }) }
+    function anyUser() {
+        if (scopeError()) return false
+        const groups = scope().groups
+        return !groups.some(g => g.users.some(u => u.toggle)) || groups.some(g => g.users.some(u => u.toggle?.v))
+    }
     return { name: "发起任务", en: "LAUNCH", live: true, api: api, blocks: blocks,
         ops: { "开始": { confirm: "将按所选任务与模式开始运行。", path: "/api/dispatch/start", body: body, reload: true, done: "已开始运行", when: anyUser } },
         actions: ["开始"] }

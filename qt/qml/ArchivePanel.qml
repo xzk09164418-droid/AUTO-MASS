@@ -255,15 +255,22 @@ Item {
         property bool primary: false
         property bool danger: false
         property bool small: false
+        property bool stateButton: false
+        property bool checked: false
+        property int entryEdge: Qt.LeftEdge
+        readonly property color stateFill: checked ? "#101010" : "#ffffff"
+        readonly property color stateText: checked ? "#ffffff" : "#101010"
         signal clicked()
         implicitWidth: btnText.implicitWidth + (small ? 20 : 40)
         implicitHeight: small ? 28 : 40
-        color: primary ? (btnMouse.containsMouse ? Theme.accent : Theme.ink) : "transparent"
+        color: stateButton ? stateFill : primary ? (btnMouse.containsMouse ? Theme.accent : Theme.ink) : "transparent"
         border.width: 1.5
-        border.color: btnMouse.containsMouse ? (danger ? Theme.error : Theme.accent) : (primary ? Theme.ink : Theme.ink)
+        border.color: stateButton ? "#101010" : btnMouse.containsMouse ? (danger ? Theme.error : Theme.accent) : Theme.ink
         activeFocusOnTab: true
         Accessible.role: Accessible.Button
         Accessible.name: text
+        Accessible.checkable: stateButton
+        Accessible.checked: stateButton && checked
         Keys.onReturnPressed: clicked()
         Keys.onSpacePressed: clicked()
         Rectangle { anchors.fill: parent; anchors.margins: -4; color: "transparent"; border.width: 2; border.color: Theme.accent; visible: btn.activeFocus }
@@ -271,13 +278,43 @@ Item {
             id: btnText
             anchors.centerIn: parent
             text: btn.text
-            color: btn.primary ? (btnMouse.containsMouse ? "#ffffff" : Theme.paper) : btnMouse.containsMouse ? (btn.danger ? Theme.error : Theme.accent) : Theme.ink
+            color: btn.stateButton ? btn.stateText : btn.primary ? (btnMouse.containsMouse ? "#ffffff" : Theme.paper) : btnMouse.containsMouse ? (btn.danger ? Theme.error : Theme.accent) : Theme.ink
             font.family: Theme.font
             font.pixelSize: btn.small ? 12 : 14
             font.weight: Font.Bold
             font.letterSpacing: btn.small ? 1 : 2
         }
-        MouseArea { id: btnMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: btn.clicked() }
+        Item {
+            anchors.fill: parent; anchors.margins: 1.5
+            visible: btn.stateButton
+            Rectangle {
+                id: wipe
+                clip: true; color: btn.stateText
+                readonly property bool horizontal: btn.entryEdge === Qt.LeftEdge || btn.entryEdge === Qt.RightEdge
+                property real progress: btn.stateButton && btnMouse.containsMouse && btn.enabled ? 1 : 0
+                Behavior on progress { enabled: Theme.richMotion; NumberAnimation { duration: 155; easing.type: Easing.OutCubic } }
+                width: horizontal ? parent.width * progress : parent.width
+                height: horizontal ? parent.height : parent.height * progress
+                x: btn.entryEdge === Qt.RightEdge ? parent.width - width : 0
+                y: btn.entryEdge === Qt.BottomEdge ? parent.height - height : 0
+                Text {
+                    x: (wipe.parent.width - width) / 2 - wipe.x
+                    y: (wipe.parent.height - height) / 2 - wipe.y
+                    text: btn.text; font: btnText.font; color: btn.stateFill
+                }
+            }
+        }
+        MouseArea {
+            id: btnMouse
+            anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+            onEntered: {
+                if (!btn.stateButton) return
+                const dx = mouseX / width - 0.5, dy = mouseY / height - 0.5
+                btn.entryEdge = Math.abs(dx) > Math.abs(dy)
+                    ? (dx < 0 ? Qt.LeftEdge : Qt.RightEdge) : (dy < 0 ? Qt.TopEdge : Qt.BottomEdge)
+            }
+            onClicked: btn.clicked()
+        }
     }
 
     // ── 控件 ────────────────────────────────────────────────────────────
@@ -285,9 +322,7 @@ Item {
         id: tg
         property var spec
         objectName: "tog:" + (spec && spec.key ? spec.key : "")
-        property bool local: spec.v
-        onLocalChanged: if (spec.v !== local) { spec.v = local; spec.dirty = true; panel.edits++ }
-        readonly property bool on: spec.x ? panel.excl === spec.x : local
+        readonly property bool on: { panel.edits; return spec.x ? panel.excl === spec.x : !!spec.v }
         implicitWidth: 72
         implicitHeight: 24
         activeFocusOnTab: true
@@ -305,7 +340,7 @@ Item {
                     if (sp.x) { const v = panel.excl === sp.x; if (sp.v !== v) { sp.v = v; sp.dirty = true } }
                 })
                 panel.edits++
-            } else local = !local
+            } else { spec.v = !spec.v; spec.dirty = true; panel.edits++ }
         }
         Keys.onSpacePressed: flip()
         Keys.onReturnPressed: flip()
@@ -550,6 +585,10 @@ Item {
                     Btn {
                         required property string modelData
                         required property int index
+                        readonly property var op: ctl.spec.ops?.[index]
+                        stateButton: !!op?.checked
+                        checked: stateButton && op.checked(panel.env)
+                        objectName: stateButton ? "desktopToggle:" + text : ""
                         text: modelData
                         small: true
                         enabled: !(ctl.spec.ops && Live.opOff(ctl.spec.ops[index], panel.runLocked, panel.env))
@@ -634,12 +673,18 @@ Item {
         property var b
         // 长表按页显示（与主页任务对象相同的刻度翻页条），不滚动：鼠标在档案卡上时滚轮翻页
         // rowsFn：行随 panel.env 即时刷新（如模拟器实例状态）
-        readonly property var all: b.rowsFn ? b.rowsFn(panel.env || {}) : (b.all || b.rows)
+        readonly property string rowSet: { panel.edits; return b.rowSet ? b.rowSet() : "" }
+        onRowSetChanged: pager.pageIndex = 0
+        readonly property var all: { rowSet; return b.rowsFn ? b.rowsFn(panel.env || {}) : (b.all || b.rows) }
         readonly property int pageRows: b.pageRows || 9
         readonly property int pages: Math.max(1, Math.ceil(all.length / pageRows))
         readonly property int off: pager.pageIndex * pageRows
         readonly property var rows: all.slice(off, off + pageRows)
         function turnWheel(pixelDelta, angleDelta) { return pages > 1 && pager.turnWheel(pixelDelta, angleDelta) }
+        onPagesChanged: {
+            if (pages > 1 && visible) panel.scrollTable = tb
+            else if (panel.scrollTable === tb) panel.scrollTable = null
+        }
         Component.onCompleted: {
             pager.pageIndex = Math.min(b.page || 0, pages - 1)
             if (pages > 1) panel.scrollTable = tb
