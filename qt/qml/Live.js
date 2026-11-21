@@ -422,7 +422,12 @@ function settings(g, version, qq) {
                   "试存回放": { path: "/api/setting/obs/save", body: {}, show: true, done: "回放已保存", when: function () { return !!valueOf(replayOn) } },
                   "清空密码": { confirm: "清空后将按无密码连接 OBS。", path: "/api/setting/update", body: { data: { Replay: { Password: "" } } }, reload: true, done: "OBS 密码已清空", off: !R.PasswordConfigured, when: function () { return !!valueOf(replayOn) } } },
           actions: ["保存", "检查连接", "试存回放", "清空密码"] },
-        { name: "高级与关于", en: "ADVANCED", live: true, api: "POST /api/setting/backup", blocks: [SD.kv("关于", [["版本", version || "—"], ["字体", "MiSans（小米）· 许可见 NOTICE"], ["视觉参考", "LBEILC / RhineLabUI（MIT）"]])], actions: [] }
+        { name: "高级与关于", en: "ADVANCED", live: true, api: "GET /api/setting/backup", blocks: [
+            SD.kv("数据与日志", [["数据备份", "导出配置、数据与历史记录的压缩包"], ["日志", "打包运行日志，反馈问题时附上"]]),
+            SD.kv("关于", [["版本", version || "—"], ["字体", "MiSans（小米）· 许可见 NOTICE"], ["视觉参考", "LBEILC / RhineLabUI（MIT）"]]),
+            SD.note("导出的文件保存在「下载」文件夹，完成后自动打开所在位置。", true)
+          ], ops: { "导出数据备份": { exportBackup: true, when: function (e) { return !e.exporting } }, "打包日志": { exportLogs: true, when: function (e) { return !e.exporting } } },
+          actions: ["导出数据备份", "打包日志"] }
     ]
 }
 function local(g, port, vd, nav) {

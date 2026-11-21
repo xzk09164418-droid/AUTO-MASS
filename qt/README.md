@@ -55,6 +55,7 @@ uv pip install --python .venv/Scripts/python.exe -r qt/requirements.txt
 | `qml/ArchiveArray3D.qml` / `shaders/` / `IconDisc.qml` | 增强挡位的多列档案阵列（托管管理、调度队列）；阵列部件着色器；程序图标唱片 |
 | `qml/BackendPanel.qml` | 后端启动中 / 失败面板 |
 | `qml/Ledger.qml` | 底部刻度栏 |
+| `WEB-PARITY.md` | 与网页版逐页的交互对照（含各控件的可用条件） |
 | `qml/PageScale.qml` | 刻度翻页条：主页任务对象与各部门的长表格超出一页时用它翻页，不滚动 |
 
 ## 一级界面

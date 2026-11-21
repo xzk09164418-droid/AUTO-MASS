@@ -348,6 +348,23 @@ FocusScope {
             })
             return
         }
+        if (op.exportBackup) {
+            env = Object.assign({}, env, { exporting: true })
+            toast.show("正在导出数据备份…")
+            api.exportBackup(text => {
+                env = Object.assign({}, env, { exporting: false })
+                let r = {}; try { r = JSON.parse(text) } catch (e) {}
+                if (r.ok) { toast.show("已导出：" + r.path); fileLocations.openFolder(r.path) }
+                else toast.show("导出失败：" + (r.message || ""))
+            })
+            return
+        }
+        if (op.exportLogs) {
+            const path = fileLocations.exportLogs()
+            if (path) { toast.show("已打包日志：" + path); fileLocations.openFolder(path) }
+            else toast.show("打包日志失败")
+            return
+        }
         if (op.historyLog) { logViewer.open(op.historyLog, op.title || ""); return }
         if (op.captureHotkey) {
             const field = op.captureHotkey
