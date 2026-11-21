@@ -780,7 +780,7 @@ function dispatchCenter(snapshot, queueNames, launch) {
     if (!tasks.length) return head.concat([{ name: "调度空闲", en: "IDLE", live: true, api: api, blocks: [SD.kv("任务", [["状态", [WAIT, "没有运行中的任务"]], ["定时关联脚本", String((snapshot.scheduledScripts || []).length) + " 个"]])], ops: { "刷新": { reload: true } }, actions: ["刷新"] }])
     function title(t, i) { return t.queueId && queueNames[t.queueId] ? queueNames[t.queueId] : (t.mode === "ScriptConfig" ? "脚本设置" : t.mode === "Update" ? "更新" : "任务 " + String(i + 1).padStart(2, "0")) }
     // 总览：所有同时运行的任务并排列出，一眼看到各自进行到哪
-    var overview = { name: "总览", en: "OVERVIEW · " + tasks.length + " RUNNING", live: true, api: api, blocks: [
+    var overview = { runtimeKey: "scheduler:overview", name: "总览", en: "OVERVIEW · " + tasks.length + " RUNNING", live: true, api: api, blocks: [
         SD.stats("运行概况", [["运行中", String(tasks.filter(function (t) { return !t.stopping }).length)], ["正在停止", String(tasks.filter(function (t) { return t.stopping }).length)],
             ["循环队列", String(tasks.filter(function (t) { return t.isCycle }).length)], ["定时关联脚本", String((snapshot.scheduledScripts || []).length)]]),
         SD.table("任务", ["队列 / 任务", "当前脚本", "进度", "状态"], tasks.map(function (t, i) {

@@ -212,7 +212,8 @@ FocusScope {
             setLive("scheduler", list)
             if (previous) {
                 select(position < 0 ? 1 : position)
-                panel.tab = position < 0 ? 0 : Math.min(previousTab, list[position].tabs.length - 1)
+                // 总览与任务共用稳定刷新，但总览没有页签。
+                panel.tab = position < 0 ? 0 : Math.min(previousTab, (list[position].tabs?.length || 1) - 1)
             }
         })
     }
