@@ -32,7 +32,8 @@ uv pip install --python .venv/Scripts/python.exe -r qt/requirements.txt
   Windows x64 的 D3D11 首次启动使用与 Qt 版本匹配的预编译材质和字节码。材质或着色器更新后，在安装了增强组件的 Windows x64 环境运行 `python qt/tools/bake_array_shaders.py`，并更新 `qt/main.py` 中的缓存修订号。
   Qt Quick 3D 在 `PySide6-Addons` 里（下载约 161 MB，安装后约 420 MB），**默认不安装**：在设置里选「增强」时二次确认后下载（版本与 PySide6 一致）。
   切回其它挡位时不立即删除，只写入 `config/QtEnhancedRemove.flag`；退出程序、下次启动加载完毕并空闲后在后台删除；删除前切回增强则取消。
-- 深色主题下增强阵列的录像带为炭黑色，只有选中抬起的那盒保持浅色；阵列上的文字区铺有柔边衬底。
+- 深色主题下增强阵列的录像带为炭黑色，选中抬起的那盒保持浅色并作为光源（暖色点光 + 自发光），映亮相邻几盒；阵列上的文字区铺有柔边衬底。
+- 每盒内部的漫射板按格位（列、行）固定随机一种档案图案（点阵 / 斜纹 / 同心环 / 条码 / 电路 / 准星，部分带橙色标块），抽出时随一道橙色扫描线自下而上显现（`qml/shaders/arraypart_pattern.*`）。
 - 托管管理、调度队列、调度中心的录像带唱片取所选脚本启动程序（exe）的图标；调度中心取任务当前运行（否则第一个）脚本。
 - 选择的挡位保存在 `config/QtClient.json`，下次启动沿用（`--motion` 可临时指定）。
 

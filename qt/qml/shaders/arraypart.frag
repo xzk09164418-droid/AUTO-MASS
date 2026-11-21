@@ -18,4 +18,6 @@ void MAIN()
     ATTENUATION_DISTANCE = mix(uAttenuationDistance,8.0,vClarity);
     CLEARCOAT_AMOUNT = uClearcoat;
     CLEARCOAT_ROUGHNESS = uClearcoatRoughness;
+    // 深色主题：抽出的那盒自身发出柔光（uGlow 只在深色下非 0）
+    EMISSIVE_COLOR = uRaisedColor * vRaised * uGlow;
 }

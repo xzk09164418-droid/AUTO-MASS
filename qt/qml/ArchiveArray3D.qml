@@ -368,6 +368,17 @@ Item {
                             property real coverage: detailNode.amount
                         }
                     }
+                    // 深色主题：抽出的那盒就是光源，暖光随抽出量渐亮、按距离衰减，映亮相邻几盒（参考 Rhine Music Database 的夜间光场）
+                    PointLight {
+                        visible: Theme.dark && detailNode.current
+                        position: Qt.vector3d(0, 1.9, 0)
+                        color: "#ffb877"
+                        brightness: 4.5 * detailNode.amount
+                        constantFade: 1
+                        linearFade: 0
+                        quadraticFade: 0.35
+                        castsShadow: false
+                    }
                     DetailPart { source: "../assets3d/cassette/Printed_Label.mesh"; tint: "#eae5dc"; rough: 0.65 }
                     DetailPart { source: "../assets3d/cassette/Case_Engraving.mesh"; tint: "#918a80"; metal: 0.12 }
                     DetailPart { source: "../assets3d/cassette/Case_Engraving_Highlight.mesh"; tint: "#e6ded4"; metal: 0.16 }
@@ -418,6 +429,7 @@ Item {
         property real uClearcoat: 0
         property real uClearcoatRoughness: 0
         property real uGradient: 0
+        property real uGlow: 0                  // 抽出时的自发光强度（深色主题）
         property real uTime: root.clock
         property vector4d uSelected: root.selectedCell
         property vector3d uRaisedColor: uColor
@@ -444,12 +456,24 @@ Item {
         id: matShell
         uRaisedColor: root.lin(Theme.dark ? "#d8d1c7" : "#fffdfa")
         // 深色主题：外壳为炭黑，选中抬起的那盒仍混到 uRaisedColor（浅暖色）
+        uGlow: Theme.dark ? 0.18 : 0
         uColor: root.lin(Theme.dark ? "#30363a" : "#fff7ed"); uRoughness: 0.28; uTransmission: 0.3; uThickness: 0.12
         uAttenuation: root.lin(Theme.dark ? "#22282b" : "#eee6df"); uAttenuationDistance: 2; uClearcoat: 0.3; uClearcoatRoughness: 0.25; uGradient: 1
     }
     // 其余部件不透光：用不写透射的着色器，才会画进屏幕纹理、透过磨砂外壳显出来
     PartMaterial { id: matEdges; uRaisedColor: root.lin(Theme.dark ? "#c9c0b6" : "#f0e7df"); fragmentShader: "shaders/arraypart_opaque.frag"; uColor: root.lin(Theme.dark ? "#272c2f" : "#fff5e9"); uRoughness: 0.38; uMetalness: 0.02 }
-    PartMaterial { id: matDiffuser; uRaisedColor: root.lin("#e2dad4"); fragmentShader: "shaders/arraypart_opaque.frag"; uColor: root.lin(Theme.dark ? "#3a3129" : "#806447"); uRoughness: 0.7 }
+    // 漫射板：每盒按格位随机一种内部图案，抽出时随橙色扫描线自下而上显现
+    PartMaterial {
+        id: matDiffuser
+        uRaisedColor: root.lin("#e2dad4")
+        vertexShader: "shaders/arraypart_pattern.vert"; fragmentShader: "shaders/arraypart_pattern.frag"
+        uColor: root.lin(Theme.dark ? "#3a3129" : "#806447"); uRoughness: 0.7
+        property vector3d uPatternColor: root.lin("#4a4036")
+        property vector3d uAccentColor: root.lin("#e8701f")
+        property vector3d uScanColor: root.lin("#ff8a3a")
+        property real uPatternAmount: 1
+        uGlow: Theme.dark ? 0.3 : 0
+    }
     PartMaterial { id: matIndex; uRaisedColor: root.lin("#e4d6c5"); fragmentShader: "shaders/arraypart_opaque.frag"; uColor: root.lin(Theme.dark ? "#4a4741" : "#e4d6c5"); uRoughness: 0.52; uMetalness: 0.05 }
     PartMaterial { id: matFasteners; fragmentShader: "shaders/arraypart_opaque.frag"; uColor: Qt.vector3d(0.58, 0.6, 0.61); uRoughness: 0.19; uMetalness: 0.82 }
     // ── 实例表：与演示基线相同的范围（左右各 3 列、前后各 18 行，约 259 盒）。
