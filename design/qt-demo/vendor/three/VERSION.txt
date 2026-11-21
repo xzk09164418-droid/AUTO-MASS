@@ -1,0 +1,2 @@
+three 0.184.0
+Subset for retained Qt art reference demos. MIT license in LICENSE.

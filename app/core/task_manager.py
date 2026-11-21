@@ -64,15 +64,7 @@ from app.utils import LazyProxy, get_logger
 from app.utils.constants import UTC4
 from app.utils.network_policy import require_network_feature
 
-from .config import (
-    BAAHConfig,
-    Config,
-    GeneralConfig,
-    MaaConfig,
-    MaaEndConfig,
-    MaaFWConfig,
-    SrcConfig,
-)
+from .config import Config, GeneralConfig
 from .queue_control import QueueControl, QueueControlChanged
 from .queue_cycle import (
     SUCCESS_USER_STATUSES,
@@ -225,21 +217,12 @@ def _is_relative_src_root(path: Path | str, parent: Path | str) -> bool:
 def _exclusive_resources(
     script_config: object,
 ) -> tuple[tuple[Path, ...], str | None]:
-    roots: tuple[Path, ...] = ()
-    if isinstance(script_config, (MaaConfig, SrcConfig, MaaEndConfig)):
-        raw = str(script_config.get("Info", "Path") or "").strip()
-        roots = (Path(raw),) if raw else ()
-    return roots, _emulator_key(script_config)
+    # 通用脚本不独占安装目录，只按模拟器实例互斥
+    return (), _emulator_key(script_config)
 
 
 def _emulator_key(script_config: object) -> str | None:
-    if isinstance(script_config, (MaaConfig, SrcConfig, MaaFWConfig, BAAHConfig)):
-        emulator_id = script_config.get("Emulator", "Id")
-        index = script_config.get("Emulator", "Index")
-    elif isinstance(script_config, MaaEndConfig):
-        emulator_id = script_config.get("Game", "EmulatorId")
-        index = script_config.get("Game", "EmulatorIndex")
-    elif isinstance(script_config, GeneralConfig):
+    if isinstance(script_config, GeneralConfig):
         if not script_config.get("Game", "Enabled") or (
             script_config.get("Game", "Type") != "Emulator"
         ):
@@ -407,23 +390,6 @@ class TaskInfo(TaskItem):
     ) -> list[str]:
         if script is None or user is None:
             return []
-        try:
-            script_config = Config.ScriptConfig[uuid.UUID(script.script_id)]
-        except (KeyError, ValueError):
-            script_config = None
-        if isinstance(script_config, MaaFWConfig):
-            from app.task.MaaFW.tools.embedded.history_paths import (
-                maafw_history_log_path,
-            )
-
-            return [
-                str(
-                    maafw_history_log_path(user.name, start, script.name).with_suffix(
-                        ".json"
-                    )
-                )
-                for start in user.log_record
-            ]
         return [
             str(
                 Config.build_history_log_path(

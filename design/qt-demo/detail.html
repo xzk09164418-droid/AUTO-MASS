@@ -1,0 +1,433 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>三级档案详情演示</title>
+<!--
+  三级界面演示：原样加载 index.html（不改动它），在其上注入「档案详情」层与全局检索。
+  视觉参考 LBEILC/RhineLabUI（MIT）的档案详情页、解密扫线、滚动数字与检索弹层。
+  需从仓库根目录以 http 打开（index.html 的 importmap 用了 ./vendor/... 绝对路径）。
+-->
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #e6e3df; }
+  #f { position: fixed; inset: 0; width: 100%; height: 100%; border: 0; }
+  #hint { position: fixed; left: 16px; bottom: 16px; max-width: 420px; padding: 12px 40px 12px 16px; background: #0b0c0b; color: #f6f4f1;
+    font: 13px/1.6 'AUTO-MAS MiSans', 'Microsoft YaHei', system-ui, sans-serif; letter-spacing: .04em; box-shadow: 0 10px 30px rgba(0,0,0,.25); z-index: 2; }
+  #hint b { color: #e8701f; font-weight: 700; }
+  #hint button { position: absolute; right: 8px; top: 8px; width: 24px; height: 24px; border: 0; background: none; color: #f6f4f1; font-size: 16px; cursor: pointer; }
+</style>
+</head>
+<body>
+<iframe id="f" src="index.html" title="AUTO-MAS 档案终端演示"></iframe>
+<div id="hint"><b>三级档案详情</b>：进入任一二级界面，点表格里的某一行，或点「查看日志 / 编辑托管 / 管理账号」等按钮；任何界面按 <b>Ctrl+K</b> 全局检索。<button type="button" aria-label="关闭提示" onclick="this.parentNode.remove()">×</button></div>
+<script>
+const frame = document.getElementById('f')
+frame.addEventListener('load', () => {
+  try { install(frame.contentWindow) } catch (err) { console.error('注入失败：需以 http 从同源打开', err) }
+})
+
+function install(w) {
+  const d = w.document
+  const stage = d.getElementById('stage')
+  if (!stage || d.getElementById('xd')) return
+  const G = name => { try { return w.eval(name) } catch { return undefined } }
+  const $ = s => d.querySelector(s)
+  const strip = html => { const t = d.createElement('div'); t.innerHTML = String(html); return t.textContent.trim() }
+  const pad = n => String(n).padStart(2, '0')
+  const reduced = w.matchMedia('(prefers-reduced-motion: reduce)').matches
+
+  // ───────── 样式 ─────────
+  const css = d.createElement('style')
+  css.textContent = `
+  #s-panel tbody tr { cursor: pointer; }
+  #s-panel tbody tr:hover td { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+  #s-panel tbody tr:hover td.n { color: var(--accent); }
+  .xr { display: inline-flex; overflow: hidden; vertical-align: top; height: 1.15em; line-height: 1.15em; }
+  .xr .d { display: inline-flex; flex-direction: column; transition: transform .46s cubic-bezier(.25,.9,.2,1); }
+  .xr .d span, .xr .c { display: block; height: 1.15em; text-align: center; }
+
+  #xd { position: absolute; inset: 0; z-index: 40; opacity: 0; pointer-events: none; transition: opacity .18s ease;
+    background: color-mix(in srgb, var(--bg) 90%, transparent); backdrop-filter: blur(10px); }
+  #xd.open { opacity: 1; pointer-events: auto; }
+  #xd .cap { position: absolute; left: 80px; top: 64px; font-size: 13px; font-weight: 700; letter-spacing: .3em; color: var(--muted); }
+  #xd .cap .a { color: var(--accent); margin-right: 14px; }
+  #xd .cap b { color: var(--ink); }
+  #xd .close { position: absolute; right: 80px; top: 52px; }
+
+  .xd-wrap { position: absolute; left: 110px; top: 210px; width: 720px; height: 560px; perspective: 1600px; }
+  .xd-doc { position: absolute; inset: 0; transform-style: preserve-3d; opacity: 0;
+    transform: translate(-220px, 160px) rotateY(48deg) rotateX(10deg) scale(.72);
+    transition: transform .42s cubic-bezier(.2,.8,.2,1), opacity .2s ease; }
+  #xd.open .xd-doc { opacity: 1; transform: rotateY(14deg) rotateX(6deg); }
+  .xd-glass { position: absolute; inset: 0; overflow: hidden; border: 1px solid rgba(255,255,255,.85);
+    background: linear-gradient(135deg, rgba(255,255,255,.72), rgba(255,255,255,.2) 70%);
+    box-shadow: 0 60px 80px -36px rgba(40,36,30,.35), inset 0 0 0 1px rgba(170,165,154,.35); }
+  .xd-glass::before { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 46px; border-bottom: 1px solid var(--hair);
+    background: repeating-linear-gradient(90deg, transparent 0 22px, rgba(170,165,154,.25) 22px 23px); }
+  .xd-glass .flag { position: absolute; left: 34px; top: -1px; width: 12px; height: 24px; background: var(--accent); }
+  .xd-glass .head { position: absolute; left: 64px; top: 14px; font-size: 12px; font-weight: 700; letter-spacing: .3em; color: var(--muted); }
+  .xd-wall { position: absolute; left: 0; right: 0; top: 100%; height: 28px; transform-origin: top; transform: rotateX(-90deg);
+    background: linear-gradient(rgba(170,165,154,.5), transparent); }
+  .xd-sheet { position: absolute; left: 40px; right: 40px; top: 70px; bottom: 60px; overflow: hidden;
+    font: 14px/26px 'Cascadia Mono', Consolas, var(--font); white-space: pre; color: var(--ink); }
+  .xd-sheet .t { color: var(--muted); } .xd-sheet .h { color: var(--accent); font-weight: 700; }
+  .xd-sheet .ok { color: #55785a; } .xd-sheet .er { color: #b6453c; } .xd-sheet .wa { color: #b8752c; }
+  .xd-sheet .hl { background: color-mix(in srgb, var(--accent) 16%, transparent); }
+  .xd-sheet.frost { filter: blur(5px); opacity: .5; }
+  .xd-sheet.clear { clip-path: polygon(0 0, var(--p, 130%) 0, calc(var(--p, 130%) - 18%) 100%, 0 100%); }
+  .xd-sweep { position: absolute; top: -30px; bottom: -30px; left: var(--p, 130%); width: 2px; background: var(--accent);
+    box-shadow: 0 0 16px 2px var(--accent); transform: skewX(-17deg); opacity: 0; }
+  .xd-doc.sweeping .xd-sweep { opacity: 1; }
+  .xd-rings { position: absolute; right: 34px; bottom: 30px; width: 150px; height: 150px; opacity: .16; color: var(--ink); }
+  .xd-stamp { position: absolute; left: 40px; bottom: 22px; font-size: 12px; letter-spacing: .28em; color: var(--muted); }
+  .xd-stamp b { color: var(--ink); }
+
+  .xd-info { position: absolute; left: 960px; top: 170px; width: 860px; }
+  .xd-info > * { opacity: 0; transform: translateY(12px); transition: opacity .3s ease, transform .45s cubic-bezier(.2,.8,.2,1); }
+  #xd.open .xd-info > * { opacity: 1; transform: none; }
+  .xd-meta0 { font-size: 12px; font-weight: 700; letter-spacing: .24em; color: var(--muted); display: flex; gap: 18px; }
+  .xd-meta0 .a { color: var(--accent); }
+  .xd-code { font-size: 72px; line-height: 84px; font-weight: 700; letter-spacing: 2px; margin-top: 10px; font-variant-numeric: tabular-nums; }
+  .xd-title { font-size: 34px; font-weight: 700; letter-spacing: .06em; }
+  .xd-sub { font-size: 13px; letter-spacing: .3em; color: var(--muted); margin-top: 8px; }
+  .xd-grid { display: grid; grid-template-columns: repeat(3, 1fr); border-top: 2px solid var(--ink); border-bottom: 1px solid var(--hair); margin-top: 26px; }
+  .xd-grid div { padding: 14px 0; min-width: 0; }
+  .xd-grid div + div { border-left: 1px solid var(--hair); padding-left: 20px; }
+  .xd-grid .k { font-size: 12px; letter-spacing: .24em; color: var(--muted); font-weight: 700; }
+  .xd-grid .v { font-size: 22px; font-weight: 600; margin-top: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .xd-tabs { display: flex; gap: 36px; margin-top: 28px; position: relative; border-bottom: 1px solid var(--hair); }
+  .xd-tabs button { background: none; border: 0; padding: 0 0 12px; min-height: 44px; font: 700 15px var(--font); letter-spacing: .16em; color: var(--muted); cursor: pointer; }
+  .xd-tabs button.on { color: var(--ink); }
+  .xd-tabs .ul { position: absolute; bottom: -1px; height: 2px; background: var(--ink); transition: left .18s ease, width .18s ease; }
+  .xd-pane { height: 300px; overflow: auto; padding-top: 14px; font-size: 15px; transition: opacity .15s; }
+  .xd-pane.fade { opacity: 0; }
+  .xd-pane .row { display: flex; gap: 18px; padding: 9px 0; border-bottom: 1px dashed var(--hair); }
+  .xd-pane .row .t { width: 120px; flex: none; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .xd-pane .row.mono { font: 13px 'Cascadia Mono', Consolas, var(--font); }
+  .xd-pane .dot { display: inline-block; width: 8px; height: 8px; margin-right: 10px; background: #55785a; }
+  .xd-pane .dot.err { background: #b6453c; } .xd-pane .dot.off { background: var(--hair); }
+  .xd-acts { display: flex; gap: 12px; margin-top: 22px; }
+  .xd-acts .btn.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+  #xs { position: absolute; inset: 0; z-index: 45; background: rgba(11,12,11,.2); opacity: 0; pointer-events: none; transition: opacity .2s ease; }
+  #xs.open { opacity: 1; pointer-events: auto; transition-duration: .3s; }
+  #xs .box { position: absolute; left: 520px; top: 150px; width: 880px; background: var(--paper); border: 1px solid var(--hair);
+    box-shadow: 0 40px 90px -30px rgba(40,36,30,.4); transform: translateY(8px); transition: transform .2s ease; }
+  #xs.open .box { transform: none; transition: transform .3s cubic-bezier(.2,.8,.2,1); }
+  #xs .box::before { content: ''; position: absolute; left: 0; top: 0; width: 6px; height: 68px; background: var(--accent); }
+  #xs input { width: 100%; height: 68px; border: 0; border-bottom: 1px solid var(--hair); background: transparent; padding: 0 30px; font: 18px var(--font); color: var(--ink); outline: none; }
+  #xs .hint { padding: 10px 30px; font-size: 12px; letter-spacing: .2em; color: var(--muted); }
+  #xs .list { max-height: 560px; overflow: auto; }
+  #xs .r { display: grid; grid-template-columns: 150px 1fr 90px; align-items: center; gap: 12px; padding: 0 30px; height: 54px; cursor: pointer; border-top: 1px solid var(--hair); font-size: 15px; }
+  #xs .r.on, #xs .r:hover { background: var(--bg); }
+  #xs .r .c { font-size: 12px; font-weight: 700; letter-spacing: .14em; color: var(--muted); }
+  #xs .r .k { font-size: 12px; letter-spacing: .14em; color: var(--muted); text-align: right; }
+  #xs .r .s { color: var(--muted); font-size: 13px; margin-left: 10px; }
+  #xs mark { background: none; color: var(--accent); font-weight: 700; }
+  @media (prefers-reduced-motion: reduce) { #xd *, #xs * { transition-duration: 0s !important; } }
+  `
+  d.head.appendChild(css)
+
+  // ───────── 详情层与检索层 ─────────
+  const layer = d.createElement('div')
+  layer.id = 'xd'
+  layer.innerHTML = `
+    <div class="cap"><span class="a" data-x="cap-a"></span>ARCHIVE DETAIL // <b>三级档案</b></div>
+    <button class="btn close" type="button">返回 ESC</button>
+    <div class="xd-wrap"><div class="xd-doc">
+      <div class="xd-glass">
+        <i class="flag"></i><div class="head" data-x="head"></div>
+        <div class="xd-sheet frost"></div><div class="xd-sheet clear"></div><i class="xd-sweep"></i>
+        <svg class="xd-rings" viewBox="0 0 100 100"><circle cx="50" cy="50" r="44" fill="none" stroke="currentColor" stroke-width="5"/><circle cx="50" cy="50" r="29" fill="none" stroke="currentColor" stroke-width="3"/><rect x="47" y="2" width="6" height="96" fill="currentColor"/></svg>
+        <div class="xd-stamp" data-x="stamp"></div>
+      </div><div class="xd-wall"></div>
+    </div></div>
+    <div class="xd-info">
+      <div class="xd-meta0" data-x="meta0"></div>
+      <div class="xd-code"><span class="xr" data-x="code"></span></div>
+      <div class="xd-title" data-x="title"></div>
+      <div class="xd-sub" data-x="sub"></div>
+      <div class="xd-grid" data-x="grid"></div>
+      <div class="xd-tabs" data-x="tabs"></div>
+      <div class="xd-pane" data-x="pane"></div>
+      <div class="xd-acts">
+        <button class="btn" type="button" data-a="save">收藏</button>
+        <button class="btn" type="button" data-a="export">导出 TXT</button>
+        <button class="btn pri" type="button" data-a="primary"></button>
+      </div>
+    </div>`
+  stage.appendChild(layer)
+  const X = k => layer.querySelector(`[data-x="${k}"]`)
+
+  const search = d.createElement('div')
+  search.id = 'xs'
+  search.innerHTML = `<div class="box"><input placeholder="检索托管、账号、队列、历史记录、设置项…" autocomplete="off" /><div class="hint"></div><div class="list"></div></div>`
+  stage.appendChild(search)
+
+  // ───────── 滚动数字 ─────────
+  function roll(el, text) {
+    text = String(text)
+    if (el.dataset.len !== String(text.length)) {
+      el.innerHTML = [...text].map(ch => /\d/.test(ch)
+        ? `<span class="d">${[...'0123456789'].map(n => `<span>${n}</span>`).join('')}</span>`
+        : `<span class="c">${ch}</span>`).join('')
+      el.dataset.len = text.length
+    }
+    ;[...text].forEach((ch, k) => {
+      const node = el.children[k]
+      if (node.classList.contains('d')) node.style.transform = `translateY(${-Number(ch) * 1.15}em)`
+      else node.textContent = ch
+    })
+  }
+  function rollIn(el, text) {
+    el.classList.add('xr'); el.dataset.len = ''
+    roll(el, String(text).replace(/\d/g, '0'))
+    el.offsetWidth
+    setTimeout(() => roll(el, text), reduced ? 0 : 40)
+  }
+  // 二级面板的统计数字：每次面板重绘都从 0 滚到目标值
+  const panel = d.getElementById('s-panel')
+  new w.MutationObserver(() => {
+    panel.querySelectorAll('.stats b:not([data-rolled])').forEach(b => {
+      const t = b.textContent.trim()
+      if (!/^\d[\d,.:]*$/.test(t)) return
+      b.dataset.rolled = '1'
+      setTimeout(() => rollIn(b, t), 380)
+    })
+  }).observe(panel, { childList: true })
+
+  // ───────── 数据整理 ─────────
+  function blockPairs(b) {
+    if (b.t === 'kv') return b.rows.map(([k, v]) => [k, strip(v)])
+    if (b.t === 'table') return b.rows.map(r => [strip(r[0]), r.slice(1).map(strip).join(' · ')])
+    if (b.t === 'stats' || b.t === 'list') return b.rows.map(([a, c]) => [strip(a), strip(c)])
+    if (b.t === 'log') return b.lines.map(l => ['', strip(l)])
+    if (b.t === 'banner') return [['版本', b.v], ['活动', b.title], ['剩余', b.left]]
+    if (b.t === 'quote') return [['', b.text], ['', b.by]]
+    if (b.t === 'run') return [['状态', '待命']]
+    return []
+  }
+  const width = s => [...s].reduce((n, ch) => n + (ch.charCodeAt(0) > 255 ? 2 : 1), 0)
+  const padTo = (s, n) => s + ' '.repeat(Math.max(1, n - width(s)))
+
+  const STEPS = [
+    [/BGI|原神/, ['启动游戏', '领取每日委托', '自动秘境 ×4', '合成浓缩树脂', '领取纪行奖励']],
+    [/鸣潮/, ['启动游戏', '声骸副本 ×3', '每日活跃', '领取月卡']],
+    [/星铁/, ['启动游戏', '清开拓力', '每日实训', '领取奖励']],
+    [/MAA|方舟/, ['唤醒', '基建换班', '刷理智', '领取任务奖励']],
+  ]
+  function recordLog(time, acct, task, result) {
+    const steps = (STEPS.find(([re]) => re.test(task)) || [0, ['启动程序', '执行托管', '检查日志判定', '关闭程序']])[1]
+    const fail = /异常|失败/.test(result) ? steps.length - 2 : -1
+    const [h, m] = (time.match(/\d+/g) || [6, 0]).map(Number)
+    let t = h * 3600 + m * 60
+    const ts = () => `${pad(Math.floor(t / 3600) % 24)}:${pad(Math.floor(t / 60) % 60)}:${pad(t % 60)}`
+    const lines = [`<span class="t">${ts()}</span>  开始代理 · ${acct} · ${task}`], tl = []
+    steps.forEach((s, k) => {
+      t += 97 + k * 151
+      if (fail >= 0 && k > fail) { tl.push([s, 'off']); return }
+      if (k === fail) { lines.push(`<span class="t">${ts()}</span>  <span class="er">✕ ${s}：识别超时，重试 3 次后中止</span>`); tl.push([s, 'err']); return }
+      lines.push(`<span class="t">${ts()}</span>  <span class="ok">✓ ${s}</span>`); tl.push([s, 'ok'])
+    })
+    lines.push(`<span class="t">${ts()}</span>  ${fail >= 0 ? '<span class="er">代理异常中止 · 已推送通知</span>' : '代理完成 · 游戏已关闭'}`)
+    return { lines, tl, fail, mins: Math.round((t - (h * 3600 + m * 60)) / 60) }
+  }
+
+  // ───────── 打开详情 ─────────
+  const saved = new Set()
+  let cur = null, tab = 0, sweepRaf = 0
+  const DEPT = () => { const st = G('state'); return st && st.open >= 0 ? { st, dept: G('DEPTS')[st.open], item: st.items[st.target] } : null }
+
+  function build({ blockIdx = -1, rowIdx = -1, action = '' }) {
+    const ctx = DEPT(); if (!ctx) return null
+    const { st, dept, item } = ctx
+    let block = blockIdx >= 0 ? item.blocks[blockIdx] : null
+    if (!block && /日志/.test(action)) { blockIdx = item.blocks.findIndex(b => b.t === 'table'); block = item.blocks[blockIdx]; rowIdx = 0 }
+    const row = block && rowIdx >= 0 ? block.rows[rowIdx].map(strip) : null
+    const code = `X-${dept.n}-${pad(st.target + 1)}${row ? '-' + pad(rowIdx + 1) : ''}`
+    const base = { dept, item, code, action, meta0: [`X-0${dept.n}`, dept.code.replace('\n', ' '), dept.sub] }
+    const isRecord = row && block.cols.length >= 4 && /托管/.test(block.cols[2]) && /结果/.test(block.cols[3])
+    if (isRecord) {
+      const [time, acct, task, result] = row
+      const log = recordLog(time, acct, task, result)
+      return { ...base, kind: 'record', title: `${task} · ${acct}`, sub: `${item.name} ${time} · ${result} · 耗时 ${log.mins} 分钟`,
+        grid: [['开始', time], ['账号', acct], ['结果', result]],
+        sheet: [`<span class="h">── RECORD ${code} ──</span>`, ...log.lines].join('\n'), stamp: `RECORD <b>${code}</b> · ${result}`,
+        tabs: [
+          ['概览', [['托管', task], ['账号', acct], ['结果', result], ['耗时', log.mins + ' 分钟'], ['通知', log.fail >= 0 ? '已推送异常通知' : '仅记录']]],
+          ['执行日志', log.lines.map(l => ['', l]), 'mono'],
+          ['时间线', log.tl.map(([s, st], k) => [`STEP ${k + 1}`, `<i class="dot ${st}"></i>${s}`])]],
+        primary: log.fail >= 0 ? '从失败处重新代理' : '重新代理' }
+    }
+    // 通用：把整个条目当成一份档案，选中的行高亮
+    const sheet = []
+    item.blocks.forEach((b, bi) => {
+      sheet.push(`<span class="h">── ${b.title || b.t.toUpperCase()} ──</span>`)
+      if (b.t === 'table') sheet.push(`<span class="t">${b.cols.map(c => padTo(c, 14)).join('')}</span>`)
+      const pairs = b.t === 'table' ? b.rows.map(r => ['', r.map(c => padTo(strip(c), 14)).join('')]) : blockPairs(b).map(([k, v]) => [k, padTo(k, 14) + v])
+      pairs.forEach(([, line], ri) => sheet.push(bi === blockIdx && ri === rowIdx ? `<span class="hl">${line}</span>` : line))
+      sheet.push('')
+    })
+    const tabs = item.blocks.map(b => [b.title || b.t.toUpperCase(), blockPairs(b)]).filter(t => t[1].length).slice(0, 4)
+    if (row) tabs.unshift(['本行', block.cols.map((c, k) => [c, row[k]])])
+    const grid = row ? block.cols.slice(0, 3).map((c, k) => [c, row[k]]) : [['部门', dept.zh], ['条目', item.name], ['区块', item.blocks.length + ' 项']]
+    return { ...base, kind: 'item', title: row ? `${row[0]} · ${item.name}` : `${item.name}`, sub: `${dept.zh} / ${item.en}${action ? ' · ' + action : ''}`,
+      grid, sheet: sheet.join('\n'), stamp: `ARCHIVE <b>${code}</b> · ${dept.zh}`, tabs,
+      primary: action && !/查看/.test(action) ? '保存修改' : (dept.n === '08' ? '导出当日' : '打开二级界面') }
+  }
+
+  function sweep() {
+    const doc = layer.querySelector('.xd-doc')
+    cancelAnimationFrame(sweepRaf)
+    if (reduced) { doc.style.setProperty('--p', '130%'); return }
+    doc.style.setProperty('--p', '-20%')
+    setTimeout(() => {
+      doc.classList.add('sweeping')
+      const t0 = performance.now(), D = 1150
+      const step = now => {
+        const k = Math.min(1, (now - t0) / D), e = 1 - Math.pow(1 - k, 3)
+        doc.style.setProperty('--p', (-20 + e * 150) + '%')
+        if (k < 1) sweepRaf = requestAnimationFrame(step); else doc.classList.remove('sweeping')
+      }
+      sweepRaf = requestAnimationFrame(step)
+    }, 300)
+  }
+
+  function open(opts) {
+    const m = build(opts); if (!m) return
+    cur = m
+    X('cap-a').textContent = `X-0${m.dept.n} // ${m.dept.zh}`
+    X('head').textContent = `${m.kind === 'record' ? 'OPERATION RECORD' : 'SECTION ARCHIVE'} · ${m.dept.sub}`
+    layer.querySelectorAll('.xd-sheet').forEach(s => s.innerHTML = m.sheet)
+    X('stamp').innerHTML = m.stamp
+    X('meta0').innerHTML = `<span class="a">${m.meta0[0]}</span><span>${m.meta0[1]}</span><span>${m.meta0[2]}</span>`
+    rollIn(X('code'), m.code)
+    X('title').textContent = m.title
+    X('sub').textContent = m.sub
+    X('grid').innerHTML = m.grid.map(([k, v]) => `<div><div class="k">${k}</div><div class="v">${v}</div></div>`).join('')
+    X('tabs').innerHTML = m.tabs.map((t, k) => `<button type="button" data-k="${k}">${t[0]}</button>`).join('') + '<i class="ul"></i>'
+    layer.querySelector('[data-a="primary"]').textContent = m.primary
+    syncSave()
+    layer.querySelectorAll('.xd-info > *').forEach((el, k) => el.style.transitionDelay = `${120 + k * 50}ms`)
+    layer.classList.add('open')
+    setTab(0, true)
+    sweep()
+  }
+  function close() { layer.classList.remove('open'); cur = null }
+  function syncSave() { const b = layer.querySelector('[data-a="save"]'); const on = saved.has(cur.code); b.classList.toggle('on', on); b.textContent = on ? '已收藏' : '收藏' }
+  function setTab(k, instant) {
+    tab = k
+    const btns = [...X('tabs').querySelectorAll('button')]
+    btns.forEach((b, j) => b.classList.toggle('on', j === k))
+    requestAnimationFrame(() => { const ul = X('tabs').querySelector('.ul'), b = btns[k]; ul.style.left = b.offsetLeft + 'px'; ul.style.width = b.offsetWidth + 'px' })
+    const [, rows, mono] = cur.tabs[k], pane = X('pane')
+    const fill = () => pane.innerHTML = rows.map(([a, b]) => `<div class="row${mono ? ' mono' : ''}">${mono ? '' : `<span class="t">${a}</span>`}<span>${b}</span></div>`).join('')
+    if (instant) return fill()
+    pane.classList.add('fade'); setTimeout(() => { fill(); pane.classList.remove('fade') }, 150)
+  }
+  const toast = t => { try { w.eval('toast')(t) } catch {} }
+
+  layer.addEventListener('click', e => {
+    if (e.target.closest('.close')) return close()
+    const tb = e.target.closest('.xd-tabs button'); if (tb) return setTab(+tb.dataset.k)
+    const a = e.target.closest('[data-a]')?.dataset.a
+    if (a === 'save') { saved.has(cur.code) ? saved.delete(cur.code) : saved.add(cur.code); syncSave(); toast(saved.has(cur.code) ? `已收藏 ${cur.code}` : '已取消收藏') }
+    else if (a === 'export') {
+      const txt = layer.querySelector('.xd-sheet.clear').textContent.replace(/\n/g, '\r\n')
+      const link = d.createElement('a'); link.href = URL.createObjectURL(new Blob(['﻿' + txt], { type: 'text/plain;charset=utf-8' }))
+      link.download = `${cur.code}.txt`; link.click(); setTimeout(() => URL.revokeObjectURL(link.href), 1000)
+    } else if (a === 'primary') { const t = cur.primary; if (t === '打开二级界面') close(); else toast(`演示：${t}`) }
+  })
+
+  // 二级面板 → 三级：表格行、查看/编辑/管理类按钮（捕获阶段拦截，原演示的提示不再弹）
+  d.addEventListener('click', e => {
+    if (!panel.contains(e.target) || e.target.closest('.tog')) return
+    const tr = e.target.closest('tbody tr')
+    if (tr) {
+      const blk = tr.closest('.blk'), blocks = [...panel.querySelectorAll('.blk')]
+      e.stopPropagation()
+      return open({ blockIdx: blocks.indexOf(blk), rowIdx: [...tr.parentNode.children].indexOf(tr) })
+    }
+    const b = e.target.closest('.btn')
+    if (b && /查看|编辑|管理/.test(b.textContent)) { e.stopPropagation(); open({ action: b.textContent.trim() }) }
+  }, true)
+
+  // ───────── 全局检索 ─────────
+  let hits = [], hi = 0
+  function index() {
+    const S = G('SECTIONS') || {}, out = []
+    Object.entries(S).forEach(([n, conf]) => {
+      const dept = G('DEPTS').find(x => x.n === n)
+      conf.items.forEach((item, i) => {
+        out.push({ n, zh: dept.zh, i, kind: '条目', label: item.name, sub: item.en, text: [item.name, item.en, dept.zh, ...item.blocks.flatMap(b => blockPairs(b).flat())].join(' ') })
+        item.blocks.forEach((b, bi) => b.t === 'table' && b.rows.forEach((r, ri) => {
+          const cells = r.map(strip)
+          out.push({ n, zh: dept.zh, i, bi, ri, kind: n === '08' ? '记录' : '行', label: cells.slice(0, 3).join(' · '), sub: item.name, text: [cells.join(' '), item.name, dept.zh].join(' ') })
+        }))
+      })
+    })
+    return out
+  }
+  const ALL = index()
+  function openSearch() { search.classList.add('open'); const q = search.querySelector('input'); q.value = ''; doSearch(); q.focus() }
+  function closeSearch() { search.classList.remove('open'); search.querySelector('input').blur() }
+  function doSearch() {
+    const q = search.querySelector('input').value.trim().toLowerCase()
+    const words = q.split(/\s+/).filter(Boolean)
+    hits = ALL.filter(h => words.every(wd => h.text.toLowerCase().includes(wd))).slice(0, 60); hi = 0
+    const mk = s => words.reduce((acc, wd) => acc.replace(new RegExp(wd.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'ig'), m => `<mark>${m}</mark>`), s)
+    search.querySelector('.hint').textContent = `${hits.length} 项 · ↑↓ 选择 · ENTER 打开 · ESC 关闭`
+    search.querySelector('.list').innerHTML = hits.map((h, k) => `<div class="r${k ? '' : ' on'}" data-k="${k}"><span class="c">X-${h.n} ${h.zh}</span><span>${mk(h.label)}<span class="s">${mk(h.sub)}</span></span><span class="k">${h.kind}</span></div>`).join('')
+  }
+  function moveHit(dv) {
+    if (!hits.length) return
+    hi = (hi + dv + hits.length) % hits.length
+    search.querySelectorAll('.r').forEach((r, k) => r.classList.toggle('on', k === hi))
+    search.querySelector('.r.on').scrollIntoView({ block: 'nearest' })
+  }
+  function go(h) {
+    closeSearch(); close()
+    const st = G('state'), di = G('DEPTS').findIndex(x => x.n === h.n)
+    const finish = () => { if (h.ri !== undefined) setTimeout(() => open({ blockIdx: h.bi, rowIdx: h.ri }), 420) }
+    if (st.open === di) { G('select')(h.i); return finish() }
+    const enter = () => {
+      G('openSection')(di)
+      setTimeout(() => { if (h.i) G('select')(h.i); finish() }, 900)
+    }
+    if (st.open >= 0) { G('closeSection')(); setTimeout(enter, 1000) } else enter()
+  }
+  search.querySelector('input').addEventListener('input', doSearch)
+  search.addEventListener('click', e => {
+    const r = e.target.closest('.r'); if (r) return go(hits[+r.dataset.k])
+    if (e.target === search) closeSearch()
+  })
+
+  // ───────── 键盘（捕获阶段，先于原演示处理） ─────────
+  w.addEventListener('keydown', e => {
+    if (search.classList.contains('open')) {
+      e.stopImmediatePropagation()
+      if (e.key === 'Escape') closeSearch()
+      else if (e.key === 'ArrowDown') { e.preventDefault(); moveHit(1) }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); moveHit(-1) }
+      else if (e.key === 'Enter' && hits[hi]) go(hits[hi])
+      return
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+      e.preventDefault(); e.stopImmediatePropagation()
+      if (!G('booting')) openSearch()
+      return
+    }
+    if (cur) {
+      e.stopImmediatePropagation()
+      if (e.key === 'Escape') close()
+      else if (e.key === 'ArrowRight') setTab((tab + 1) % cur.tabs.length)
+      else if (e.key === 'ArrowLeft') setTab((tab + cur.tabs.length - 1) % cur.tabs.length)
+    }
+  }, true)
+  // 详情打开时，滚轮不再切换二级条目
+  layer.addEventListener('wheel', e => e.stopPropagation(), { passive: true })
+}
+</script>
+</body>
+</html>

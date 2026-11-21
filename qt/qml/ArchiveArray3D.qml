@@ -1,0 +1,942 @@
+import QtQuick
+import QtQuick3D
+import QtQuick3D.Helpers
+import QtQuick.Effects
+import "."
+
+// 增强挡位：多列档案阵列（以 design/qt-demo/array.html 为基线，按 LBEILC/RhineLabUI 的实现移植，MIT）。
+// 托管管理：列 = 通用脚本，列内 = 程序、启动等实际分页及各账号；调度队列：列 = 队列，列内 = 队列配置 + 各队列项。
+// 首尾按周期无缝循环，每列记住上次的选择。读取时选中的录像带抬起、镜头转向把它放到画面左侧，
+// 选中一盒时盖板随抬升从上向下变清晰，露出双卷盘内衬和程序图标。
+//
+// 画面以演示基线为准：环境光照（RoomEnvironment + 半球光烘成的 HDR）、主光与补光、软阴影、透射磨砂外壳与竖向渐变。
+// 省 CPU：阵列的波浪、呼吸、涟漪、悬停与飞入都在顶点着色器里算（arraypart.vert），
+// 每帧只更新弹簧、镜头与少量 uniform；实例表只在换档时重建。
+// 组件在增强模式下异步预热（见 Main.qml），各部门共用同一份。
+Item {
+    id: root
+
+    readonly property bool singleColumn: mode !== "scripts" && mode !== "queue"
+    property string sectionCode: ""
+    property string emptyText: ""
+    property var sortShelf: null
+    property var sortRecord: null
+    function sortSide(stage, point) {
+        const at = sortLabel.mapFromItem(stage,point)
+        return sortLabel.contains(at) ? (at.y < sortLabel.height / 2 ? -1 : 1) : 0
+    }
+    property string mode: "scripts"          // scripts / queue
+    property var columns: []                 // [{ name, en, icon, accounts: [行名…], rowIcons: [每行图标…] }]
+    property real viewportScale: 1
+    property bool active: visible
+    readonly property int laneCount: Math.max(1, columns.length)
+    readonly property int lane: wrap(cellLane - (isQueue ? 0 : 2), laneCount)
+    readonly property var column: columns.length ? columns[lane] : null
+    // 调度队列没有「队列配置」那一盒：列内只有队列项
+    readonly property bool hasConfig: !column || column.configRow !== false
+    readonly property int rowCount: Math.max(1, column?.rows ? column.rows.length : column ? (hasConfig ? 1 : 0) + (column.accounts ? column.accounts.length : 0) : 1)
+    readonly property int row: wrap(cellRow - 12, rowCount)
+    readonly property int itemIdx: hasConfig ? row - 1 : row
+    property bool detailOpen: false
+    readonly property string fileId: (mode === "queue" ? "Q-" : "X-") + String(lane + 1).padStart(2, "0") + String(row).padStart(2, "0")
+    property int dir: 1
+    // 文案：按部门区分
+    readonly property bool isQueue: mode === "queue"
+    readonly property string rowName: !column && !isQueue ? emptyText : column?.rows ? column.rows[row] || "" :
+        hasConfig && row === 0 ? column?.name || "" : column?.accounts?.[itemIdx] || "（空队列）"
+    readonly property string rowIcon: column?.rowIcons?.[row] || column?.icon || ""
+    readonly property string labelNo: "NO." + String(lane * 10 + row + 1).padStart(3, "0")
+    readonly property string discTitle: column?.name || rowName
+    readonly property string discSub: rowName === discTitle ? "" : rowName
+
+    signal opened(int lane, int row)
+    signal closed()
+    signal moved(int lane, int row)
+    signal flownOut()
+
+    // ── 运动函数（与演示基线 / 原项目 motion.ts 相同；阵列部分在着色器里有同一份） ──
+    function wrap(v, n) { return ((v % n) + n) % n }
+    function smooth(t) { t = Math.max(0, Math.min(1, t)); return t * t * t * (10 + t * (-15 + 6 * t)) }
+    function ease(t) { t = Math.max(0, Math.min(1, t)); return t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2 }
+    function bell(x, w) { return Math.exp(-0.5 * (x / w) * (x / w)) }
+    function settlingWave(distance, time) {
+        const age = time - 25.05 - Math.abs(distance) * 0.065
+        const envelope = Math.max(-0.42, 2.15 - 0.17 * (Math.sqrt(distance * distance + 1) - 1))
+        const ring = age > 0 ? Math.sin(age * 5.1) * Math.exp(-age * 1.3) : 0
+        return envelope * (smooth(age / 0.62) + 0.18 * ring * smooth(age / 0.16))
+    }
+    function selectionWave(distance, age) {
+        if (age < 0 || age > 3.2) return 0
+        return 0.8 * smooth(age / 0.2) * Math.exp(-age * 1.15) * Math.cos((distance - age * 8) * 0.58) * bell(distance - age * 8, 3.4)
+    }
+    function columnStrength(l, focus) { return 0.25 + 0.75 * bell(l - focus, 0.55) }
+    function idleWave(r, l, t) { return 0.075 * Math.sin(t * Math.PI / 4 + r * 0.3 - l * 0.45) + 0.027 * Math.sin(t * Math.PI * 2 / 13 - r * 0.17 + l * 0.3) }
+    function damp(s, target, rate, dt) {
+        const delta = s.v - target, impulse = s.vel + rate * delta, decay = Math.exp(-rate * dt)
+        s.v = target + (delta + impulse * dt) * decay
+        s.vel = (s.vel - rate * impulse * dt) * decay
+    }
+    function lin(hex) {
+        const c = Qt.color(hex), f = v => v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4)
+        return Qt.vector3d(f(c.r), f(c.g), f(c.b))
+    }
+
+    readonly property real columnSpacing: 5.2
+    readonly property real rowSpacing: 0.62
+    readonly property real inspectionLift: 4.05
+
+    // ── 状态 ──────────────────────────────────────────────────────────────
+    property int cellLane: 2
+    property int cellRow: 12
+    property var laneMemory: ({})
+    property var springs: ({ lift: { v: 0.4, vel: 0 }, rail: { v: 0, vel: 0 }, shoulder: { v: 12, vel: 0 }, focus: { v: 2, vel: 0 }, track: { v: 0, vel: 0 } })
+    property var pulses: []
+    property real clock: 0
+    property real lastInteraction: 0
+    property real idleGain: 0
+    property real pulseGain: 1
+    property bool holdDetailCamera: false
+    property real detail: 0
+    property real clarity: 0
+    property var hoverCell: null
+    property var hoverLifts: ({})
+    // 进出场：节奏同原项目 ArchiveScene.reveal（指数逼近，速率 2.8），方向按示意图：整列阵列从画面右上方（世界 +x）沿录像带长边滑入，向左下落位；
+    // 离开时反向滑回。reveal 以选择过渡同样的指数速率（2.8）逼近目标
+    property real reveal: 0
+    property real targetReveal: 0
+    readonly property bool uiShown: targetReveal === 1 && !detailOpen
+    // 原项目的「换下的那盒」：换选中时，原来抬起的那盒保持完整外观与标签，按自己的弹簧（4.5）落回格位；
+    // 再选回它时接着它当前的高度继续。外壳保持同一个实例，附加刻字和图标各占一个格位。
+    property var outgoing: []
+    property vector4d out0: Qt.vector4d(0, 0, 0, 0)
+    property vector4d out1: Qt.vector4d(0, 0, 0, 0)
+    property vector4d out2: Qt.vector4d(0, 0, 0, 0)
+    property vector4d out3: Qt.vector4d(0, 0, 0, 0)
+    property int selectedSlot: 0
+    property vector4d selectedCell: Qt.vector4d(2, 12, 0, 0)
+
+    // 着色器 uniform
+    property real uShoulder: 12
+    property real uFocus: 2
+    property real uDetail: 0
+    property vector4d hover0: Qt.vector4d(0, 0, 0, 0)
+    property vector4d hover1: Qt.vector4d(0, 0, 0, 0)
+    property vector4d hover2: Qt.vector4d(0, 0, 0, 0)
+    property var pulseVecs: [Qt.vector4d(0, 0, 0, 0), Qt.vector4d(0, 0, 0, 0), Qt.vector4d(0, 0, 0, 0), Qt.vector4d(0, 0, 0, 0), Qt.vector4d(0, 0, 0, 0), Qt.vector4d(0, 0, 0, 0)]
+
+    // 换到另一个部门（或重新进入）：状态归位，不播放切换过渡
+    function reset(laneIndex, pageIndex) {
+        detailOpen = false
+        holdDetailCamera = false
+        laneMemory = ({})
+        cellLane = singleColumn ? 2 : 2 + laneIndex
+        cellRow = 12 + (singleColumn ? laneIndex : isQueue ? 0 : (pageIndex || 0))
+        const S = springs
+        S.lift.v = 0.4; S.lift.vel = 0
+        S.shoulder.v = cellRow; S.shoulder.vel = 0
+        S.focus.v = cellLane; S.focus.vel = 0
+        S.track.v = (cellLane - 2) * columnSpacing; S.track.vel = 0
+        S.rail.v = -2.17 - (cellRow - 15.5) * rowSpacing; S.rail.vel = 0
+        pulses = []
+        updatePulses()
+        outgoing = []
+        selectedSlot = 0
+        for (let i = 0; i < decorations.count; ++i) decorations.objectAt(i).visible = false
+        out0 = out1 = out2 = out3 = Qt.vector4d(0, 0, 0, 0)
+        detail = 0; clarity = 0; idleGain = 0
+        hoverCell = null; hoverLifts = ({})
+        lastInteraction = clock
+        snapCamera = true
+        rebuild()
+    }
+    function prime() {
+        if (active) return
+        reset(0, 0)
+        reveal = 1
+        step(0)
+    }
+    function flyIn() { reveal = 0; targetReveal = 1; springs.lift.v = 0; springs.lift.vel = 0; running = true }
+    // 返回索引：画面原样模糊并淡出（索引在下面同时淡入），结束后再静默归位，不播放滑出 / 收回读取
+    property real exitP: 0
+    function blurOut() {
+        if (exitAnim.running) return
+        exitAnim.restart()
+    }
+    layer.enabled: exitP > 0
+    layer.effect: MultiEffect { blurEnabled: true; blur: root.exitP; blurMax: 48; autoPaddingEnabled: false }
+    opacity: 1 - exitP
+    SequentialAnimation {
+        id: exitAnim
+        NumberAnimation { target: root; property: "exitP"; from: 0; to: 1; duration: Theme.richMotion ? 380 : 1; easing.type: Easing.OutCubic }
+        ScriptAction { script: {
+            root.detailOpen = false
+            root.targetReveal = 0; root.reveal = 0
+            root.flownOut()
+            root.exitP = 0
+        } }
+    }
+
+    function nav(axis, d) {
+        if ((isQueue && detailOpen) || targetReveal !== 1 || !columns.length) return
+        if (axis === "lane" && laneCount <= 1 || axis === "row" && rowCount <= 1) return
+        lastInteraction = clock
+        dir = d
+        let l = cellLane, r = cellRow
+        if (axis === "row") r += d
+        else {
+            const m = Object.assign({}, laneMemory)
+            m[columns[lane]?.uid || lane] = cellRow
+            laneMemory = m
+            l += d
+            const nextLane = wrap(l - (isQueue ? 0 : 2), laneCount)
+            const mr = laneMemory[columns[nextLane]?.uid || nextLane]
+            if (mr !== undefined) r = mr
+            else if (!isQueue) r = 12
+        }
+        moveTo(l, r)
+    }
+    function goCell(l, r) {
+        if (detailOpen || targetReveal !== 1) return
+        dir = l > cellLane || (l === cellLane && r > cellRow) ? 1 : -1
+        lastInteraction = clock
+        moveTo(l, r)
+    }
+    // 换选中（同原项目 ArchiveScene.select）：原来抬起的那盒转为「换下的那盒」自行落回；
+    // 新格若正是某盒换下的、还没落回的，就接着它的高度继续
+    function moveTo(l, r) {
+        if (l === cellLane && r === cellRow) return
+        const S = springs
+        const list = outgoing.slice()
+        holdDetailCamera = detailOpen && (holdDetailCamera || detail > 0.5)
+        const previous = decorations.objectAt(selectedSlot)
+        previous.lastNo = labelNo
+        previous.lastIcon = rowIcon
+        previous.lastTitle = discTitle
+        previous.lastSub = discSub
+        const returning = list.findIndex(o => o.lane === l && o.row === r)
+        const next = returning >= 0 ? list.splice(returning, 1)[0] : null
+        list.push({lane:cellLane, row:cellRow, slot:selectedSlot, clarity:clarity, lift:{v:S.lift.v, vel:S.lift.vel}})
+        if (list.length > 4) {
+            const lowest = list.reduce((best, o, i) => o.lift.v < list[best].lift.v ? i : best, 0)
+            decorations.objectAt(list.splice(lowest, 1)[0].slot).visible = false
+        }
+        let slot = 0
+        if (next) slot = next.slot
+        else while (list.some(o => o.slot === slot)) ++slot
+        selectedSlot = slot
+        cellLane = l
+        cellRow = r
+        S.lift.v = next ? next.lift.v : 0
+        S.lift.vel = next ? next.lift.vel : 0
+        clarity = next ? next.clarity : 0
+        outgoing = list
+        // 输入事件和 FrameAnimation 可能落在不同呈现帧；同一次事件中提交新旧格的姿态。
+        step(0)
+        changed()
+    }
+    function changed() {
+        const p = pulses.slice(-5); p.push({ lane: cellLane, row: cellRow, time: clock }); pulses = p
+        updatePulses()
+        moved(lane, row)
+        running = true
+    }
+    function updatePulses() {
+        const v = []
+        for (let i = 0; i < 6; i++) {
+            const p = pulses[i]
+            v.push(p && Theme.richMotion ? Qt.vector4d(p.lane, p.row, p.time, 1) : Qt.vector4d(0, 0, 0, 0))
+        }
+        pulseVecs = v
+    }
+    function open() { if (detailOpen || targetReveal !== 1 || (!isQueue && !column)) return; detailOpen = true; running = true; opened(lane, row) }
+    function close() { if (!detailOpen) return; detailOpen = false; holdDetailCamera = false; running = true; closed() }
+
+    // ── 3D 场景 ────────────────────────────────────────────────────────────
+    View3D {
+        id: view
+        anchors.fill: parent
+        // 参考舞台固定为 1920×1080，离屏纹理只需覆盖窗口中实际显示的像素。
+        readonly property real pixelScale: Math.min(1, root.viewportScale) * Screen.devicePixelRatio
+        explicitTextureWidth: Math.max(1, Math.ceil(width * pixelScale))
+        explicitTextureHeight: Math.max(1, Math.ceil(height * pixelScale))
+        environment: ExtendedSceneEnvironment {
+            backgroundMode: SceneEnvironment.Color
+            clearColor: Theme.dark ? "#11181b" : "#eae5e1"
+            antialiasingMode: SceneEnvironment.MSAA
+            antialiasingQuality: SceneEnvironment.High
+            tonemapMode: SceneEnvironment.TonemapModeAces
+            exposure: 1.05
+            // 环境光照：演示基线的 RoomEnvironment（强度 0.48）+ 半球光，烘成一张 HDR（qt/tools/make_room_env.py）
+            // 深色主题：环境光压低，暗色盒阵里只有抬起的那盒（保持浅暖色）显得发亮
+            probeExposure: Theme.dark ? 0.75 : 1.3
+            lightProbe: Texture { source: Qt.resolvedUrl("../assets3d/room-env.ktx"); mappingMode: Texture.LightProbe }
+            fog: Fog {
+                enabled: true
+                color: Theme.dark ? "#11181b" : "#eae5e1"
+                depthEnabled: true
+                depthNear: root.fogNear
+                depthFar: root.fogFar
+                depthCurve: 1
+            }
+            depthOfFieldEnabled: true
+            depthOfFieldFocusDistance: root.focusDistance
+            depthOfFieldFocusRange: 6
+            depthOfFieldBlurAmount: 2 + 2 * root.detail
+        }
+
+        PerspectiveCamera {
+            id: camera
+            clipNear: 5
+            clipFar: 300
+            fieldOfView: 3
+            position: Qt.vector3d(-62.26, 35.98, 43.28)
+        }
+        // 主光（投影）与补光：位置、颜色同演示基线；three.js 的光强含 1/π，Qt 不含，按 强度/π 换算
+        DirectionalLight {
+            id: key
+            color: "#fff7ed"
+            brightness: (Theme.dark ? 0.9 : 1.4) / Math.PI
+            position: Qt.vector3d(-6, 14, -5)
+            castsShadow: true
+            shadowMapQuality: Light.ShadowMapQualityHigh
+            softShadowQuality: Light.PCF8
+            pcfFactor: 4
+            shadowFactor: 100
+            shadowBias: 3
+            shadowMapFar: 120
+            rotation: Quaternion.lookAt(position, Qt.vector3d(0, 0, 0), Qt.vector3d(0, 0, -1), Qt.vector3d(0, 1, 0))
+        }
+        DirectionalLight {
+            color: "#ffffff"
+            brightness: (Theme.dark ? 0.35 : 0.6) / Math.PI
+            position: Qt.vector3d(7, 8, -10)
+            rotation: Quaternion.lookAt(position, Qt.vector3d(0, 0, 0), Qt.vector3d(0, 0, -1), Qt.vector3d(0, 1, 0))
+        }
+        Model {
+            source: "#Rectangle"
+            position: Qt.vector3d(0, -4.63, 0)
+            eulerRotation.x: -90
+            scale: Qt.vector3d(4, 4, 1)
+            receivesShadows: true
+            materials: PrincipledMaterial { baseColor: Theme.dark ? "#1b2428" : "#d8c9b9"; roughness: 0.95 }
+        }
+
+        Node {
+            id: arrayRoot
+            PointLight {
+                id: tapeLight
+                visible: Theme.dark
+                onVisibleChanged: if (visible && root.entries.length) root.updateTapeLight()
+                color: "#ffb877"
+                brightness: 0
+                constantFade: 1
+                linearFade: 0
+                quadraticFade: 0.35
+                castsShadow: false
+            }
+            // 阵列：同一个模型的实例化副本（实例表位置为阵列内的绝对坐标，整体随轨道平移）
+            InstanceList { id: instances; instanceCountOverride: root.singleColumn ? 37 : root.maxInstances }
+            component GridPart: Model {
+                objectName: "arrayPart"
+                instancing: instances
+                pickable: true
+                castsShadows: false
+            }
+            GridPart { source: "../assets3d/cassette/Frosted_Polymer.mesh"; materials: matShell }
+            GridPart { source: "../assets3d/cassette/Ivory_Edges.mesh"; materials: matEdges }
+            GridPart { source: "../assets3d/cassette/Optical_Diffuser.mesh"; materials: matDiffuser; castsShadows: true }
+            GridPart { source: "../assets3d/cassette/Index_Inlay.mesh"; materials: matIndex }
+            GridPart { source: "../assets3d/cassette/Titanium_Fasteners.mesh"; materials: matFasteners }
+
+            // 外壳始终由原实例绘制；可读标签与唱片跟着自己的格位落回，不在第一帧换贴图。
+            Repeater3D {
+                id: decorations
+                model: 5
+                delegate: Node {
+                    id: detailNode
+                    required property int index
+                    property real amount: 0
+                    property int gridLane: 0
+                    property int gridRow: 0
+                    property string lastNo: ""
+                    property string lastIcon: ""
+                    property string lastTitle: ""
+                    property string lastSub: ""
+                    readonly property bool current: index === root.selectedSlot
+                    visible: false
+                    component DetailPart: Model {
+                        objectName: "detailPart"
+                        pickable: true
+                        castsShadows: false
+                        property color tint
+                        property real metal: 0
+                        property real rough: 0.4
+                        materials: CustomMaterial {
+                            shadingMode: CustomMaterial.Shaded
+                            cullMode: Material.NoCulling
+                            fragmentShader: "shaders/cassettedetail.frag"
+                            property vector3d inkColor: root.lin(parent.tint)
+                            property real metal: parent.metal
+                            property real rough: parent.rough
+                            property real coverage: detailNode.amount
+                        }
+                    }
+                    // 密排时只露出壳边，刻线、标签与饰条仅随抬起及回落的盒子绘制。
+                    DetailPart { source: "../assets3d/cassette/Printed_Label.mesh"; tint: "#eae5dc"; rough: 0.65 }
+                    DetailPart { source: "../assets3d/cassette/Case_Engraving.mesh"; tint: "#918a80"; metal: 0.12 }
+                    DetailPart { source: "../assets3d/cassette/Case_Engraving_Highlight.mesh"; tint: "#e6ded4"; metal: 0.16 }
+                    DetailPart { source: "../assets3d/cassette/Champagne_Index.mesh"; tint: "#a3754a"; metal: 0.48 }
+                    Model {
+                        source: "#Rectangle"
+                        position: Qt.vector3d(-1.36,3.04,0.255)
+                        scale: Qt.vector3d(0.0099,0.0046,1)
+                        castsShadows: false; opacity: detailNode.amount
+                        materials: PrincipledMaterial {
+                            lighting: PrincipledMaterial.NoLighting; alphaMode: PrincipledMaterial.Blend
+                            baseColorMap: Texture { sourceItem: LabelArt { no: detailNode.current ? root.labelNo : detailNode.lastNo } }
+                        }
+                    }
+                    Model {
+                        source: "#Rectangle"
+                        position: Qt.vector3d(0, 1.82, 0.152)
+                        scale: Qt.vector3d(0.045,0.032,1)
+                        castsShadows: false
+                        materials: PrincipledMaterial {
+                            // 透射外壳只采样不透明阶段；圆盘的透明边缘用裁切保留。
+                            lighting: PrincipledMaterial.NoLighting
+                            alphaMode: PrincipledMaterial.Mask; cullMode: Material.NoCulling
+                            baseColorMap: Texture { sourceItem: DiscArt {
+                                logoIndex: root.wrap(Math.imul(detailNode.gridLane, 73856093) ^ Math.imul(detailNode.gridRow, 19349663), 12)
+                                icon: detailNode.current ? root.rowIcon : detailNode.lastIcon
+                                title: detailNode.current ? root.discTitle : detailNode.lastTitle
+                                sub: detailNode.current ? root.discSub : detailNode.lastSub
+                            } }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // 阵列部件材质：波浪等在顶点着色器里算，颜色取演示基线的阵列材质
+    component PartMaterial: CustomMaterial {
+        shadingMode: CustomMaterial.Shaded
+        cullMode: Material.NoCulling
+        vertexShader: "shaders/arraypart.vert"
+        fragmentShader: "shaders/arraypart.frag"
+        property vector3d uColor: Qt.vector3d(1, 1, 1)
+        property real uRoughness: 0.5
+        property real uMetalness: 0
+        property real uTransmission: 0
+        property real uThickness: 0
+        property vector3d uAttenuation: Qt.vector3d(1, 1, 1)
+        property real uAttenuationDistance: 1e6
+        property real uClearcoat: 0
+        property real uClearcoatRoughness: 0
+        property real uGradient: 0
+        property real uGlow: 0                  // 抽出时的自发光强度（深色主题）
+        property real uTime: root.clock
+        property vector4d uSelected: root.selectedCell
+        property vector3d uRaisedColor: uColor
+        property real uShoulder: root.uShoulder
+        property real uFocus: root.uFocus
+        property real uIdle: root.idleGain
+        property real uPulseGain: root.pulseGain
+        property real uDetail: root.uDetail
+        property vector4d uOut0: root.out0
+        property vector4d uOut1: root.out1
+        property vector4d uOut2: root.out2
+        property vector4d uOut3: root.out3
+        property vector4d uPulse0: root.pulseVecs[0]
+        property vector4d uPulse1: root.pulseVecs[1]
+        property vector4d uPulse2: root.pulseVecs[2]
+        property vector4d uPulse3: root.pulseVecs[3]
+        property vector4d uPulse4: root.pulseVecs[4]
+        property vector4d uPulse5: root.pulseVecs[5]
+        property vector4d uHover0: root.hover0
+        property vector4d uHover1: root.hover1
+        property vector4d uHover2: root.hover2
+    }
+    PartMaterial {
+        id: matShell
+        uRaisedColor: root.lin(Theme.dark ? "#d8d1c7" : "#fffdfa")
+        // 深色阵列保留暖色抬升光；选中与回落时的盖板清晰度独立过渡。
+        uGlow: Theme.dark ? 0.08 : 0
+        uColor: root.lin(Theme.dark ? "#30363a" : "#fff7ed"); uRoughness: 0.36; uTransmission: Theme.dark ? 0.30 : 0.64; uThickness: 0.12
+        uAttenuation: root.lin(Theme.dark ? "#22282b" : "#eee6df"); uAttenuationDistance: 2; uClearcoat: 0.3; uClearcoatRoughness: 0.25; uGradient: Theme.dark ? 1 : 0.52
+    }
+    // 其余部件不透光：用不写透射的着色器，才会画进屏幕纹理、透过磨砂外壳显出来
+    PartMaterial { id: matEdges; uRaisedColor: Theme.dark ? root.lin("#c9c0b6") : uColor; fragmentShader: "shaders/arraypart_opaque.frag"; uColor: root.lin(Theme.dark ? "#272c2f" : "#e7dfd7"); uRoughness: 0.38; uMetalness: 0.02 }
+    // 双卷盘内衬与格位标志在盖板后绘制，外沿使用源模型的刻线与金属件。
+    PartMaterial {
+        id: matDiffuser
+        uRaisedColor: root.lin("#c6bdb0")
+        vertexShader: "shaders/arraypart_pattern.vert"; fragmentShader: "shaders/arraypart_pattern.frag"
+        uColor: root.lin(Theme.dark ? "#3a3129" : "#c6bcb1"); uRoughness: 0.7
+        uGlow: Theme.dark ? 0.3 : 0
+    }
+    PartMaterial { id: matIndex; uRaisedColor: root.lin("#e4d6c5"); fragmentShader: "shaders/arraypart_opaque.frag"; uColor: root.lin(Theme.dark ? "#4a4741" : "#e4d6c5"); uRoughness: 0.52; uMetalness: 0.05 }
+    PartMaterial { id: matFasteners; fragmentShader: "shaders/arraypart_opaque.frag"; uColor: Qt.vector3d(0.58, 0.6, 0.61); uRoughness: 0.19; uMetalness: 0.82 }
+    // ── 实例表：与演示基线相同的范围（左右各 3 列、前后各 18 行，约 259 盒）。
+    //    以阵列「当前滑到的位置」为中心，而不是目标格：切换行列时边缘的列 / 行随阵列平移自然移出画面，
+    //    滑过半格后才换下；换档或滑过整格时重建，静态起伏烘入高度供拾取。 ──
+    property var entries: []
+    property var drawn: []
+    readonly property int maxInstances: 7 * 37
+    property int builtLane: -9999
+    property int builtRow: -9999
+    Component { id: entryComponent; InstanceListEntry {} }
+    Component.onCompleted: {
+        const list = []
+        for (let i = 0; i < maxInstances; i++) list.push(entryComponent.createObject(instances))
+        entries = list
+        instances.instances = list
+        rebuild()
+    }
+    function visualLane() { return Math.round(springs.track.v / columnSpacing) + 2 }
+    function visualRow() { return Math.round(15.5 + (-2.17 - springs.rail.v) / rowSpacing) }
+    function rebuild() {
+        if (!entries.length) return
+        const list = []
+        let i = 0
+        const vl = visualLane(), vr = visualRow()
+        builtLane = vl; builtRow = vr
+        const radius = singleColumn ? 0 : 3
+        for (let l = vl - radius; l <= vl + radius; l++) {
+            for (let r = vr - 18; r <= vr + 18; r++) {
+                const st = settlingWave(r - cellRow, 26.56) * columnStrength(l, cellLane)
+                const e = entries[i++]
+                e.position = Qt.vector3d((l - 2) * columnSpacing, -4.6 + st, (r - 15.5) * rowSpacing)
+                e.customData = Qt.vector4d(l, r, st, 0)
+                list.push({ lane: l, row: r })
+            }
+        }
+        drawn = list
+    }
+
+    // ── 每帧更新：弹簧、镜头、选中的那盒与 uniform（阵列本身在 GPU 上动） ──────
+    property bool running: true
+    property bool snapCamera: true
+    property real fogNear: 145
+    property real fogFar: 165
+    property real focusDistance: 140
+    readonly property vector3d baseDirection: {
+        const yaw = 59 * Math.PI / 180, el = 19 * Math.PI / 180
+        return Qt.vector3d(-Math.sin(yaw) * Math.cos(el), Math.sin(el), Math.cos(yaw) * Math.cos(el))
+    }
+    property real cameraAimX: -0.5
+    property real cameraAimY: 1.1
+    property real cameraAimZ: 0.4
+
+    function field(r, l, t) {
+        let ripple = 0
+        if (Theme.richMotion) for (const p of pulses) ripple += selectionWave(Math.hypot(r - p.row, (l - p.lane) * 2.2), t - p.time)
+        return settlingWave(r - springs.shoulder.v, 26.56) * columnStrength(l, springs.focus.v) + idleWave(r, l, t) * idleGain + Math.max(-0.6, Math.min(0.6, ripple)) * pulseGain
+    }
+    function stepHover(dt) {
+        const hl = Object.assign({}, hoverLifts)
+        const hk = hoverCell ? hoverCell.lane + ":" + hoverCell.row : ""
+        if (hk && hl[hk] === undefined) hl[hk] = 0
+        for (const k in hl) {
+            const target = k === hk ? 0.28 : 0
+            hl[k] += (target - hl[k]) * (1 - Math.exp(-dt * 14))
+            if (target === 0 && hl[k] < 0.0001) delete hl[k]
+        }
+        hoverLifts = hl
+        const hv = Object.keys(hl).slice(-3).map(k => { const s = k.split(":"); return Qt.vector4d(+s[0], +s[1], hl[k], 0) })
+        while (hv.length < 3) hv.push(Qt.vector4d(0, 0, 0, 0))
+        hover0 = hv[0]; hover1 = hv[1]; hover2 = hv[2]
+    }
+    // 换下的盒保留各自的高度、速度和玻璃清晰度。
+    function pose(slot, l, r, lift, t) {
+        const node = decorations.objectAt(slot)
+        if (!node) return
+        const amount = ease(lift / 0.4)
+        node.gridLane = l; node.gridRow = r
+        node.amount = amount
+        node.position = Qt.vector3d((l - 2) * columnSpacing,
+            -4.6 + field(r,l,t) + lift + (hoverLifts[l+":"+r] || 0), (r-15.5) * rowSpacing)
+        node.eulerRotation.x = (field(r+0.5,l,t)-field(r-0.5,l,t))*0.024*(1-detail)*(1-amount)*57.2958
+        node.visible = amount > 0.00001
+    }
+    function stepOutgoing(dt,t) {
+        const slots = []
+        const remaining = []
+        for (const o of outgoing) {
+            damp(o.lift,0,Theme.richMotion ? 4.5 : 35,dt)
+            if (o.lift.v < 0.0001) { decorations.objectAt(o.slot).visible = false; continue }
+            remaining.push(o)
+            o.clarity = Math.max(0, o.clarity - dt * 4)
+            slots.push(Qt.vector4d(o.lane,o.row,o.lift.v,ease(o.clarity)))
+            pose(o.slot,o.lane,o.row,o.lift.v,t)
+        }
+        if (remaining.length !== outgoing.length) outgoing = remaining
+        while (slots.length < 4) slots.push(Qt.vector4d(0,0,0,0))
+        out0=slots[0]; out1=slots[1]; out2=slots[2]; out3=slots[3]
+    }
+    // 换盒时由仍然抬起的盒子共同决定暖光的位置与亮度，避免先熄灭再点亮。
+    function updateTapeLight() {
+        const current = decorations.objectAt(selectedSlot)
+        if (!current) return
+        let weight = current.amount
+        let position = current.position.times(weight)
+        for (const o of outgoing) {
+            const node = decorations.objectAt(o.slot)
+            weight += node.amount
+            position = position.plus(node.position.times(node.amount))
+        }
+        if (weight > 0)
+            tapeLight.position = position.times(1 / weight).plus(Qt.vector3d(0, 1.9, 0))
+        tapeLight.brightness = 4.5 * Math.min(weight, 1)
+    }
+    function step(dt) {
+        clock += dt
+        const t = clock
+        const S = springs
+        const chosenX = (cellLane - 2) * columnSpacing, chosenZ = (cellRow - 15.5) * rowSpacing
+        damp(S.shoulder, cellRow, 5, dt)
+        damp(S.focus, cellLane, 4, dt)
+        damp(S.track, chosenX, 3.7, dt)
+        damp(S.rail, -2.17 - chosenZ, 3.7, dt)
+        if (pulses.length && t - pulses[0].time > 3.2) { pulses = pulses.filter(p => t - p.time < 3.2); updatePulses() }
+        const idle = Theme.richMotion && targetReveal > 0 && !detailOpen && detail < 0.01 && t - lastInteraction > 2.5
+        idleGain += ((idle ? 1 : 0) - idleGain) * (1 - Math.exp(-dt * (idle ? 0.8 : 4)))
+        pulseGain += ((detailOpen ? 0 : 1) - pulseGain) * (1 - Math.exp(-dt * 8))
+        // 进出场：reveal 指数逼近目标（同原项目 selectionTransition 的 2.8）
+        reveal += (targetReveal - reveal) * (1 - Math.exp(-dt * (Theme.richMotion ? 2.8 : 35)))
+        if (Math.abs(targetReveal - reveal) < 0.0005) reveal = targetReveal
+        const entryX = 28 * (1 - reveal)          // 世界 +x 在画面里是右上方
+        // 悬停抬起（最多三格同时在变化；没有悬停时跳过，不产生临时对象）
+        if (hoverCell || Object.keys(hoverLifts).length) stepHover(dt)
+        damp(S.lift, detailOpen ? inspectionLift : 0.4 * targetReveal, Theme.richMotion ? 4.2 : 35, dt)
+        const camTarget = detailOpen && holdDetailCamera ? 1 : detailOpen ? ease((S.lift.v - 0.8) / 2.4) : ease((S.lift.v - 0.4) / (inspectionLift - 0.4))
+        detail += (camTarget - detail) * (1 - Math.exp(-dt * (Theme.richMotion ? 2.8 : 35)))
+        const clearTarget = targetReveal === 1 && (!!column || detailOpen)
+        clarity = clearTarget ? Math.min(1, clarity + dt / 0.45) : Math.max(0, clarity - dt * 4)
+        uShoulder = S.shoulder.v; uFocus = S.focus.v; uDetail = detail
+        if (visualLane() !== builtLane || visualRow() !== builtRow) rebuild()
+        const trackX = S.track.v, rail = S.rail.v
+        arrayRoot.position = Qt.vector3d(-trackX + entryX, 0, rail)
+        stepOutgoing(dt, t)
+        selectedCell = Qt.vector4d(cellLane,cellRow,S.lift.v,ease(clarity))
+        pose(selectedSlot,cellLane,cellRow,S.lift.v,t)
+        if (Theme.dark) updateTapeLight()
+        const selY = -4.6 + field(cellRow,cellLane,t) + S.lift.v + (hoverLifts[cellLane+":"+cellRow] || 0)
+
+        // 镜头：长焦，阵列 140 单位外取景；读取时拉近到 72，录像带放到画面左侧
+        const d = baseDirection.times(1 - detail).plus(Qt.vector3d(-0.277, 0.238, 0.931).times(detail)).normalized()
+        const distance = 140 + (72 - 140) * detail
+        const span = 7.33 + (5.9 - 7.33) * detail
+        const right = Qt.vector3d(0, 1, 0).crossProduct(d).normalized()
+        const up = d.crossProduct(right).normalized()
+        const pixelScale = 1080 / span
+        const aimY = holdDetailCamera ? selY - S.lift.v + inspectionLift : selY
+        let detailAim = Qt.vector3d(chosenX - trackX + entryX, aimY, chosenZ + rail).plus(Qt.vector3d(0, 1.85, 0))
+        detailAim = detailAim.plus(right.times((0.5 - 550 / 1920) * 1920 / pixelScale)).plus(up.times((560 / 1080 - 0.5) * 1080 / pixelScale))
+        const arrayAim = Qt.vector3d(-1.091, -0.045, 0.481)
+        const aim = arrayAim.times(1 - detail).plus(detailAim.times(detail))
+        const camPos = aim.plus(d.times(distance))
+        const blend = snapCamera ? 1 : 1 - Math.exp(-dt * 5)
+        snapCamera = false
+        camera.position = camera.position.times(1 - blend).plus(camPos.times(blend))
+        cameraAimX += (aim.x - cameraAimX) * blend; cameraAimY += (aim.y - cameraAimY) * blend; cameraAimZ += (aim.z - cameraAimZ) * blend
+        camera.lookAt(Qt.vector3d(cameraAimX, cameraAimY, cameraAimZ))
+        const fov = 2 * Math.atan(span / (2 * distance)) * 180 / Math.PI
+        camera.fieldOfView += (fov - camera.fieldOfView) * blend
+        const rendered = camera.position.minus(Qt.vector3d(cameraAimX, cameraAimY, cameraAimZ)).length()
+        fogNear = rendered + 1 + (-1 - 1) * detail
+        fogFar = rendered + 13 + (12 - 13) * detail
+        focusDistance = rendered
+
+        const moving = Math.abs(S.lift.vel) > 1e-4 || Math.abs(detail - camTarget) > 1e-3 || pulses.length > 0 || Math.abs(S.rail.vel) > 1e-4
+            || Math.abs(S.track.vel) > 1e-4 || Math.abs(S.shoulder.vel) > 1e-4 || Object.keys(hoverLifts).length > 0
+            || reveal !== targetReveal || outgoing.length > 0
+            || (clearTarget ? clarity < 1 : clarity > 0) || camera.position.minus(camPos).length() > 0.01
+        // 空闲呼吸按显示器刷新率逐帧推进（画面优先；每帧只有少量 uniform，CPU 开销很小）
+        return moving || idleGain > 0.001 || idle
+    }
+    FrameAnimation {
+        running: root.active && root.running
+        onTriggered: { if (!root.step(Math.min(0.05, frameTime))) root.running = false }
+    }
+    // 停止操作 2.5 秒后进入呼吸：唤醒逐帧更新
+    Timer {
+        interval: 2000
+        repeat: true
+        running: root.active && !root.running && !root.detailOpen && Theme.richMotion
+        // 停止更新时时钟不走：把「上次操作」往前推，等价于计时
+        onTriggered: { root.lastInteraction -= interval / 1000; if (root.clock - root.lastInteraction > 2.4) root.running = true }
+    }
+
+    // ── 拾取 ──────────────────────────────────────────────────────────────
+    MouseArea {
+        anchors.fill: parent
+        hoverEnabled: true
+        enabled: !root.detailOpen && root.targetReveal === 1
+        function cellAt(x, y) {
+            const r = view.pick(x, y)
+            if (!r.objectHit) return null
+            if (r.objectHit.objectName === "arrayPart") return r.instanceIndex >= 0 && r.instanceIndex < root.drawn.length ? root.drawn[r.instanceIndex] : null
+            if (r.objectHit.objectName === "detailPart") return {lane:r.objectHit.parent.gridLane,row:r.objectHit.parent.gridRow}
+            return { lane: root.cellLane, row: root.cellRow }
+        }
+        onPositionChanged: mouse => {
+            const c = cellAt(mouse.x, mouse.y)
+            const h = c && !(c.lane === root.cellLane && c.row === root.cellRow) ? c : null
+            const same = (a, b) => a && b && a.lane === b.lane && a.row === b.row
+            if (!same(h, root.hoverCell) && (h || root.hoverCell)) { root.hoverCell = h; root.lastInteraction = root.clock; root.running = true }
+            cursorShape = c ? Qt.PointingHandCursor : Qt.ArrowCursor
+        }
+        onExited: if (root.hoverCell) { root.hoverCell = null; root.running = true }
+        onClicked: mouse => {
+            const c = cellAt(mouse.x, mouse.y)
+            if (!c) return
+            if (c.lane === root.cellLane && c.row === root.cellRow) root.open()
+            else root.goCell(c.lane, c.row)
+        }
+    }
+
+    // ── 贴图来源：档案标签与图标唱片（离屏渲染；选中的那盒与换下的那盒各一份） ──
+    component LabelArt: Rectangle {
+        property string no: ""
+        width: 1024; height: 440
+        color: "#e6e2d9"
+        Rectangle { x: 12; y: 12; width: 1000; height: 6; color: "#171713" }
+        Rectangle { x: 12; y: 419; width: 1000; height: 3; color: "#171713" }
+        Text { x: 22; y: 30; text: "AUTO-MAS"; color: "#171713"; font.family: Theme.font; font.pixelSize: 81; font.bold: true }
+        Text { x: 25; y: 140; text: root.isQueue ? "QUEUE DISPATCH" : root.singleColumn ? root.sectionCode : "SCRIPT CUSTODY"; color: "#878476"; font.family: Theme.font; font.pixelSize: 32 }
+        Text { x: 22; y: 230; text: parent.no; color: "#171713"; font.family: Theme.font; font.pixelSize: 130; font.bold: true }
+        Rectangle { x: 782; y: 32; width: 221; height: 39; color: "#171713"; Text { x: 27; anchors.verticalCenter: parent.verticalCenter; text: "A M / S C"; color: "#eee9de"; font.family: Theme.font; font.pixelSize: 24 } }
+        Text { x: 830; y: 84; text: "INFO"; color: "#171713"; font.family: Theme.font; font.pixelSize: 64; font.bold: true }
+        Emblem { face: Emblem.Archive; x: 820; y: 250; width: 92; height: 92; ink: "#171713"; core: Theme.accent }
+        Mark { x: 915; y: 254; width: 84; height: 84; ink: "#171713" }
+    }
+    component DiscArt: Item {
+        id: art
+        required property int logoIndex
+        property string icon: ""
+        property string title: ""
+        property string sub: ""
+        width: 900; height: 640
+        // 每世界单位 200 像素。两枚图标贴在同一层内衬上，共享盖板的透射与清晰度。
+        Image {
+            x: 133; y: 185; width: 270; height: 270
+            asynchronous: true
+            source: art.icon ? "image://exeicon/cassette/" + encodeURIComponent(art.icon) : ""
+            fillMode: Image.PreserveAspectFit
+            smooth: true; mipmap: true
+        }
+        Image {
+            x: 497; y: 185; width: 270; height: 270
+            source: "../assets3d/cassette-logos.png"
+            sourceClipRect: Qt.rect((art.logoIndex % 4) * 256, Math.floor(art.logoIndex / 4) * 256, 256, 256)
+            smooth: true; mipmap: true
+        }
+        Rectangle {
+            x: 82; y: 546; width: 736; height: 53
+            visible: !!art.title
+            color: "#dcd5c8"
+            Rectangle { width: 10; height: parent.height; color: "#cf692c" }
+            Text {
+                anchors.fill: parent; anchors.leftMargin: 26; anchors.rightMargin: 16
+                verticalAlignment: Text.AlignVCenter; elide: Text.ElideRight
+                text: art.title + (art.sub ? "   /   " + art.sub : "")
+                color: "#302d2a"; font.family: Theme.font; font.pixelSize: 30; font.bold: true
+            }
+        }
+    }
+    // ── 界面（原项目的档案选择版式） ──────────────────────────────────────
+    // 动效时序取自原项目 style.css：整层 .archive-ui 0.8 秒淡入、延迟 0.3 秒；
+    // 眉题 0.7 秒淡入；分隔线自右向左展开 1.3 秒（cubic-bezier(0.22, 1, 0.36, 1)）；
+    // 摘要行 0.7 秒淡入并上移 8px、读取行 0.7 秒淡入，二者延迟 0.4 秒。离开 / 进入读取时按同样的时长反向
+    readonly property var cssEase: [0.25, 0.1, 0.25, 1, 1, 1]
+    readonly property var outExpo: [0.22, 1, 0.36, 1, 1, 1]
+    // 原版阵列的暖灰氛围：远处盒脊融入上缘，近处底部淡出；详情右侧留给正文。
+    Rectangle {
+        anchors.fill: parent
+        visible: !Theme.dark
+        gradient: Gradient {
+            GradientStop { position: 0; color: "#eae5e1" }
+            GradientStop { position: 0.11; color: "#d1eae5e1" }
+            GradientStop { position: 0.40; color: "#20eae5e1" }
+            GradientStop { position: 0.81; color: "#20eae5e1" }
+            GradientStop { position: 1; color: "#efeae5e1" }
+        }
+    }
+    Rectangle {
+        anchors.fill: parent
+        visible: !Theme.dark && root.detail > 0
+        opacity: root.detail
+        gradient: Gradient {
+            orientation: Gradient.Horizontal
+            GradientStop { position: 0.4; color: "#00e8e5e1" }
+            GradientStop { position: 0.59; color: "#33e8e5e1" }
+            GradientStop { position: 0.68; color: "#ebe8e5e1" }
+            GradientStop { position: 1; color: "#e8e5e1" }
+        }
+    }
+    // 文字衬底：右侧档案信息与底部操作区各铺一层柔边底色，叠在录像带上的文字在浅色 / 深色下都清楚
+    Item {
+        id: scrims
+        anchors.fill: parent
+        visible: false
+        Rectangle {
+            x: 850; y: 420; width: 1150; height: 420
+            gradient: Gradient {
+                orientation: Gradient.Horizontal
+                GradientStop { position: 0; color: Qt.rgba(Theme.bg.r, Theme.bg.g, Theme.bg.b, 0) }
+                GradientStop { position: 0.2; color: Qt.rgba(Theme.bg.r, Theme.bg.g, Theme.bg.b, Theme.dark ? 0.7 : 0.58) }
+                GradientStop { position: 1; color: Qt.rgba(Theme.bg.r, Theme.bg.g, Theme.bg.b, Theme.dark ? 0.8 : 0.68) }
+            }
+        }
+        Rectangle {
+            y: 790; width: parent.width; height: 330
+            gradient: Gradient {
+                GradientStop { position: 0; color: Qt.rgba(Theme.bg.r, Theme.bg.g, Theme.bg.b, 0) }
+                GradientStop { position: 0.35; color: Qt.rgba(Theme.bg.r, Theme.bg.g, Theme.bg.b, Theme.dark ? 0.72 : 0.6) }
+                GradientStop { position: 1; color: Qt.rgba(Theme.bg.r, Theme.bg.g, Theme.bg.b, Theme.dark ? 0.88 : 0.78) }
+            }
+        }
+    }
+    MultiEffect {
+        anchors.fill: parent
+        source: scrims
+        blurEnabled: true; blur: 1; blurMax: 64
+        opacity: root.uiShown ? 1 : 0
+        visible: opacity > 0
+        Behavior on opacity { enabled: Theme.richMotion; NumberAnimation { duration: 700; easing.type: Easing.BezierSpline; easing.bezierCurve: root.cssEase } }
+    }
+    Item {
+        anchors.fill: parent
+        opacity: root.uiShown ? 1 : 0
+        visible: opacity > 0
+        Behavior on opacity { enabled: Theme.richMotion; SequentialAnimation { PauseAnimation { duration: 300 } NumberAnimation { duration: 800; easing.type: Easing.BezierSpline; easing.bezierCurve: root.cssEase } } }
+
+        Column {
+            x: 970; y: 471
+            spacing: 0
+            Row {
+                spacing: 16
+                opacity: root.uiShown ? 1 : 0
+                Behavior on opacity { enabled: Theme.richMotion; NumberAnimation { duration: 700; easing.type: Easing.BezierSpline; easing.bezierCurve: root.cssEase } }
+                Text { text: "INTERNAL DATABASE"; color: Theme.muted; font.family: Theme.font; font.pixelSize: 12; font.letterSpacing: 1.3 }
+                Text { text: "／"; color: Theme.muted; font.family: Theme.font; font.pixelSize: 12 }
+                RollText { text: root.column ? root.column.name : ""; dir: root.dir; color: Theme.muted; font.family: Theme.font; font.pixelSize: 12; font.letterSpacing: 1.3 }
+            }
+            Item { width: 1; height: 22 }
+            Row {
+                spacing: 10
+                Text { text: "FILE NUMBER:"; color: Theme.ink; font.family: Theme.font; font.pixelSize: 28; font.weight: Font.Bold }
+                RollText { text: root.fileId; dir: root.dir; color: Theme.ink; font.family: Theme.font; font.pixelSize: 28; font.weight: Font.Bold }
+                Text { text: "↗"; color: Theme.ink; opacity: 0.5; font.pixelSize: 20; anchors.verticalCenter: parent.verticalCenter
+                    MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.open() } }
+            }
+            Item { width: 1; height: 55 }
+            Item {
+                width: 950; height: 1
+                Rectangle {
+                    x: 57; width: parent.width - 57; height: 1; color: Theme.ink
+                    transform: Scale {
+                        origin.x: 950 - 57
+                        xScale: root.uiShown ? 1 : 0
+                        Behavior on xScale { enabled: Theme.richMotion; NumberAnimation { duration: 1300; easing.type: Easing.BezierSpline; easing.bezierCurve: root.outExpo } }
+                    }
+                }
+                Rectangle { x: -4; y: -3; width: 6; height: 6; color: Theme.ink; opacity: root.uiShown ? 1 : 0 }
+            }
+            Item { width: 1; height: 22 }
+            Item {
+                id: sortLabel
+                x: 58; width: 652; height: 22
+                opacity: root.uiShown ? 1 : 0
+                Behavior on opacity { enabled: Theme.richMotion; SequentialAnimation { PauseAnimation { duration: 400 } NumberAnimation { duration: 700; easing.type: Easing.BezierSpline; easing.bezierCurve: root.cssEase } } }
+                transform: Translate {
+                    y: root.uiShown ? 0 : 8
+                    Behavior on y { enabled: Theme.richMotion; SequentialAnimation { PauseAnimation { duration: 400 } NumberAnimation { duration: 700; easing.type: Easing.BezierSpline; easing.bezierCurve: root.cssEase } } }
+                }
+                ScriptDragArea {
+                    anchors.fill: parent; z: 1
+                    visible: !!root.sortRecord && root.singleColumn
+                    shelf: root.sortShelf; record: root.sortRecord
+                    onTapped: root.open()
+                }
+                RollText { text: root.rowName; dir: root.dir; color: Theme.ink; font.family: Theme.font; font.pixelSize: 16 }
+                Text { anchors.right: parent.right; text: root.isQueue ? "QUEUE ITEM" : root.singleColumn ? "RECORD" : "SCRIPT PAGE"; color: Theme.muted; font.family: Theme.font; font.pixelSize: 11; font.letterSpacing: 1 }
+            }
+            Item { width: 1; height: 58 }
+            Row {
+                x: 58
+                visible: !!root.column || root.isQueue
+                spacing: 70
+                opacity: root.uiShown ? 1 : 0
+                Behavior on opacity { enabled: Theme.richMotion; SequentialAnimation { PauseAnimation { duration: 400 } NumberAnimation { duration: 700; easing.type: Easing.BezierSpline; easing.bezierCurve: root.cssEase } } }
+                Text { text: "ACCESS FILE"; color: Theme.ink; font.family: Theme.font; font.pixelSize: 14; font.letterSpacing: 1 }
+                Text { text: "→"; color: Theme.ink; font.pixelSize: 24; anchors.verticalCenter: parent.verticalCenter }
+                MouseArea { x: -10; y: -10; width: 260; height: 50; cursorShape: Qt.PointingHandCursor; onClicked: root.open() }
+            }
+        }
+        // 左下：列内序号
+        Column {
+            x: 60; y: 1080 - 115 - 92
+            visible: !!root.column || root.isQueue
+            Text { text: "ARCHIVE / SELECT"; color: Theme.ink; font.family: Theme.font; font.pixelSize: 11; font.letterSpacing: 1.7 }
+            Item { width: 1; height: 16 }
+            Row {
+                spacing: 21
+                RollDigits { text: String(root.row + 1).padStart(2, "0"); dir: root.dir; color: Theme.ink; font.family: Theme.font; font.pixelSize: 58 }
+                Text { anchors.bottom: parent.bottom; anchors.bottomMargin: 8; text: "/"; color: Theme.muted; font.family: Theme.font; font.pixelSize: 32; font.weight: Font.Light }
+                Text { anchors.bottom: parent.bottom; anchors.bottomMargin: 10; text: String(root.rowCount).padStart(2, "0"); color: Theme.muted; font.family: Theme.font; font.pixelSize: 22 }
+            }
+        }
+        // 底部：上下翻档 + 刻度
+        Row {
+            x: 504; y: 1080 - 131 - 46
+            visible: !!root.column || root.isQueue
+            spacing: 33
+            Text { width: 46; height: 46; text: "↑"; color: Theme.ink; font.pixelSize: 28; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
+                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.nav("row", -1) } }
+            Row {
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: 12
+                // 刻度最多 12 格：行数多时以当前行为中心滑动显示
+                readonly property int first: root.rowCount <= 12 ? 0 : Math.max(0, Math.min(root.rowCount - 12, root.row - 6))
+                Repeater {
+                    model: Math.min(root.rowCount, 12)
+                    Item {
+                        required property int index
+                        readonly property int r: parent.first + index
+                        width: 14; height: 40
+                        Rectangle { x: 6; width: 2; anchors.verticalCenter: parent.verticalCenter; height: parent.r === root.row ? 33 : 12; color: parent.r === root.row ? Theme.ink : Theme.hair
+                            Behavior on height { NumberAnimation { duration: 400 } } }
+                        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.goCell(root.cellLane, root.cellRow + parent.r - root.row) }
+                    }
+                }
+            }
+            Text { width: 46; height: 46; text: "↓"; color: Theme.ink; font.pixelSize: 28; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
+                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.nav("row", 1) } }
+        }
+        // 底部：列切换
+        Row {
+            visible: !root.singleColumn && (!!root.column || root.isQueue)
+            x: 1005; y: 1080 - 131 - 46
+            spacing: 24
+            Text { width: 46; height: 46; text: "←"; color: Theme.ink; font.pixelSize: 24; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
+                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.nav("lane", -1) } }
+            Column {
+                anchors.verticalCenter: parent.verticalCenter
+                width: 160
+                spacing: 7
+                RollText { text: "COLUMN " + String(root.lane + 1).padStart(2, "0") + " / " + String(root.laneCount).padStart(2, "0"); dir: root.dir; color: Theme.muted; font.family: Theme.font; font.pixelSize: 10; font.letterSpacing: 1.2 }
+                RollText { text: root.column ? root.column.name : ""; dir: root.dir; color: Theme.ink; font.family: Theme.font; font.pixelSize: 15 }
+            }
+            Text { width: 46; height: 46; text: "→"; color: Theme.ink; font.pixelSize: 24; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
+                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.nav("lane", 1) } }
+        }
+        Text {
+            x: 505; y: 1080 - 60 - 12
+            visible: !!root.column || root.isQueue
+            text: (root.singleColumn ? "" : "←  →  ／  A  D  切换" + (root.isQueue ? "队列" : "程序") + "    ／    ") + "↑  ↓  ／  W  S  前后档案    ／    ENTER  读取"
+            color: Theme.muted; font.family: Theme.font; font.pixelSize: 11; font.letterSpacing: 0.9
+        }
+    }
+}

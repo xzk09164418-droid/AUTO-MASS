@@ -1,125 +1,51 @@
-<h1 align="center">AUTO-MAS</h1>
-<p align="center">
-  A Multi-Script, Multi-Config Management and Automation Software<br><br>
-  <img alt="Software icon" src="https://auto-mas.top/favicon.ico">
-</p>
+# AUTO-MASS
 
----
+版本 **0.1.0**，基于 AUTO-MAS 的个人派生项目。当前发布基线为本仓库 QT 分支。
 
-<p align="center">
-  <a href="https://github.com/AUTO-MAS-Project/AUTO-MAS/stargazers"><img alt="GitHub Stars" src="https://img.shields.io/github/stars/AUTO-MAS-Project/AUTO-MAS?style=flat-square"></a>
-  <a href="https://github.com/AUTO-MAS-Project/AUTO-MAS/network"><img alt="GitHub Forks" src="https://img.shields.io/github/forks/AUTO-MAS-Project/AUTO-MAS?style=flat-square"></a>
-  <a href="https://github.com/AUTO-MAS-Project/AUTO-MAS/releases/latest"><img alt="GitHub Downloads" src="https://img.shields.io/github/downloads/AUTO-MAS-Project/AUTO-MAS/total?style=flat-square"></a>
-  <a href="https://github.com/AUTO-MAS-Project/AUTO-MAS/issues"><img alt="GitHub Issues" src="https://img.shields.io/github/issues/AUTO-MAS-Project/AUTO-MAS?style=flat-square"></a>
-  <a href="https://github.com/AUTO-MAS-Project/AUTO-MAS/graphs/contributors"><img alt="GitHub Contributors" src="https://img.shields.io/github/contributors/AUTO-MAS-Project/AUTO-MAS?style=flat-square"></a>
-  <a href="https://github.com/AUTO-MAS-Project/AUTO-MAS/blob/main/LICENSE"><img alt="GitHub License" src="https://img.shields.io/github/license/AUTO-MAS-Project/AUTO-MAS?style=flat-square"></a>
-  <a href="https://deepwiki.com/AUTO-MAS-Project/AUTO-MAS"><img alt="DeepWiki" src="https://deepwiki.com/badge.svg"></a>
-  <a href="https://mirrorchyan.com/zh/projects?rid=AUTO-MAS&source=auto_mas-readme"><img alt="mirrorc" src="https://img.shields.io/badge/Mirror%E9%85%B1-%239af3f6?logo=countingworkspro&logoColor=4f46e5"></a>
-</p>
+## 来源与署名
 
-<p align="center">
-  <a href="docs/zh/README.md">简体中文</a>
-  | English
-</p>
+本项目继承 [AUTO-MAS](https://github.com/AUTO-MAS-Project/AUTO-MAS) 的后端、任务调度与配置管理能力，原作者为 DLmaster361 与 AUTO-MAS Team，其他贡献者见上游项目及文件版权声明。
 
-## Introduction
+本次派生版主要提供 General 通用脚本入口、Windows 本地远程桌面与热键/外部占用控制，以及 PySide6/QML 桌面界面。原始项目说明保存在 [README-UPSTREAM.md](README-UPSTREAM.md)。
 
-### Nature
+项目在2026 年 10 月 21 日开始构建，最初为了解决automas原有脚本无法使用本地远程rdp进行后台操作，以及脚本运行的暂停问题（目前automas已有相关方向，详情移步至https://github.com/AUTO-MAS-Project/AUTO-MAS ）
 
-This software is a management tool for automation scripts. It enables centralized management of numerous scripts, stores multiple user configurations, designs automated task workflows, monitors script logs, and enhances the efficiency and stability of automated proxy operations.
+日常运行无需拉取源码，本构建禁用遥测。获取活动信息、社区签到、邮箱控制、发送远程通知和下载可选的增强视觉组件时会使用网络。外部脚本和游戏的联网行为由各自程序决定。
+同时，本项目参考Better Genshin Impact（项目地址 https://github.com/babalae/better-genshin-impact ）的子session实现
+## 对于原版的破坏性改动
 
-- **Centralized Management**: Manage multiple scripts and user configurations in one place—say goodbye to messy, scattered script windows!
-- **Unattended Operation**: Monitor script logs and automatically handle errors—no more worries about tasks freezing while you're away from your computer!
-- **Flexible Configuration**: Combine scheduling queues with scripts to freely implement any scheduling logic you can imagine!
-- **Proxy Logging**: Record all proxy sessions and log snippets for faster, more accurate, and convenient troubleshooting!
+以下对比以 2026 年 10 月 21 日的上游提交 `9d27abe` 为基准。
 
-### Working Principle
+- **移除 13 个内置专项适配器**：BAAH、BetterGI、HSR、M9A、MAA、MSS、MaaEnd、MaaFW、OkNte、Okww、SRC、Whimbox 和 ZzzOd。当前仅保留 General 通用脚本入口。原先依赖专项的用户需要在 General 中配置外部脚本的启动方式；原专项提供的能力（如 BetterGI 的账号切换、一条龙计划和掉落统计）不会随之迁移。
+- **桌面主界面改用 PySide6/QML**：当前版本以 Qt 作为唯一图形界面，已移除浏览器控制台与 Node 前端宿主，并支持在无界面模式下按队列 ID 或脚本 ID 启动任务。
 
-The software stores multiple configurations for multiple scripts and implements proxy functionality through the following workflow:
+在保留的 General 入口基础上，本版新增以下运行方式：
 
-1. **Configuration**: Generate configuration files based on user settings and inject them into the corresponding scripts.
-2. **Monitoring**: After the script starts proxying, continuously read its logs to assess runtime status. If an anomaly is detected, the software restarts the script to ensure task continuity.
-3. **Looping**: Repeat the above steps to allow scripts to sequentially fulfill automated proxy tasks for all users.
+- **本地远程桌面**：外部脚本可以在独立的 Windows 子会话中操作桌面，宿主窗口支持隐藏到托盘或按需显示。也可以通过命令行单独启动脚本，指定参数、超时和最大尝试次数（含首次）。
+- **运行控制与桌面借用**：可用热键控制任务启停或切换任务，其中热键启停的设计参考了维护者的 [windows-script-scheduler](https://github.com/xzk09164418-droid/windows-script-scheduler) 项目。外部程序可申请借用远程桌面，队列会在子任务之间让出桌面，用完后由借用方释放。
 
-## Important Notice
+具体命令见[远程桌面与启动说明](README-RELEASE.md)。
 
-The development team commits to never actively modifying the game client or its configuration files. This project is open-sourced under the AGPL license, with the following clarifications:
+维护者已获得上游作者同意开设 fork。相关沟通记录由维护者私下保留。项目继续按根目录 [LICENSE](LICENSE) 中的 AGPL-3.0 条款发布，文件内已有的版权及许可证声明一并保留。第三方来源见 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)。
 
-- **Authorship**: The author of the AUTO-MAS project is the AUTO-MAS Team. All rights of the AUTO-MAS Team are exclusively granted to [DLmaster (@DLmaster361)](https://github.com/DLmaster361), who alone may represent the team in exercising all rights.
-- **Usage**: Users may freely use this software at their own discretion. Per the AGPL, the AUTO-MAS Team bears no liability for any potential damages arising from its use.
-- **Distribution**: Anyone may freely redistribute this software, including for commercial profit. Direct redistribution requires providing recipients with the project URL, full source code, and a copy of the AGPL license text as mandated by the AGPL. Modified redistributions must additionally include the original unmodified source code. Violators may face legal action. Commercial users must establish their own customer communities and provide their own after-sales support—they may not redirect customers to the official AUTO-MAS community. Those exploiting the open-source community for profit will be blacklisted and publicly disclosed.
-- **Promotion**: Redistribution is generally permitted, provided that original copyright notices remain intact and the existence of the AUTO-MAS Team is not concealed. Due to the nature of this software, the AUTO-MAS Team requests that no one mention AUTO-MAS or related automation tools in official game media (including official accounts and communities) or game-related content (such as fan groups, offline events, or gameplay discussions). Your understanding is appreciated.
-- **Derivative Works**: Anyone may create derivative works based on the software or parts of its code. However, per the AGPL, any redistributed derivatives must also be open-sourced under the AGPL or a compatible license.
-- **Artwork and Visual Assets:** Images, icons, illustrations, and other visual assets of this software are **not** covered by the code open-source license. For the full ownership inventory, redistribution duties, third-party compliance templates, and commercial authorization contacts, see the [Visual Assets License Agreement](https://doc.auto-mas.top/disclosure/assets-license). That Agreement is an inseparable part of any distribution and must not be stripped when redistributing or using the assets alone.
+## 从源码运行 Qt 界面
 
-These terms supplement and emphasize specific aspects of the AGPL. Where unspecified, the AGPL governs; for visual assets, the online Agreement governs; for other conflicts, these terms prevail. For clarification, please open an Issue. In disputes involving unaddressed matters, the AUTO-MAS Team reserves final interpretation rights.
+需要 Windows 和 Python 3.12。先准备开发环境标记，再安装依赖。
 
-## How to Use
+```powershell
+Copy-Item .env.example .env
+py -3.12 -m pip install uv
+uv sync --locked --python 3.12
+uv pip install --python .venv\Scripts\python.exe -r qt/requirements.txt
+.venv\Scripts\python.exe qt/main.py
+```
 
-Visit the official AUTO-MAS documentation site for user guides and additional project information
+Qt 启动选项与增强组件说明见 [qt/README.md](qt/README.md)。界面预览可使用 `--no-backend`。本地远程桌面宿主需要按 [README-RELEASE.md](README-RELEASE.md) 的 Windows 安装步骤准备。
 
-- [Official Documentation](https://doc.auto-mas.top)
+## 版本与发布
 
-## Contributing
+AUTO-MASS 使用独立版本号 `0.1.0`。继承的上游更新历史保存在 `CHANGELOG.md` 和 `res/version.json` 的历史条目中。源代码发布应包含许可证、对应构建脚本及第三方声明。
 
-To participate in development or contribute to the project, please read the development and contribution guide first:
+配置、邮件授权码、调用方密钥、运行日志和恢复备份保存在本地忽略目录中。首次公开仓库应使用经过检查的 QT 发布范围或源码快照。其他本地分支历史曾提交私人配置，避免使用 --all 或 --mirror 推送。
 
-- [Development and Contribution Guide](https://doc.auto-mas.top/developer/)
-
-## Code Signing Policy
-
-Free code signing provided by [SignPath.io](https://signpath.io/), certificate by [SignPath Foundation](https://signpath.org/).
-
-- Approvers: [DLmaster (@DLmaster361)](https://github.com/DLmaster361)
-
-## Privacy Policy
-
-To better serve you, AUTO-MAS will automatically collect the following information:
-
-- Software version number
-- Runtime error information
-- Performance tracing information
-- Usage statistics: run counts and results per script type, which public MaaFramework project is run (only projects listed in the MaaFramework README; any other project is reported as "other"), and one daily-active count per day (no device identifier)
-
-AUTO-MAS respects and protects user privacy. This information is redacted on the client before being sent to Sentry SaaS (US region) for error and performance analysis. User identity, cookies, request headers, request bodies, URL query parameters, local variables, and absolute local paths are not sent. Anonymous telemetry is enabled by default and can be disabled under 「Settings -> Function Settings」; once disabled, neither the frontend nor backend sends telemetry data.
-
----
-
-# About
-
-## Special Thanks
-
-- [AoXuan (@ClozyA)](https://github.com/ClozyA): donated the AUTO-MAS download server for several months.
-- <a href="https://www.packyapi.ai/register?aff=zKkA"><img alt="PackyCode" src="https://www.packyapi.ai/logo-full.svg" height="28" align="absmiddle"></a>: Sponsored the developer with AI API credits. PackyCode is a stable, high-performance API relay provider offering relay services for Claude Code, Codex, Gemini, and more, with automatic failover, smart routing, and unlimited concurrency. [Register for free on PackyCode](https://www.packyapi.ai/register?aff=zKkA).
-
-## Contributors
-
-We thank the following contributors for their work on this project
-
-<a href="https://github.com/AUTO-MAS-Project/AUTO-MAS/graphs/contributors">
-
-  <img src="https://contrib.rocks/image?repo=AUTO-MAS-Project/AUTO-MAS" />
-
-</a>
-
-![Alt](https://repobeats.axiom.co/api/embed/faac2ed458f7eebe0b7f31432224514d50367152.svg "Repobeats analytics image")
-
-## Star History
-
-<a href="https://www.star-history.com/?repos=AUTO-MAS-Project%2FAUTO-MAS&type=date&legend=top-left">
-
- <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=AUTO-MAS-Project/AUTO-MAS&type=date&theme=dark&legend=top-left&sealed_token=tzZpfkoUQl3n13ptQrCOpskCv49TRKf6ChW1P2gpvDLfKXtjjy853wsRzl7qsI3J3ryH6456XHLUG15UveDTCcgKmop9fdLrxjOG4pFgeRdH5HR_SYbHSd24ZhBEfVKHPEMwtZkSOW7-i1CUKC8aWLxiW1I97KfvHgU4-PlMTZcqPw9CTBUfQhpB9iS0" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=AUTO-MAS-Project/AUTO-MAS&type=date&legend=top-left&sealed_token=tzZpfkoUQl3n13ptQrCOpskCv49TRKf6ChW1P2gpvDLfKXtjjy853wsRzl7qsI3J3ryH6456XHLUG15UveDTCcgKmop9fdLrxjOG4pFgeRdH5HR_SYbHSd24ZhBEfVKHPEMwtZkSOW7-i1CUKC8aWLxiW1I97KfvHgU4-PlMTZcqPw9CTBUfQhpB9iS0" />
-   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=AUTO-MAS-Project/AUTO-MAS&type=date&legend=top-left&sealed_token=tzZpfkoUQl3n13ptQrCOpskCv49TRKf6ChW1P2gpvDLfKXtjjy853wsRzl7qsI3J3ryH6456XHLUG15UveDTCcgKmop9fdLrxjOG4pFgeRdH5HR_SYbHSd24ZhBEfVKHPEMwtZkSOW7-i1CUKC8aWLxiW1I97KfvHgU4-PlMTZcqPw9CTBUfQhpB9iS0" />
- </picture>
-
-</a>
-
-## Official Community
-
-Join the official AUTO-MAS community!
-
-- QQ Group: [957750551](https://qm.qq.com/q/bd9fISNoME)
-- QQ Developer Community: [1094208135](https://qm.qq.com/q/MJYbfjwScM)
-- Telegram: [@AUTO_MAS_top](https://t.me/AUTO_MAS_top)
+Qt 关闭窗口后保留托盘与后端；托盘支持仅退出前端、停止队列和完整退出。隔离后端已验证窗口关闭/重建与完整退出；真实游戏任务及 RDP 注销仍需在对应运行环境验证。已修复的问题见 [RELEASE-NOTES.md](RELEASE-NOTES.md)。

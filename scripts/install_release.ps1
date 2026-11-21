@@ -5,7 +5,7 @@
 .DESCRIPTION
     1. 使用 Windows 10/11 系统自带的 .NET 编译器 (csc.exe) 编译：
        - `res/ChildSessionHost/AutoMas.ChildSessionHost.exe`（复刻 BGI 远程桌面 UI，默认托盘静默运行）
-       - `AUTO-MAS.exe`（原生无黑框系统托盘启动器，支持 Node.js 打开浏览器或命令行无窗口直跑）
+       - `AUTO-MAS.exe`（原生无黑框系统托盘启动器，启动 Qt 控制台与系统托盘）
     2. 自动检测并配置 Python 运行环境与依赖（支持 uv / venv / 系统 Python）。
     3. 初始化默认配置文件 `config/Config.json`（开启本地远程桌面与默认托盘隐藏模式）。
     4. 创建桌面快捷方式（`AUTO-MAS 控制台` 与 `AUTO-MAS 无窗口静默运行`）。
@@ -83,7 +83,7 @@ if ($CscExe) {
     }
 
     Write-Host "[2/4] 正在编译原生无窗口托盘启动器 (AUTO-MAS.exe)..." -ForegroundColor Yellow
-    $LauncherCs = Join-Path $RootDir "res\Launcher\AutoMasLauncher.cs"
+    $LauncherCs = Join-Path $RootDir "res\Launcher\AutoMassQtLauncher.cs"
     $LauncherOut = Join-Path $RootDir "AUTO-MAS.exe"
     $LauncherArgs = @(
         "/nologo",
@@ -138,6 +138,9 @@ if (Get-Command uv -ErrorAction SilentlyContinue) {
     if ($LASTEXITCODE -ne 0) { throw "安装 Python 依赖失败，请检查上方错误。" }
 }
 
+& $VenvPython -m pip install -r (Join-Path $RootDir "qt/requirements.txt")
+if ($LASTEXITCODE -ne 0) { throw "Qt 依赖安装失败。" }
+
 # 3. 初始化默认配置 (默认开启远程桌面且默认托盘隐藏运行)
 $ConfigDir = Join-Path $RootDir "config"
 if (-not (Test-Path -LiteralPath $ConfigDir)) {
@@ -181,7 +184,7 @@ try {
     $Shortcut1.TargetPath = $TargetExe
     $Shortcut1.WorkingDirectory = $RootDir
     if (Test-Path -LiteralPath $IconPath) { $Shortcut1.IconLocation = $IconPath }
-    $Shortcut1.Description = "启动 AUTO-MAS（Node.js 调用系统浏览器打开控制台，远程桌面在托盘静默运行）"
+    $Shortcut1.Description = "启动 AUTO-MAS Qt 控制台，关闭窗口后托盘和后端继续运行"
     $Shortcut1.Save()
 
     $Shortcut2 = $WshShell.CreateShortcut((Join-Path $DesktopDir "AUTO-MAS 静默后台运行.lnk"))

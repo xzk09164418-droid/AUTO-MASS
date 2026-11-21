@@ -9,7 +9,7 @@ $VenvDir = Join-Path $RootDir ".venv"
 $LauncherExe = Join-Path $RootDir "AUTO-MAS.exe"
 $HostExe = Join-Path $RootDir "res\ChildSessionHost\AutoMas.ChildSessionHost.exe"
 $MainPy = Join-Path $RootDir "main.py"
-$ServerJs = Join-Path $RootDir "frontend\server.js"
+$QtMain = Join-Path $RootDir "qt\main.py"
 $WrapperPy = Join-Path $RootDir "app\utils\platform\windows\child_session_wrapper.py"
 $Comparison = [StringComparison]::OrdinalIgnoreCase
 
@@ -35,10 +35,10 @@ $OwnedProcesses = @($Processes | Where-Object {
     $isPython = $name -in @("python.exe", "pythonw.exe") -and (
         $exe.StartsWith((Join-Path $VenvDir "Scripts") + '\', $Comparison) -or
         $command.IndexOf($MainPy, $Comparison) -ge 0 -or
+        $command.IndexOf($QtMain, $Comparison) -ge 0 -or
         $command.IndexOf($WrapperPy, $Comparison) -ge 0
     )
-    $isNode = $name -eq "node.exe" -and $command.IndexOf($ServerJs, $Comparison) -ge 0
-    $isLauncher -or $isHost -or $isPython -or $isNode
+    $isLauncher -or $isHost -or $isPython
 })
 
 foreach ($process in $OwnedProcesses) {

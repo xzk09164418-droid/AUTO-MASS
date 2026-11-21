@@ -1,0 +1,1733 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>AUTO-MAS 档案终端演示</title>
+<link rel="stylesheet" href="./vendor/misans/misans.css" />
+<script type="importmap">{ "imports": { "three": "./vendor/three/build/three.module.js" } }</script>
+<style>
+:root {
+  --bg: #e6e3df;
+  --ink: #0b0c0b;
+  --paper: #f6f4f1;
+  --muted: #77756d;
+  --hair: #aaa59a;
+  --grid: rgba(120, 116, 106, 0.16);
+  --accent: #e8701f;
+  --amber: #9b7247;
+  --font: 'AUTO-MAS MiSans', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--bg); overflow: hidden; font-family: var(--font); color: var(--ink); }
+/* 1920×1080 参考舞台，按窗口等比缩放 */
+#viewport { position: fixed; inset: 0; overflow: clip; }
+#stage { position: absolute; left: 50%; top: 50%; width: 1920px; height: 1080px; transform-origin: center; overflow: clip; background: var(--bg); }
+svg { display: block; }
+
+/* ─────────── 启动动画 ─────────── */
+#boot { position: absolute; inset: 0; z-index: 50; background: #fff; transition: transform .8s cubic-bezier(.5,0,.2,1), filter .8s ease, opacity .6s ease; }
+#boot.leave { transform: scale(.86); filter: blur(10px) hue-rotate(160deg) saturate(.6); opacity: 0; }
+#boot.flash { filter: invert(1); }
+#b-black { position: absolute; inset: 0; background: #000; display: grid; place-items: center; transition: opacity .25s; }
+#b-black svg { width: 120px; opacity: 0; animation: fade-in .9s .1s ease forwards; }
+#b-black.off { opacity: 0; pointer-events: none; }
+#b-type { position: absolute; left: 0; right: 0; top: 520px; text-align: center; font-size: 22px; font-weight: 700; letter-spacing: .32em; white-space: pre; }
+#b-type .caret { display: inline-block; width: 12px; height: 22px; margin-left: 4px; background: var(--ink); vertical-align: -3px; animation: blink .5s steps(1) infinite; }
+#b-ident { position: absolute; left: 0; right: 0; top: 470px; display: flex; flex-direction: column; align-items: center; gap: 22px; font-size: 22px; font-weight: 700; letter-spacing: .3em; }
+#b-ident .spin { display: inline-block; width: 18px; height: 18px; margin-right: 12px; border: 3px solid var(--ink); border-right-color: transparent; border-radius: 50%; vertical-align: -2px; animation: spin .6s linear infinite; }
+
+#b-logo { position: absolute; left: 860px; top: 440px; width: 200px; height: 200px; transition: transform .9s cubic-bezier(.2,.8,.1,1); }
+#b-logo.shift { transform: translateX(-250px); }
+#b-logo .draw { fill: none; stroke: var(--ink); stroke-width: 7; stroke-dasharray: 700; stroke-dashoffset: 700; }
+#b-logo.play .draw { animation: draw 1.3s cubic-bezier(.6,0,.2,1) forwards; }
+#b-logo .tick { stroke: var(--ink); stroke-width: 7; opacity: 0; }
+#b-logo.play .tick { animation: fade-in .2s 1.05s forwards; }
+#b-logo .core { fill: var(--accent); transform-origin: 100px 100px; transform: scale(0); }
+#b-logo.play .core { animation: pop .35s 1.2s cubic-bezier(.3,1.6,.5,1) forwards; }
+
+#b-brand { position: absolute; left: 870px; top: 470px; width: 300px; transition: left .9s cubic-bezier(.6,0,.2,1), top .9s cubic-bezier(.6,0,.2,1), transform .9s cubic-bezier(.6,0,.2,1); transform-origin: left top; }
+#b-brand.corner { left: 59px; top: 64px; transform: scale(.9); }
+.brand-line { opacity: 0; transform: translateX(120px); transition: transform .7s cubic-bezier(.1,.9,.2,1), opacity .2s; white-space: nowrap; }
+.brand-line.in { opacity: 1; transform: none; }
+.brand-1 { font-size: 46px; line-height: 50px; font-weight: 700; letter-spacing: 2.5px; }
+.brand-2 { font-size: 15px; line-height: 22px; font-weight: 600; letter-spacing: 1.6px; }
+.brand-3 { font-size: 35px; line-height: 40px; font-weight: 700; letter-spacing: 6px; }
+
+#b-auth { position: absolute; inset: 0; opacity: 0; }
+#b-auth.play { opacity: 1; }
+#b-auth .ring-outer { fill: none; stroke: var(--ink); stroke-width: 30; transform-origin: 960px 540px; transform: scale(3); }
+#b-auth.play .ring-outer { animation: converge 1.1s cubic-bezier(.1,.8,.2,1) forwards; }
+#b-auth .ring-white { fill: none; stroke: #fff; stroke-width: 8; stroke-dasharray: 1100 400; transform-origin: 960px 540px; transform: scale(2.4) rotate(0); }
+#b-auth.play .ring-white { animation: converge-rot 1.3s .1s cubic-bezier(.1,.8,.2,1) forwards; }
+#b-auth .arc-inner { fill: none; stroke: var(--ink); stroke-width: 5; stroke-dasharray: 340 900; transform-origin: 960px 540px; }
+#b-auth.play .arc-inner { animation: rot-rev 3.2s .4s cubic-bezier(.2,.7,.2,1) forwards; }
+#b-auth .node { fill: var(--accent); transform-origin: 960px 540px; }
+#b-auth.play .node { animation: rot 3.2s .5s cubic-bezier(.3,.6,.2,1) forwards; }
+#b-auth .jump { transform-origin: 960px 540px; }
+#b-auth.play .jump { animation: jumps .5s 1.4s steps(1) forwards; }
+#b-auth .center { fill: var(--ink); transform-origin: 960px 540px; }
+#b-auth.play .center { animation: center-flick .8s 2.2s steps(1) forwards; }
+#b-auth .orbit { transform-origin: 960px 540px; opacity: 0; }
+#b-auth.play .orbit { animation: orbit 2s 2.4s linear forwards; }
+#b-auth .side { fill: none; stroke: var(--ink); stroke-width: 6; stroke-dasharray: 0 400; }
+#b-auth.play .side-l { animation: side-l 1.8s 1.6s cubic-bezier(.2,.8,.2,1) forwards; transform-origin: 600px 540px; }
+#b-auth.play .side-r { animation: side-r 1.8s 1.6s cubic-bezier(.2,.8,.2,1) forwards; transform-origin: 1320px 540px; }
+#b-auth .granted { font-size: 18px; font-weight: 700; letter-spacing: .4em; fill: var(--ink); opacity: 0; }
+#b-auth.play .granted { animation: fade-in .1s 2.9s steps(1) forwards; }
+
+#b-welcome { position: absolute; left: 0; right: 0; top: 380px; display: none; flex-direction: column; align-items: center; gap: 14px; }
+#b-welcome.play { display: flex; }
+#b-welcome .w1 { font-size: 64px; font-weight: 700; letter-spacing: .14em; }
+#b-welcome .w2 { position: relative; font-size: 96px; line-height: 1.15; font-weight: 700; letter-spacing: .12em; padding: 0 40px; color: #fff; isolation: isolate; }
+#b-welcome .w2::before { content: ''; position: absolute; inset: 0; z-index: -1; background: var(--ink); transform: scaleX(0); transform-origin: left; animation: sweep .9s .15s cubic-bezier(.05,.9,.2,1) forwards; }
+#b-welcome .w3 { font-size: 42px; font-weight: 700; letter-spacing: .3em; opacity: 0; animation: flash3 .9s .7s steps(1) forwards; }
+
+#skip { position: absolute; right: 48px; bottom: 40px; z-index: 60; font: 600 14px var(--font); letter-spacing: .3em; color: var(--muted); background: none; border: 1px solid var(--hair); padding: 10px 18px; cursor: pointer; }
+#skip:hover { color: var(--ink); border-color: var(--ink); }
+
+/* ─────────── 部门索引（一级界面） ─────────── */
+#hub { position: absolute; inset: 0; background:
+  linear-gradient(var(--grid) 1px, transparent 1px) 0 0 / 96px 96px,
+  linear-gradient(90deg, var(--grid) 1px, transparent 1px) 0 0 / 96px 96px,
+  radial-gradient(ellipse at 50% 50%, #f1efec 0%, var(--bg) 70%); }
+.hub-diag { position: absolute; inset: 0; pointer-events: none; }
+.hub-diag line { stroke: #3a3a36; stroke-width: 1.4; stroke-dasharray: 900; stroke-dashoffset: 900; }
+#hub.in .hub-diag line { transition: stroke-dashoffset 1.2s cubic-bezier(.6,0,.2,1); stroke-dashoffset: 0; }
+.cross { position: absolute; width: 60px; height: 60px; pointer-events: none; opacity: .5; }
+.cross::before, .cross::after { content: ''; position: absolute; background: #fff; }
+.cross::before { left: 29px; top: 0; width: 2px; height: 60px; }
+.cross::after { top: 29px; left: 0; height: 2px; width: 60px; }
+
+.ghost-brand { position: absolute; left: 59px; top: 64px; filter: blur(2.5px); opacity: .35; pointer-events: none; }
+.ghost-ring { position: absolute; right: -150px; top: -260px; width: 560px; height: 560px; border: 70px solid rgba(255,255,255,.75); border-radius: 50%; filter: blur(1.5px); pointer-events: none; }
+.ghost-letters { position: absolute; right: 80px; top: 170px; font-size: 30px; font-weight: 700; letter-spacing: 1.6em; color: rgba(255,255,255,.85); pointer-events: none; }
+
+.tile { position: absolute; transform: translate(-50%, -50%) translate(calc(var(--px, 0) * 1px), calc(var(--py, 0) * 1px)) scale(var(--s, 1)); transition: transform .35s cubic-bezier(.2,.8,.2,1), opacity .5s, filter .3s, box-shadow .3s; cursor: pointer; border: none; padding: 0; font: inherit; color: inherit; background: none; opacity: 0; }
+#hub.in .tile { opacity: 1; }
+.tile:focus-visible { outline: 2px solid var(--accent); outline-offset: 8px; }
+.tile.card { background: var(--paper); box-shadow: 0 0 0 1px rgba(0,0,0,.04), 0 18px 40px -24px rgba(0,0,0,.25); }
+.tile.ink { background: var(--ink); color: #fff; }
+.tile.ink.textured { background: radial-gradient(circle at 30% 70%, #2a2c2b 0, transparent 45%), linear-gradient(160deg, #0b0c0b 0%, #1c1e1d 55%, #0b0c0b 100%); }
+.tile.bare { background: transparent; }
+.tile:hover, .tile.focus { --s: 1.05; z-index: 5; }
+#hub.has-focus .tile:not(.focus):not(.deco) { filter: saturate(.6) opacity(.75); }
+.tile.deco { cursor: default; pointer-events: none; }
+.tile-inner { position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+.code { position: relative; font-weight: 700; line-height: .86; letter-spacing: -.02em; }
+.tile .emb { position: absolute; right: 10px; top: 10px; width: 20px; height: 20px; opacity: .9; }
+.tile .emb.big { right: 16px; top: 16px; width: 30px; height: 30px; }
+.sub { margin-top: 6px; font-size: 11px; font-weight: 600; letter-spacing: .06em; white-space: nowrap; }
+.zh { margin-top: 8px; font-size: 14px; font-weight: 600; letter-spacing: .3em; opacity: .7; }
+.idx { position: absolute; left: 10px; top: 8px; font-size: 12px; font-weight: 600; letter-spacing: .1em; opacity: .55; }
+.accent-block { position: absolute; width: 38px; height: 38px; background: var(--accent); }
+.accent-block::after { content: ''; position: absolute; left: 12px; top: 12px; width: 14px; height: 26px; background: #fff; }
+
+#searching { position: absolute; z-index: 20; display: flex; align-items: center; gap: 0; transform: translate(-50%, -100%); transition: left .35s cubic-bezier(.2,.8,.2,1), top .35s cubic-bezier(.2,.8,.2,1), opacity .3s; pointer-events: none; opacity: 0; }
+#hub.in #searching { opacity: 1; }
+#searching i { width: 14px; height: 10px; background: var(--ink); }
+#searching span { border: 1.5px solid var(--ink); background: var(--paper); padding: 3px 14px; font-size: 13px; font-weight: 700; letter-spacing: .08em; white-space: nowrap; }
+
+.ledger { position: absolute; left: 0; right: 0; bottom: 0; height: 56px; display: flex; align-items: center; gap: 28px; padding: 0 48px; font-size: 12px; font-weight: 600; letter-spacing: .2em; color: var(--muted); }
+.ledger .sq { width: 26px; height: 26px; background: #8b8a85; }
+.ruler { display: flex; align-items: flex-end; gap: 22px; height: 26px; }
+.ruler button { position: relative; width: 22px; height: 26px; border: none; background: none; cursor: pointer; padding: 0; }
+.ruler button i { position: absolute; left: 10px; bottom: 0; width: 2px; height: 10px; background: var(--hair); transition: height .2s, background .2s; }
+.ruler button b { position: absolute; left: 0; right: 0; top: -6px; font-size: 9px; color: var(--muted); font-weight: 600; letter-spacing: 0; }
+.ruler button.on i { height: 22px; background: var(--accent); }
+.ledger .grow { flex: 1; }
+
+/* ─────────── 二级界面（参考 PV 1:19 之后）：方块左移 → 左下录像带轮盘 → 右侧档案 ─────────── */
+#hub.sectioned .tile:not(.s-clone), #hub.sectioned .hub-diag, #hub.sectioned #searching, #hub.sectioned .cross, #hub.sectioned .hint, #hub.sectioned .ghost-letters, #hub.sectioned .ghost-brand {
+  opacity: 0 !important; pointer-events: none; transition: opacity .28s ease !important;
+}
+#hub .hub-diag, #hub .cross, #hub .hint, #hub .ghost-letters, #hub .ghost-brand { transition: opacity .4s ease .35s; }
+#sect { position: absolute; inset: 0 0 56px 0; z-index: 30; pointer-events: none; }
+#sect.on { pointer-events: auto; }
+/* 方块 → 部门卡的过渡体：位置与尺寸同时插值，按随机方式运动 */
+.s-morph { position: absolute; z-index: 31; pointer-events: none; overflow: hidden; will-change: left, top, width, height; }
+.s-morph .tile { position: absolute !important; left: 50% !important; top: 50% !important; margin: 0 !important; transform-origin: 50% 50% !important; transition: none !important; }
+.s-morph.ghost { z-index: 30; }
+
+/* 参考 PV 1:19 的构图：左上品牌 + 竖线 + 黑色部门卡；左下大号录像带串；中央剪影；右侧铭牌与档案 */
+#sect { inset: 0; }
+#hub.sectioned .ledger, #hub.sectioned .ghost-ring { opacity: 0; pointer-events: none; transition: opacity .25s; }
+#hub .ledger, #hub .ghost-ring { transition: opacity .4s .3s; }
+#sect > :not(:where(#toast)) { opacity: 0; transition: opacity .35s ease, transform .6s cubic-bezier(.2,.8,.2,1); }
+#sect.reel-in > :not(:where(#toast)) { opacity: 1; }
+.s-vline { position: absolute; left: 430px; top: 0; width: 2px; height: 640px; background: var(--ink); transform-origin: top; transform: scaleY(0); }
+#sect.reel-in .s-vline { transform: scaleY(1); transition: transform .7s cubic-bezier(.7,0,.2,1), opacity .1s; }
+.s-brand { position: absolute; left: 64px; top: 122px; transform: translateX(-20px); }
+#sect.reel-in .s-brand { transform: none; }
+.s-brand .b3 { font-size: 35px; line-height: 40px; font-weight: 400; letter-spacing: 4px; }
+.s-brand .b3 b { font-weight: 700; }
+.s-db { position: absolute; left: 50px; top: 370px; display: flex; flex-direction: column; gap: 22px; }
+.s-db i { width: 14px; height: 3px; background: var(--ink); }
+.s-db span { background: var(--ink); color: #fff; font-size: 8px; font-weight: 700; letter-spacing: .12em; padding: 2px 6px; }
+
+#s-sec { position: absolute; left: 248px; top: 300px; width: 410px; z-index: 3; }
+#s-sec .tab { display: inline-block; margin-left: 50px; padding: 6px 24px; background: #e3e1dc; font-size: 20px; letter-spacing: .06em; color: #333; transform: translateY(8px); opacity: 0; transition: transform .4s cubic-bezier(.2,.8,.2,1) .25s, opacity .3s .25s; }
+#sect.reel-in #s-sec .tab { transform: none; opacity: 1; }
+#s-sec .box { position: relative; height: 290px; background: radial-gradient(circle at 70% 30%, #2a2c2b 0, transparent 50%), linear-gradient(160deg, #0b0c0b 0%, #1b1d1c 55%, #0b0c0b 100%); color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; overflow: hidden; visibility: hidden; }
+#sect.landed #s-sec .box { visibility: visible; }
+#s-sec .box > * { opacity: 0; transform: translateY(8px); }
+#sect.landed #s-sec .box > * { opacity: 1; transform: none; transition: opacity .3s ease, transform .45s cubic-bezier(.2,.8,.2,1); }
+#sect.landed #s-sec .box > :nth-child(3) { transition-delay: .06s; }
+#sect.landed #s-sec .box > :nth-child(4) { transition-delay: .12s; }
+#s-sec .box .dot { position: absolute; right: 18px; top: 16px; width: 14px; height: 14px; border-radius: 50%; background: #9a9893; }
+#s-sec .code { font-size: 120px; }
+#s-sec .sub { margin-top: 10px; font-size: 13px; letter-spacing: .1em; }
+#s-sec .zh { margin-top: 4px; font-size: 13px; }
+
+#chain { position: absolute; left: 0; top: 440px; width: 900px; height: 640px; z-index: 2; }
+#r-current { display: none; }
+.s-limit { position: absolute; left: 0; top: 956px; z-index: 4; display: flex; gap: 26px; align-items: flex-start; pointer-events: none; }
+.s-limit i { width: 46px; height: 14px; margin-top: 4px; background: var(--ink); }
+.s-limit b { display: block; font-size: 15px; letter-spacing: .04em; }
+.s-limit span { font-size: 15px; font-weight: 700; letter-spacing: .04em; }
+
+/* 中央剪影：AUTO-MAS 标志以半调网点填充，切换条目时转动 */
+#s-hero { position: absolute; left: 690px; top: -60px; width: 380px; height: 540px; pointer-events: none; transform: translateY(30px); }
+#sect.reel-in #s-hero { transform: none; transition: opacity .6s ease .15s, transform .9s cubic-bezier(.2,.8,.2,1) .15s; }
+#s-hero svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+#s-hero .rot { transform-origin: 380px 600px; transform: rotate(var(--rot, 0deg)); transition: transform .9s cubic-bezier(.2,.8,.2,1); }
+.hero-num { position: absolute; left: 250px; top: 330px; font-size: 150px; font-weight: 700; line-height: 1; letter-spacing: -.04em; color: transparent; -webkit-text-stroke: 2px rgba(11,12,11,.16); transition: transform .5s cubic-bezier(.2,.8,.2,1), opacity .25s; }
+
+
+/* 右上条目分页：琥珀点，当前项为 •–o–• */
+#s-pager { position: absolute; left: 1150px; top: 58px; display: flex; align-items: center; gap: 4px; z-index: 5; }
+#s-pager button { position: relative; width: 22px; height: 22px; border: none; background: none; padding: 0; cursor: pointer; }
+#s-pager button::before { content: ''; position: absolute; left: 8px; top: 8px; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); transition: transform .2s; }
+#s-pager button:hover::before { transform: scale(1.6); }
+#s-pager button.on { width: 42px; }
+#s-pager button.on::before { left: 13px; top: 4px; width: 10px; height: 10px; border: 2px solid var(--accent); background: transparent; }
+#s-pager button.on::after { content: ''; position: absolute; left: 0; right: 0; top: 10px; height: 2px; background: linear-gradient(90deg, var(--accent) 12px, transparent 12px 30px, var(--accent) 30px); }
+#s-pager button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* 右侧档案：半透明玻璃面板，略向内转 */
+#sect { perspective: 2200px; perspective-origin: 70% 40%; }
+#s-glass { position: absolute; left: 1150px; top: 92px; width: 730px; height: 800px; z-index: 5; transform-origin: 100% 50%;
+  transform: rotateY(calc(18deg + var(--ty, 0deg))) translateX(40px);
+  background: linear-gradient(135deg, rgba(255,255,255,.72), rgba(246,244,241,.5) 60%, rgba(255,255,255,.62));
+  border: 1px solid rgba(20,20,18,.14); box-shadow: 0 30px 60px -40px rgba(20,20,18,.45), inset 0 0 0 1px rgba(255,255,255,.55); backdrop-filter: blur(8px); }
+#sect.reel-in #s-glass { transform: rotateY(calc(2deg + var(--ty, 0deg))) rotateX(var(--tx, 0deg)); transition: opacity .4s ease .35s, transform .8s cubic-bezier(.2,.8,.2,1) .35s; }
+
+/* 右侧铭牌（对应 PV 的人物名牌） */
+#s-plate { position: absolute; left: 1150px; top: 910px; width: 730px; height: 100px; z-index: 5; transform: translateX(30px); }
+#sect.reel-in #s-plate { transform: none; transition: opacity .35s .2s, transform .6s cubic-bezier(.2,.8,.2,1) .2s; }
+#s-plate .logo { position: absolute; left: 0; top: 0; width: 116px; height: 64px; background: var(--ink); color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; }
+#s-plate .logo svg { width: 30px; height: 30px; color: #fff; }
+#s-plate .logo span { font-size: 6px; font-weight: 700; letter-spacing: .3em; }
+#s-plate .txt { position: absolute; left: 132px; top: -4px; right: 0; }
+#s-plate .role { font-size: 14px; letter-spacing: .04em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#s-plate .name { font-size: 34px; font-weight: 700; line-height: 1.12; letter-spacing: .02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#s-plate .line { position: absolute; left: 116px; right: 0; top: 62px; height: 2px; background: var(--ink); transform-origin: left; transform: scaleX(0); }
+#sect.reel-in #s-plate .line { transform: scaleX(1); transition: transform .6s cubic-bezier(.7,0,.2,1) .35s; }
+#s-plate .detail { position: absolute; left: 132px; top: 72px; font-size: 13px; letter-spacing: .06em; }
+#s-plate .detail b { font-weight: 700; }
+#s-plate .txt, #s-plate .detail { transition: opacity .2s, transform .35s cubic-bezier(.2,.8,.2,1); }
+#s-plate.swap .txt, #s-plate.swap .detail { opacity: 0; transform: translateY(10px); transition: none; }
+
+/* 底部字幕：部门说明（PV 的字幕位置） */
+/* 部门说明不再以底部白字显示，只留给读屏 */
+#s-sub { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.s-powered { position: absolute; right: 56px; top: 1044px; font-size: 14px; letter-spacing: .04em; }
+.s-powered b { font-weight: 700; }
+.s-hint { position: absolute; right: 250px; top: 1048px; font-size: 11px; letter-spacing: .2em; color: var(--muted); }
+
+/* 右侧档案面板 */
+#s-panel { position: absolute; left: 30px; right: 30px; top: 20px; bottom: 20px; display: flex; flex-direction: column; }
+#s-panel .sp-title, #s-panel .sp-rule { display: none; }
+#s-panel .sp-meta { justify-content: space-between; }
+#s-panel .sp-meta .api { font: 600 11px Consolas, monospace; letter-spacing: .04em; color: var(--muted); }
+#s-panel .sp-body { margin-top: 14px; grid-template-columns: 1fr; gap: 16px; overflow: hidden; padding-right: 0; }
+#s-panel .kv { grid-template-columns: 150px 1fr; }
+#s-panel .kv > div { padding: 6px 4px; font-size: 15px; min-height: 40px; display: flex; align-items: center; gap: 10px; }
+#s-panel .kv .k { font-size: 14px; letter-spacing: .06em; cursor: help; }
+#s-panel .tbl { font-size: 14px; }
+#s-panel .tbl td { padding: 7px 6px; }
+#s-panel .stats b { font-size: 30px; }
+#s-panel .stats div { padding: 8px 12px; }
+#s-panel .banner { height: 170px; }
+#s-panel .banner h3 { font-size: 32px; }
+#s-panel .log { height: 170px; }
+#s-panel .log.tall { height: 470px; }
+#s-panel .sp-actions { margin-top: auto; padding-top: 14px; flex-wrap: wrap; gap: 10px; }
+#s-panel .btn { padding: 10px 20px; font-size: 14px; }
+/* ── 借鉴 RhineLabUI ── */
+/* 滚动文字：新内容自下方滚入、旧内容向上滚出并轻微模糊，宽度随之过渡（460ms） */
+.roll { display: inline-block; position: relative; overflow: hidden; vertical-align: bottom; white-space: nowrap; transition: width .46s cubic-bezier(.2,.8,.2,1); }
+.roll > span { display: inline-block; }
+.roll > span.out { position: absolute; left: 0; top: 0; }
+.digits { display: inline-flex; font-variant-numeric: tabular-nums; }
+/* 解密揭示：对角线合拢 → 保持 → 收束；玻璃由磨砂自上而下变清晰；正文遮挡条退开 */
+@property --clear { syntax: '<number>'; inherits: false; initial-value: 1; }
+#s-glass .frost { position: absolute; inset: 0; z-index: 3; pointer-events: none; --clear: 1; backdrop-filter: blur(9px); background: rgba(246,244,241,.28);
+  -webkit-mask-image: linear-gradient(to bottom, transparent calc(var(--clear) * 124% - 24%), #000 calc(var(--clear) * 124%));
+  mask-image: linear-gradient(to bottom, transparent calc(var(--clear) * 124% - 24%), #000 calc(var(--clear) * 124%)); }
+#s-glass .dec { position: absolute; inset: 0; z-index: 4; pointer-events: none; overflow: hidden; }
+#s-glass .dec-bar { position: absolute; left: 50%; top: 50%; width: 1083px; height: 3px; display: flex; transform: translate(-50%, -50%) rotate(47.6deg); opacity: 0; }
+#s-glass .dec-bar i { flex: 1; background: var(--ink); }
+#s-panel.redact .kv > div:not(.k), #s-panel.redact .tbl td:not(.n), #s-panel.redact .stats b, #s-panel.redact .note, #s-panel.redact .lst div, #s-panel.redact .run-line { position: relative; }
+#s-panel.redact .kv > div:not(.k)::after, #s-panel.redact .tbl td:not(.n)::after, #s-panel.redact .stats b::after, #s-panel.redact .note::after, #s-panel.redact .lst div::after, #s-panel.redact .run-line::after {
+  content: ''; position: absolute; left: 4px; right: 30%; top: 30%; bottom: 30%; background: var(--ink); pointer-events: none; transform-origin: right; transition: transform .42s cubic-bezier(.7,0,.2,1) var(--d, 0ms); }
+#s-panel.redact.open .kv > div:not(.k)::after, #s-panel.redact.open .tbl td:not(.n)::after, #s-panel.redact.open .stats b::after, #s-panel.redact.open .note::after, #s-panel.redact.open .lst div::after, #s-panel.redact.open .run-line::after { transform: scaleX(0); }
+/* 确认弹窗：300ms 入场（位移 12px）、200ms 退出（位移 8px），背景磨砂 */
+#modal { position: absolute; inset: 0; z-index: 60; display: none; align-items: center; justify-content: center; background: rgba(230,227,223,.4); backdrop-filter: blur(6px); opacity: 0; transition: opacity .2s; }
+#modal.show { display: flex; }
+#modal.in { opacity: 1; transition-duration: .3s; }
+#modal .box { width: 560px; background: var(--paper); border: 1px solid var(--hair); box-shadow: 0 30px 60px -30px rgba(0,0,0,.35); padding: 34px 40px 30px; transform: translateY(8px); transition: transform .2s cubic-bezier(.4,0,1,1); }
+#modal.in .box { transform: none; transition: transform .3s cubic-bezier(.2,.8,.2,1); }
+#modal.enter .box { transform: translateY(12px); transition: none; }
+#modal .m-meta { font-size: 12px; font-weight: 700; letter-spacing: .2em; color: var(--muted); display: flex; justify-content: space-between; }
+#modal h3 { margin: 18px 0 6px; font-size: 30px; letter-spacing: .04em; }
+#modal p { margin: 0 0 26px; color: var(--muted); line-height: 1.7; }
+#modal .m-rule { height: 2px; background: var(--ink); margin: 18px 0 20px; }
+#modal .m-act { display: flex; gap: 12px; justify-content: flex-end; }
+/* 功能分页：同一条目内按功能拆分，避免单页显示不全 */
+.sp-tabs { position: relative; display: flex; gap: 6px; margin-top: 14px; border-bottom: 1px solid var(--hair); }
+.sp-tabs button { position: relative; font: 600 15px var(--font); letter-spacing: .08em; color: var(--muted); background: none; border: none; padding: 8px 14px 10px 0; margin-right: 18px; cursor: pointer; transition: color .18s; }
+.sp-tabs button b { font: 700 10px var(--font); letter-spacing: .1em; margin-right: 7px; color: var(--hair); transition: color .18s; }
+.sp-tabs button:hover { color: var(--ink); }
+.sp-tabs button.on { color: var(--ink); }
+.sp-tabs button.on b { color: var(--accent); }
+.sp-tabs .ul { position: absolute; bottom: -1px; left: 0; height: 2px; background: var(--ink); transition: left .18s cubic-bezier(.2,.8,.2,1), width .18s cubic-bezier(.2,.8,.2,1); }
+.sp-page { display: contents; }
+#s-panel .sp-body.fade, #s-panel .sp-actions.fade { opacity: 0; transition: none; }
+#s-panel .sp-body.fadein, #s-panel .sp-actions.fadein { opacity: 1; transition: opacity .15s ease; }
+.sp-tabs button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+/* 表单控件：与后端配置项一一对应 */
+.inp { flex: 1; min-width: 0; font: 500 15px var(--font); color: var(--ink); background: transparent; border: none; border-bottom: 1.5px solid var(--hair); padding: 4px 2px; }
+.inp.mono { font: 14px Consolas, monospace; }
+.inp.num { flex: 0 0 76px; text-align: right; font-variant-numeric: tabular-nums; }
+.inp:hover { border-bottom-color: var(--ink); }
+.inp:focus { outline: none; border-bottom-color: var(--accent); }
+.unit { font-size: 13px; color: var(--muted); white-space: nowrap; }
+.mini { font: 700 12px var(--font); letter-spacing: .08em; padding: 5px 10px; border: 1.5px solid var(--ink); background: transparent; color: var(--ink); cursor: pointer; white-space: nowrap; }
+.mini:hover { border-color: var(--accent); color: var(--accent); }
+.seg { display: inline-flex; border: 1.5px solid var(--ink); flex-shrink: 0; }
+.seg button { font: 600 13px var(--font); letter-spacing: .04em; padding: 5px 12px; border: none; background: transparent; color: var(--ink); cursor: pointer; white-space: nowrap; }
+.seg button + button { border-left: 1.5px solid var(--ink); }
+.seg button.on { background: var(--ink); color: var(--paper); }
+.seg button:not(.on):hover { color: var(--accent); }
+.chips { display: inline-flex; gap: 4px; }
+.chips button { width: 30px; height: 28px; font: 600 13px var(--font); border: 1.5px solid var(--hair); background: transparent; color: var(--muted); cursor: pointer; }
+.chips button.on { border-color: var(--ink); background: var(--ink); color: var(--paper); }
+.mini:focus-visible, .seg button:focus-visible, .chips button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.tog.off-x { opacity: .4; }
+.note { font-size: 13px; line-height: 1.7; color: var(--muted); border-left: 3px solid var(--accent); padding: 4px 0 4px 12px; }
+#s-panel .tbl .tog, #s-panel .tbl .sel { font-size: 14px; }
+#s-panel .sp-head, #s-panel .blk, #s-panel .sp-actions { opacity: 0; transform: translateY(14px); transition: opacity .3s ease, transform .45s cubic-bezier(.2,.8,.2,1); }
+#s-panel.show .sp-head, #s-panel.show .blk, #s-panel.show .sp-actions { opacity: 1; transform: none; }
+#s-panel.leave .sp-head, #s-panel.leave .blk, #s-panel.leave .sp-actions { opacity: 0; transform: translateY(-10px); transition-duration: .14s; transition-delay: 0s !important; }
+.sp-meta { display: flex; gap: 18px; font-size: 12px; font-weight: 700; letter-spacing: .24em; color: var(--muted); }
+.sp-meta .a { color: var(--accent); }
+.sp-title { margin-top: 12px; display: flex; align-items: baseline; gap: 22px; }
+.sp-title .sp-idx { font-size: 54px; font-weight: 300; color: var(--muted); font-variant-numeric: tabular-nums; }
+.sp-title h2 { margin: 0; font-size: 46px; font-weight: 700; letter-spacing: .08em; }
+.sp-title .en { font-size: 14px; font-weight: 700; letter-spacing: .3em; color: var(--muted); }
+.sp-rule { margin-top: 16px; height: 2px; background: var(--ink); transform-origin: left; transform: scaleX(0); transition: transform .6s cubic-bezier(.7,0,.2,1) .1s; }
+#s-panel.show .sp-rule { transform: scaleX(1); }
+.sp-body { flex: 1; min-height: 0; overflow: auto; margin-top: 26px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px 28px; align-content: start; padding-right: 6px; }
+.blk { min-width: 0; }
+.blk.wide { grid-column: 1 / -1; }
+.blk-h { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; font-size: 12px; font-weight: 700; letter-spacing: .22em; color: var(--muted); }
+.blk-h::after { content: ''; flex: 1; height: 1px; background: var(--hair); }
+.blk-h i { width: 14px; height: 2px; background: var(--accent); }
+.kv { display: grid; grid-template-columns: 140px 1fr; border-top: 1px solid var(--hair); }
+.kv > div { padding: 11px 4px; border-bottom: 1px solid var(--hair); font-size: 15px; }
+.kv .k { color: var(--muted); font-size: 13px; letter-spacing: .1em; }
+.tbl { width: 100%; border-collapse: collapse; font-size: 15px; }
+.tbl th { text-align: left; font-size: 12px; font-weight: 700; letter-spacing: .18em; color: var(--muted); padding: 8px 6px; border-bottom: 2px solid var(--ink); }
+.tbl td { padding: 11px 6px; border-bottom: 1px solid var(--hair); }
+.tbl td.n { width: 44px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.tag { display: inline-block; padding: 2px 9px; font-size: 12px; font-weight: 700; letter-spacing: .12em; border: 1px solid currentColor; }
+.tag.ok { color: #55785a; } .tag.warn { color: #b8752c; } .tag.err { color: #b6453c; } .tag.idle { color: var(--muted); } .tag.run { color: var(--paper); background: var(--ink); border-color: var(--ink); }
+.stats { display: grid; grid-template-columns: repeat(3, 1fr); border-top: 1px solid var(--hair); border-left: 1px solid var(--hair); }
+.stats div { padding: 14px 16px; border-right: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+.stats b { display: block; font-size: 40px; font-weight: 300; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.stats div > span { font-size: 12px; letter-spacing: .2em; color: var(--muted); }
+.quote { font-size: 30px; font-weight: 700; line-height: 1.5; letter-spacing: .04em; padding: 18px 0 8px; }
+.quote + .by { text-align: right; color: var(--muted); letter-spacing: .1em; }
+.lst { border-top: 1px solid var(--hair); }
+.lst div { display: flex; gap: 18px; padding: 11px 4px; border-bottom: 1px solid var(--hair); font-size: 15px; }
+.lst div em { font-style: normal; color: var(--muted); font-variant-numeric: tabular-nums; min-width: 64px; }
+.log { margin: 0; height: 230px; overflow: auto; background: var(--ink); color: #d9d6cf; font: 13px/1.7 Consolas, monospace; padding: 12px 16px; }
+.log .e { color: #e58a7f; } .log .s { color: #9cc79f; }
+.banner { position: relative; height: 210px; overflow: hidden; background: var(--bg-b, linear-gradient(120deg, #1d2a2a, #49573f 55%, #c9b27a)); color: #fff; padding: 22px 26px; display: flex; flex-direction: column; justify-content: space-between; }
+.banner .v { align-self: flex-start; font-size: 13px; font-weight: 700; letter-spacing: .2em; padding: 3px 10px; border: 1px solid rgba(255,255,255,.7); }
+.banner h3 { margin: 0; font-size: 40px; letter-spacing: .1em; }
+.banner .cd { position: absolute; right: 22px; bottom: 20px; text-align: right; font-size: 12px; letter-spacing: .2em; }
+.banner .cd b { display: block; font-size: 34px; letter-spacing: .04em; }
+.tog { display: inline-flex; align-items: center; gap: 8px; }
+.tog i { width: 34px; height: 16px; border: 1.5px solid var(--ink); position: relative; }
+.tog i::after { content: ''; position: absolute; top: 2px; left: 2px; width: 10px; height: 9px; background: var(--muted); transition: left .2s; }
+.tog.on i::after { left: 19px; background: var(--accent); }
+.tbl tbody tr { transition: background .15s; }
+.tbl tbody tr:hover { background: rgba(11,12,11,.05); }
+.tog { cursor: pointer; user-select: none; }
+.tog:hover i { border-color: var(--accent); }
+.sel { font: 500 15px var(--font); color: var(--ink); background: transparent; border: none; border-bottom: 1.5px solid var(--ink); padding: 2px 22px 2px 0; cursor: pointer; }
+.sel:focus-visible, .btn:focus-visible, .tog:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.run { border-top: 1px solid var(--hair); padding-top: 12px; }
+.run-bar { height: 6px; background: rgba(11,12,11,.1); overflow: hidden; }
+.run-bar i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .5s linear; }
+.run-line { display: flex; gap: 16px; align-items: baseline; margin-top: 10px; font-size: 15px; }
+.run-line b { font-size: 13px; letter-spacing: .2em; padding: 2px 10px; border: 1.5px solid var(--ink); }
+.run[data-state="run"] .run-line b { background: var(--ink); color: var(--paper); }
+.run[data-state="done"] .run-line b { color: #55785a; border-color: #55785a; }
+.btn:active { transform: translateY(1px); }
+#toast { position: absolute; right: 56px; bottom: 150px; z-index: 40; padding: 12px 20px; background: var(--ink); color: var(--paper); font-size: 14px; letter-spacing: .12em; opacity: 0; transform: translateY(10px); transition: opacity .2s, transform .3s cubic-bezier(.2,.8,.2,1); pointer-events: none; }
+#toast.on { opacity: 1; transform: none; }
+#toast::before { content: ''; display: inline-block; width: 10px; height: 10px; margin-right: 12px; background: var(--accent); }
+/* 部门索引上随机闪现的小方块（PV 开场网格元素） */
+#rblocks { position: absolute; inset: 0; pointer-events: none; transform: translate(calc(var(--rx, 0) * 1px), calc(var(--ry, 0) * 1px)); opacity: 0; transition: opacity .4s; }
+#hub.in #rblocks { opacity: 1; }
+#rblocks i { position: absolute; display: block; }
+#rblocks i.k0 { background: var(--ink); }
+#rblocks i.k1 { background: var(--paper); }
+#rblocks i.k1::after { content: ''; position: absolute; inset: 31%; background: #d5d2cd; }
+#rblocks i.k2 { background: var(--accent); }
+#rblocks i.k3 { background: linear-gradient(var(--ink) 29%, var(--paper) 29% 71%, var(--ink) 71%); }
+#rblocks i.k4 { border: 1.5px solid rgba(11,12,11,.6); }
+#rblocks i.k4::before, #rblocks i.k4::after { content: ''; position: absolute; width: 14px; height: 14px; border: 3px solid var(--ink); }
+#rblocks i.k4::before { left: -2px; top: -2px; border-right: none; border-bottom: none; }
+#rblocks i.k4::after { right: -2px; bottom: -2px; border-left: none; border-top: none; }
+#rblocks i.k5 { background: linear-gradient(var(--ink), var(--ink)) center / 2px 100% no-repeat, linear-gradient(var(--ink), var(--ink)) center / 100% 2px no-repeat; }
+#hub.sectioned #rblocks { opacity: 0; transition: opacity .2s; }
+.sp-actions { display: flex; gap: 12px; margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--hair); }
+.btn { font: 700 14px var(--font); letter-spacing: .14em; padding: 11px 22px; border: 1.5px solid var(--ink); background: transparent; color: var(--ink); cursor: pointer; }
+.btn.pri { background: var(--ink); color: var(--paper); }
+.btn:hover { border-color: var(--accent); color: var(--accent); }
+.btn.pri:hover { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn.dng:hover { border-color: #b6453c; color: #b6453c; }
+#s-back { position: absolute; right: 56px; top: 40px; z-index: 7; font: 700 13px var(--font); letter-spacing: .28em; background: none; border: 1.5px solid var(--ink); padding: 9px 18px; cursor: pointer; opacity: 0; transition: opacity .3s .5s; }
+#sect.reel-in #s-back { opacity: 1; transition: opacity .3s .5s; }
+#s-back:hover { background: var(--ink); color: #fff; }
+
+.hint { position: absolute; right: 48px; bottom: 70px; font-size: 12px; letter-spacing: .2em; color: var(--muted); text-align: right; line-height: 1.8; }
+#replay { font: 600 12px var(--font); letter-spacing: .2em; background: none; border: 1px solid var(--hair); color: var(--muted); padding: 6px 12px; cursor: pointer; }
+
+@keyframes fade-in { to { opacity: 1; } }
+@keyframes blink { 50% { opacity: 0; } }
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes draw { to { stroke-dashoffset: 0; } }
+@keyframes pop { to { transform: scale(1); } }
+@keyframes converge { to { transform: scale(1); } }
+@keyframes converge-rot { to { transform: scale(1) rotate(-200deg); } }
+@keyframes rot { to { transform: rotate(540deg); } }
+@keyframes rot-rev { to { transform: rotate(-420deg); } }
+@keyframes jumps { 0% { transform: scale(1.08); } 25% { transform: scale(.94); } 50% { transform: scale(1.05); } 75% { transform: scale(.98); } 100% { transform: scale(1); } }
+@keyframes center-flick { 0% { transform: scale(1); } 15% { transform: scale(.4); } 30% { transform: scale(1.2); } 45% { transform: scale(.6); } 60%, 100% { transform: scale(.42); } }
+@keyframes orbit { 0% { opacity: 1; transform: rotate(0); } 100% { opacity: 1; transform: rotate(300deg); } }
+@keyframes side-l { to { stroke-dasharray: 360 400; transform: rotate(332deg); } }
+@keyframes side-r { to { stroke-dasharray: 360 400; transform: rotate(-339deg); } }
+@keyframes sweep { 0% { transform: scaleX(0); } 100% { transform: scaleX(1); } }
+@keyframes flash3 { 0% { opacity: 1; } 12% { opacity: 0; } 24% { opacity: 1; } 36% { opacity: 0; } 50%, 100% { opacity: 1; } }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 1ms !important; transition-duration: 1ms !important; }
+}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute">
+  <!-- AUTO-MAS 自有标志：细圆环 + 琥珀核心 + 四向刻度 + 斜线 -->
+  <symbol id="emblem" viewBox="0 0 40 40">
+    <path d="M9 2H38V26M26 38H2V9L9 2" fill="none" stroke="currentColor" stroke-width="2.6" />
+    <path d="M10 31 20 9 30 31M14.5 23H25.5" fill="none" stroke="currentColor" stroke-width="3.25" />
+    <rect x="31" y="31" width="7" height="7" fill="#e8701f" />
+  </symbol>
+  <symbol id="mark" viewBox="0 0 40 40">
+    <circle cx="20" cy="20" r="15" fill="none" stroke="currentColor" stroke-width="3" />
+    <circle cx="20" cy="20" r="5" fill="#e8701f" />
+    <path d="M20 0v6M20 34v6M0 20h6M34 20h6" stroke="currentColor" stroke-width="3" />
+    <path d="M9 31 31 9" stroke="currentColor" stroke-width="2" />
+  </symbol>
+</svg>
+
+<div id="viewport"><div id="stage">
+
+  <!-- ═══ 部门索引 ═══ -->
+  <section id="hub" aria-label="AUTO-MAS 一级界面">
+    <svg class="hub-diag" viewBox="0 0 1920 1080" aria-hidden="true">
+      <line x1="0" y1="0" x2="790" y2="370" /><line x1="1920" y1="0" x2="1130" y2="370" />
+      <line x1="0" y1="1080" x2="790" y2="710" /><line x1="1920" y1="1080" x2="1130" y2="710" />
+    </svg>
+    <div class="cross" style="left:470px;top:150px"></div>
+    <div class="cross" style="left:1760px;top:620px"></div>
+    <div class="cross" style="left:680px;top:900px"></div>
+    <div class="ghost-ring" aria-hidden="true"></div>
+    <div class="ghost-letters" aria-hidden="true">AUTO</div>
+    <div class="ghost-brand" aria-hidden="true">
+      <div class="brand-1">AUTO-MAS</div>
+      <div class="brand-2">SCRIPT CUSTODY INFORMATION</div>
+      <div class="brand-3">ANALYSIS OS</div>
+    </div>
+    <div id="rblocks" aria-hidden="true"></div>
+    <div id="tiles"></div>
+    <div id="searching" aria-hidden="true"><i></i><span>SEARCHING</span></div>
+
+    <footer class="ledger" aria-hidden="false">
+      <span class="sq"></span>
+      <span>SESSION ● AUTHORIZED</span>
+      <nav class="ruler" id="ruler" aria-label="一级界面刻度"></nav>
+      <span id="ledger-label">X-001 主页</span>
+      <span class="grow"></span>
+      <span id="clock"></span>
+      <span>POWERED BY AUTO-MAS</span>
+    </footer>
+    <div class="hint">数字键 1–0 选择 · ENTER 进入 · ESC 返回<br /><button id="replay" type="button">REPLAY BOOT</button></div>
+  </section>
+
+  <section id="sect" aria-label="二级界面">
+    <div class="s-vline"></div>
+    <div class="s-brand" aria-hidden="true"><div class="brand-1">AUTO-MAS</div><div class="brand-2">SCRIPT CUSTODY INFORMATION</div><div class="b3">ANALYSIS <b>OS</b></div></div>
+    <div class="s-db" aria-hidden="true"><i></i><span>AUTO-MAS LOCAL DATABASE</span></div>
+    <div id="s-hero" aria-hidden="true">
+      <div class="hero-num" id="s-hero-num"></div>
+      <svg viewBox="0 0 760 1080">
+        <defs>
+          <pattern id="ht" width="7" height="7" patternUnits="userSpaceOnUse"><rect width="7" height="7" fill="#101110" /><circle cx="3.5" cy="3.5" r="1.5" fill="#2a2b2a" /></pattern>
+        </defs>
+        <g class="rot">
+          <circle cx="380" cy="600" r="232" fill="none" stroke="url(#ht)" stroke-width="96" />
+          <path d="M380 228v150M380 822v150M8 600h150M602 600h150" stroke="url(#ht)" stroke-width="84" />
+          <path d="M236 744 524 456" stroke="url(#ht)" stroke-width="54" />
+          <circle cx="380" cy="600" r="64" fill="url(#ht)" />
+          <circle cx="380" cy="600" r="22" fill="#e8701f" />
+        </g>
+      </svg>
+    </div>
+    <div id="s-sec"><span class="tab">SECTION</span><div class="box"><i class="dot"></i><div id="s-sec-code"></div><div class="sub" id="s-sec-sub"></div><div class="zh" id="s-sec-zh"></div></div></div>
+    <canvas id="chain" width="900" height="640" aria-hidden="true"></canvas>
+    <div id="r-current" aria-live="polite"></div>
+    <div class="s-limit" aria-hidden="true"><i></i><div><b id="s-limit-k"></b><span>[LIMITED ACCESS]</span></div></div>
+    <nav id="s-pager" aria-label="条目"></nav>
+    <div id="s-glass"><div id="s-panel"></div><div class="frost"></div><div class="dec"><div class="dec-bar"><i></i><i></i></div></div></div>
+    <div id="s-plate"><div class="logo"><svg viewBox="0 0 40 40"><use href="#emblem" /></svg><span>AUTO-MAS</span></div><div class="txt"><div class="role" id="s-role"></div><div class="name" id="s-name"></div></div><div class="line"></div><div class="detail"><b id="s-code"></b> · <span id="s-en"></span></div></div>
+    <div id="s-sub" aria-live="polite"></div>
+    <div class="s-powered">POWERED BY <b>AUTO-MAS</b></div>
+    <div class="s-hint">滚轮 / ↑↓ 切换 · ESC 返回</div>
+    <div id="toast" role="status" aria-live="polite"></div>
+    <div id="modal" role="dialog" aria-modal="true" aria-labelledby="m-title"><div class="box"><div class="m-meta"><span>AUTO-MAS / CONFIRM</span><span id="m-api"></span></div><h3 id="m-title">确认删除</h3><div class="m-rule"></div><p id="m-text"></p><div class="m-act"><button class="btn" type="button" id="m-cancel">取消</button><button class="btn pri dng" type="button" id="m-ok">删除</button></div></div></div>
+    <button id="s-back" type="button">← RETURN TO INDEX</button>
+  </section>
+
+  <!-- ═══ 启动动画（复刻 PV 0–27 秒的段落结构） ═══ -->
+  <section id="boot" aria-hidden="true">
+    <div id="b-type"></div>
+    <div id="b-ident"></div>
+    <svg id="b-logo" viewBox="0 0 200 200">
+      <circle class="draw" cx="100" cy="100" r="74" transform="rotate(-45 100 100)" />
+      <path class="tick" d="M100 0v30M100 170v30M0 100h30M170 100h30" />
+      <path class="draw" d="M48 152 152 48" style="stroke-width:5" />
+      <circle class="core" cx="100" cy="100" r="22" />
+    </svg>
+    <div id="b-brand">
+      <div class="brand-line brand-1">AUTO-MAS</div>
+      <div class="brand-line brand-2">SCRIPT CUSTODY INFORMATION</div>
+      <div class="brand-line brand-3">ANALYSIS OS</div>
+    </div>
+    <svg id="b-auth" viewBox="0 0 1920 1080">
+      <g class="jump">
+        <circle class="ring-outer" cx="960" cy="540" r="220" />
+        <circle class="ring-white" cx="960" cy="540" r="220" />
+        <circle class="arc-inner" cx="960" cy="540" r="160" />
+        <circle class="node" cx="960" cy="320" r="13" />
+      </g>
+      <circle class="center" cx="960" cy="540" r="26" />
+      <g class="orbit">
+        <circle cx="995" cy="540" r="5" /><circle cx="977" cy="570" r="5" /><circle cx="943" cy="570" r="5" />
+        <circle cx="925" cy="540" r="5" /><circle cx="943" cy="510" r="5" /><circle cx="977" cy="510" r="5" />
+      </g>
+      <circle class="side side-l" cx="600" cy="540" r="56" />
+      <circle class="side side-r" cx="1320" cy="540" r="56" />
+      <text class="granted" x="960" y="850" text-anchor="middle">AUTHORIZATION GRANTED</text>
+    </svg>
+    <div id="b-welcome">
+      <div class="w1">WELCOME TO</div>
+      <div class="w2">AUTO-MAS</div>
+      <div class="w3">INTERNAL DATABASE</div>
+    </div>
+    <div id="b-black"><svg viewBox="0 0 40 40" style="color:#fff"><use href="#mark" /></svg></div>
+  </section>
+  <button id="skip" type="button">SKIP ▸</button>
+</div></div>
+
+<script>
+// ── 一级界面：01–10，不含计划管理 ──
+// style: card 白卡 / ink 黑块 / bare 直接排版；depth 越大，鼠标视差越明显
+const DEPTS = [
+  { n: '01', code: 'MAIN\nOVRV', sub: 'MAIN OVERVIEW SECTION', zh: '主页', x: 960, y: 540, w: 340, h: 340, style: 'ink', size: 112, depth: 4, center: true, textured: true },
+  { n: '02', code: 'CSTD', sub: 'SCRIPT CUSTODY SECTION', zh: '托管管理', x: 600, y: 300, w: 200, h: 200, style: 'card', size: 62, depth: 16 },
+  { n: '03', code: 'EMUL', sub: 'EMULATOR SECTION', zh: '模拟器管理', x: 560, y: 560, w: 260, h: 120, style: 'bare', size: 84, depth: 22, accent: true },
+  { n: '04', code: 'QUE', sub: 'QUEUE DISPATCH SECTION', zh: '调度队列', x: 270, y: 720, w: 220, h: 220, style: 'ink', size: 70, depth: 12, textured: true },
+  { n: '05', code: 'SCHD', sub: 'SCHEDULING CONTROL SECTION', zh: '调度中心', x: 300, y: 330, w: 230, h: 230, style: 'card', size: 66, depth: 10 },
+  { n: '06', code: 'LOCL', sub: 'LOCAL CONTROL SECTION', zh: '本地控制', x: 1320, y: 300, w: 200, h: 200, style: 'card', size: 60, depth: 18 },
+  { n: '07', code: 'SIGN', sub: 'COMMUNITY SIGN SECTION', zh: '签到', x: 1640, y: 300, w: 270, h: 170, style: 'card', size: 70, depth: 10 },
+  { n: '08', code: 'HIST', sub: 'HISTORICAL RECORD SECTION', zh: '历史记录', x: 1430, y: 560, w: 280, h: 120, style: 'bare', size: 92, depth: 24 },
+  { n: '09', code: 'INTL', sub: 'FIELD INTELLIGENCE SECTION', zh: '游戏活动', x: 1330, y: 800, w: 190, h: 190, style: 'card', size: 54, depth: 14 },
+  { n: '10', code: 'SYS', sub: 'SYSTEM CONFIG SECTION', zh: '设置', x: 1650, y: 760, w: 200, h: 200, style: 'ink', size: 74, depth: 8, textured: true },
+]
+// 纯装饰方块（PV 里的空白卡与条纹卡）
+const DECOS = [
+  { x: 760, y: 820, w: 150, h: 150, html: '<div style="position:absolute;inset:0;background:#f6f4f1"></div><div style="position:absolute;left:45px;top:45px;width:60px;height:60px;background:#d5d2cd"></div>', depth: 20 },
+  { x: 1775, y: 545, w: 140, h: 140, html: '<div style="position:absolute;inset:0;background:#0b0c0b"></div><div style="position:absolute;left:0;right:0;top:34px;height:82px;background:#f6f4f1"></div>', depth: 28, blur: 1 },
+  { x: 120, y: 520, w: 90, h: 90, html: '<div style="position:absolute;inset:0;background:#f6f4f1;opacity:.7"></div>', depth: 6, blur: 2 },
+]
+
+const stage = document.getElementById('stage')
+const REDUCE = matchMedia('(prefers-reduced-motion: reduce)').matches
+// 滚动文字（借鉴 RhineLabUI 的 Rolling Number）：dir 1 向上滚、-1 向下滚；快速连续输入从当前运动接续
+function roll(el, text, dir = 1) {
+  text = String(text)
+  if (el.dataset.v === text) return
+  const first = el.dataset.v === undefined
+  el.dataset.v = text
+  el.classList.add('roll')
+  if (first || REDUCE) { el.innerHTML = ''; const n = document.createElement('span'); n.textContent = text; el.appendChild(n); el.style.width = ''; return }
+  const w0 = el.offsetWidth
+  const old = [...el.children]
+  const n = document.createElement('span')
+  n.textContent = text
+  el.appendChild(n)
+  const ease = 'cubic-bezier(.2,.8,.2,1)'
+  old.forEach(o => {
+    o.classList.add('out')
+    o.setAttribute('aria-hidden', 'true')
+    o.getAnimations().forEach(a => a.cancel())
+    o.animate([{ transform: 'translateY(0)', opacity: 1, filter: 'blur(0)' }, { transform: `translateY(${-100 * dir}%)`, opacity: 0, filter: 'blur(2px)' }], { duration: 460, easing: ease, fill: 'forwards' }).onfinish = () => o.remove()
+    // 后台页动画时间线会暂停：到时仍未结束就直接移除，避免新旧文字叠在一起
+    setTimeout(() => o.isConnected && o.remove(), 520)
+  })
+  const w1 = n.offsetWidth
+  el.style.width = w0 + 'px'
+  void el.offsetWidth
+  el.style.width = w1 + 'px'
+  n.animate([{ transform: `translateY(${100 * dir}%)`, opacity: 0, filter: 'blur(2px)' }, { transform: 'none', opacity: 1, filter: 'blur(0)' }], { duration: 460, easing: ease })
+}
+// 逐位滚动：只滚变化的字符（时钟、编号）
+function rollDigits(el, text, dir = 1) {
+  if (!el.classList.contains('digits')) { el.classList.add('digits'); el.innerHTML = '' }
+  while (el.children.length < text.length) el.appendChild(document.createElement('span'))
+  while (el.children.length > text.length) el.lastChild.remove()
+  ;[...text].forEach((ch, k) => roll(el.children[k], ch, dir))
+}
+const hub = document.getElementById('hub')
+const tilesEl = document.getElementById('tiles')
+const searching = document.getElementById('searching')
+const ruler = document.getElementById('ruler')
+const ledgerLabel = document.getElementById('ledger-label')
+const tiles = []
+
+function fit() {
+  const s = Math.min(innerWidth / 1920, innerHeight / 1080)
+  stage.style.transform = `translate(-50%, -50%) scale(${s})`
+}
+addEventListener('resize', fit); fit()
+
+function codeHtml(d) {
+  return d.code.split('\n').map(l => `<div class="code" style="font-size:${d.size}px">${l}</div>`).join('')
+}
+
+DEPTS.forEach((d, i) => {
+  const b = document.createElement('button')
+  b.type = 'button'
+  b.className = `tile ${d.style}${d.textured ? ' textured' : ''}`
+  Object.assign(b.style, { left: d.x + 'px', top: d.y + 'px', width: d.w + 'px', height: d.h + 'px', transitionDelay: `${i * 45}ms` })
+  b.setAttribute('aria-label', `${d.n} ${d.zh}`)
+  b.innerHTML = `<div class="tile-inner">
+    ${d.style !== 'bare' ? `<span class="idx">${d.n}</span>` : ''}
+    ${d.accent ? '<span class="accent-block" style="right:-22px;top:-26px"></span>' : ''}
+    ${d.style !== 'bare' ? `<svg class="emb${d.center ? ' big' : ''}" aria-hidden="true"><use href="#emblem" /></svg>` : ''}
+    ${codeHtml(d)}
+    <div class="sub">${d.sub}</div>
+    <div class="zh">${d.zh}</div>
+  </div>`
+  b.addEventListener('mouseenter', () => focusTile(i))
+  b.addEventListener('focus', () => focusTile(i))
+  b.addEventListener('click', () => openSection(i))
+  tilesEl.appendChild(b)
+  tiles.push({ el: b, d })
+
+  const r = document.createElement('button')
+  r.type = 'button'
+  r.setAttribute('aria-label', `${d.n} ${d.zh}`)
+  r.innerHTML = `<b>${d.n}</b><i></i>`
+  r.addEventListener('click', () => { focusTile(i); openSection(i) })
+  r.addEventListener('mouseenter', () => focusTile(i))
+  ruler.appendChild(r)
+})
+DECOS.forEach(d => {
+  const el = document.createElement('div')
+  el.className = 'tile deco'
+  Object.assign(el.style, { left: d.x + 'px', top: d.y + 'px', width: d.w + 'px', height: d.h + 'px', filter: d.blur ? `blur(${d.blur}px)` : '' })
+  el.innerHTML = d.html
+  tilesEl.appendChild(el)
+  tiles.push({ el, d })
+})
+
+const CENTER = DEPTS.findIndex(d => d.center)
+let current = CENTER
+function focusTile(i) {
+  current = i
+  tiles.forEach((t, j) => t.el.classList.toggle('focus', j === i))
+  hub.classList.add('has-focus')
+  const d = DEPTS[i]
+  searching.style.left = d.x + 'px'
+  searching.style.top = (d.y - d.h / 2 - 22) + 'px'
+  searching.querySelector('span').textContent = i === CENTER && !hub.dataset.touched ? 'SEARCHING' : `ACCESS // ${d.zh}`
+  hub.dataset.touched = '1'
+  ;[...ruler.children].forEach((r, j) => r.classList.toggle('on', j === i))
+  const dir = i >= (ledgerLabel._i ?? i) ? 1 : -1
+  ledgerLabel._i = i
+  roll(ledgerLabel, `X-0${d.n} ${d.zh}`, dir)
+}
+tilesEl.addEventListener('mouseleave', () => { hub.classList.remove('has-focus'); tiles.forEach(t => t.el.classList.remove('focus')) })
+
+// 鼠标视差：按景深平移，造出前后层次；空闲时缓慢漂浮
+let mx = 0, my = 0, tx = 0, ty = 0, raf = 0
+hub.addEventListener('mousemove', e => {
+  const r = stage.getBoundingClientRect()
+  tx = ((e.clientX - r.left) / r.width - .5) * 2
+  ty = ((e.clientY - r.top) / r.height - .5) * 2
+})
+function loop(t) {
+  mx += (tx - mx) * .08; my += (ty - my) * .08
+  tiles.forEach((tl, k) => {
+    const dp = tl.d.depth || 10
+    const fx = Math.sin(t / 2600 + k) * dp * .15, fy = Math.cos(t / 3100 + k * 1.7) * dp * .15
+    tl.el.style.setProperty('--px', (-mx * dp + fx).toFixed(2))
+    tl.el.style.setProperty('--py', (-my * dp + fy).toFixed(2))
+  })
+  rblocks.style.setProperty('--rx', (-mx * 3).toFixed(2))
+  rblocks.style.setProperty('--ry', (-my * 3).toFixed(2))
+  raf = requestAnimationFrame(loop)
+}
+document.addEventListener('visibilitychange', () => { cancelAnimationFrame(raf); if (!document.hidden) raf = requestAnimationFrame(loop) })
+raf = requestAnimationFrame(loop)
+
+// ── 随机方块：位置尺寸随机（不吸附网格），避让部门方块 / 标签 / 品牌 / 底栏 / 其他方块；
+//    每 2–10 秒出现一个，停留数秒后离场；入场与离场各自随机选一种动画 ──
+const rblocks = document.getElementById('rblocks')
+const live = new Set()
+const rnd = (a, b) => a + Math.random() * (b - a)
+function blockedAt(x, y, w, h) {
+  const GAP = 26
+  if (x < 48 || y < 48 || x + w > 1872 || y + h > 960) return true
+  if (x < 440 && y < 240) return true
+  for (const d of [...DEPTS, ...DECOS]) {
+    if (x + w > d.x - d.w / 2 - GAP && x < d.x + d.w / 2 + GAP && y + h > d.y - d.h / 2 - GAP - 44 && y < d.y + d.h / 2 + GAP) return true
+  }
+  for (const o of live) if (x + w > o.x - GAP && x < o.x + o.w + GAP && y + h > o.y - GAP && y < o.y + o.h + GAP) return true
+  return false
+}
+const ANIMS = {
+  fade: [{ opacity: 0 }, { opacity: 1 }],
+  scale: [{ transform: 'scale(0)' }, { transform: 'scale(1)' }],
+  wipeX: [{ clipPath: 'inset(0 100% 0 0)' }, { clipPath: 'inset(0 0 0 0)' }],
+  wipeY: [{ clipPath: 'inset(100% 0 0 0)' }, { clipPath: 'inset(0 0 0 0)' }],
+  flicker: [{ opacity: 0, offset: 0 }, { opacity: 1, offset: 0.2 }, { opacity: 0, offset: 0.4 }, { opacity: 1, offset: 0.6 }, { opacity: 0, offset: 0.75 }, { opacity: 1, offset: 1 }],
+  slide: [{ opacity: 0, transform: 'translateY(22px)' }, { opacity: 1, transform: 'none' }],
+}
+const ANIM_KEYS = Object.keys(ANIMS)
+function spawnBlock() {
+  if (booting || document.hidden || state.open >= 0) return
+  const kind = Math.floor(Math.random() * 6)
+  const base = kind === 2 ? rnd(14, 30) : rnd(36, 120)
+  const w = Math.round(kind === 3 ? base * 1.8 : base), h = Math.round(kind === 3 ? base * 0.8 : base)
+  let spot = null
+  for (let t = 0; t < 60 && !spot; t++) {
+    const x = Math.round(rnd(48, 1872 - w)), y = Math.round(rnd(48, 960 - h))
+    if (!blockedAt(x, y, w, h)) spot = { x, y, w, h }
+  }
+  if (!spot) return
+  const el = document.createElement('i')
+  el.className = 'k' + kind
+  Object.assign(el.style, { left: spot.x + 'px', top: spot.y + 'px', width: w + 'px', height: h + 'px', filter: `opacity(${kind === 2 ? 1 : rnd(0.55, 0.9).toFixed(2)})` })
+  rblocks.appendChild(el)
+  live.add(spot)
+  const inKey = ANIM_KEYS[Math.floor(Math.random() * ANIM_KEYS.length)]
+  const outKey = ANIM_KEYS[Math.floor(Math.random() * ANIM_KEYS.length)]
+  const easing = 'cubic-bezier(.2,.8,.2,1)'
+  el.animate(ANIMS[inKey], { duration: inKey === 'flicker' ? 420 : rnd(260, 700), easing: inKey === 'flicker' ? 'steps(1, end)' : easing })
+  setTimeout(() => {
+    const rev = ANIMS[outKey].map(f => (f.offset === undefined ? f : { ...f, offset: 1 - f.offset })).reverse()
+    const out = el.animate(rev, { duration: outKey === 'flicker' ? 380 : rnd(240, 620), easing: outKey === 'flicker' ? 'steps(1, end)' : 'cubic-bezier(.6,0,.8,.2)', fill: 'forwards' })
+    out.onfinish = () => { el.remove(); live.delete(spot) }
+  }, rnd(2500, 7000))
+}
+;(function schedule(first) {
+  setTimeout(() => { spawnBlock(); schedule(false) }, first ? 2600 : rnd(2000, 10000))
+})(true)
+
+// ── 二级界面：点击方块 → 方块移到左侧 → 左下录像带轮盘绘出 → 右侧档案逐块显现 ──
+// 演示数据只为展示版式，功能对应原有界面；正式实现接入后端接口。
+const kv = (title, rows) => ({ t: 'kv', title, rows })
+const table = (title, cols, rows, wide = true) => ({ t: 'table', title, cols, rows, wide })
+const stats = (title, rows) => ({ t: 'stats', title, rows })
+const quote = (text, by) => ({ t: 'quote', text, by, wide: true })
+const list = (title, rows) => ({ t: 'list', title, rows })
+const log = (title, lines, tall) => ({ t: 'log', title, lines, tall, wide: true })
+const banner = (o) => ({ t: 'banner', ...o, wide: true })
+const note = text => ({ t: 'note', text, wide: true })
+const esc = v => String(v).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;')
+const tog = (on, attrs = '') => `<span class="tog${on ? ' on' : ''}" role="switch" aria-checked="${on}" tabindex="0"${attrs}><i></i>${on ? '开' : '关'}</span>`
+const sel = (opts, i = 0, attrs = '') => `<select class="sel"${attrs}>${opts.map((o, k) => `<option${k === i ? ' selected' : ''}>${o}</option>`).join('')}</select>`
+const inp = (v, cls = '') => `<input class="inp ${cls}" value="${esc(v)}" spellcheck="false">`
+const num = (v, unit = '') => `<input class="inp num" type="number" value="${v}">${unit ? `<span class="unit">${unit}</span>` : ''}`
+const path = v => `${inp(v, 'mono')}<button class="mini" type="button" data-pick>浏览</button>`
+const seg = (opts, i = 0) => `<span class="seg" role="radiogroup">${opts.map((o, k) => `<button type="button" role="radio" aria-checked="${k === i}"${k === i ? ' class="on"' : ''}>${o}</button>`).join('')}</span>`
+const DAYS = ['一', '二', '三', '四', '五', '六', '日']
+const chips = mask => `<span class="chips">${DAYS.map((d, k) => `<button type="button" aria-pressed="${mask[k] === '1'}"${mask[k] === '1' ? ' class="on"' : ''}>${d}</button>`).join('')}</span>`
+const mini = (...names) => names.map(n => `<button class="mini" type="button">${n}</button>`).join(' ')
+const tag = (text, kind) => `<span class="tag ${kind}">${text}</span>`
+const OK = tag('完成', 'ok'), RUN = tag('运行', 'run'), WAIT = tag('等待', 'idle'), ERR = tag('异常', 'err'), ON = tag('启用', 'ok'), OFF = tag('禁用', 'idle')
+const POWER = ['无动作', '退出 AUTO-MAS', '重启 AUTO-MAS', '睡眠', '休眠', '注销', '关机', '强制关机', '重启']
+
+// 通用脚本：按功能拆为 程序 / 判定 / 游戏 / 限制 / 账号 五页，字段与 GeneralConfig、GeneralUserConfig 对应
+function general(o) {
+  const api = 'POST /api/scripts/update'
+  return { name: o.name, en: o.en, tabs: [
+    { name: '程序', api, blocks: [
+      kv('SCRIPT', [['脚本名称', inp(o.name), 'Info.Name'], ['根目录', path(o.root), 'Info.RootPath'], ['启动程序', path(o.exe), 'Script.ScriptPath'], ['启动参数', inp(o.args || '', 'mono'), 'Script.Arguments'], ['配置路径', path(o.cfg), 'Script.ConfigPath'], ['路径类型', seg(['文件', '文件夹'], o.folder ? 1 : 0), 'Script.ConfigPathMode'], ['回写配置', seg(['从不', '成功时', '失败时', '总是'], 1), 'Script.UpdateConfigMode']]),
+      kv('PROCESS', [['追踪进程', tog(!!o.track), 'Script.IfTrackProcess'], ['进程名', inp(o.track || '', 'mono'), 'Script.TrackProcessName'], ['清理范围', seg(['跨会话强力', '仅本轮', '当前会话'], 0), 'Script.TaskKillMode']]),
+    ], actions: ['保存', '复制脚本', '删除脚本'] },
+    { name: '判定', api, blocks: [
+      kv('LOG FILE', [['日志路径', path(o.log), 'Script.LogPath'], ['路径日期格式', inp('%Y-%m-%d', 'mono'), 'Script.LogPathFormat'], ['时间戳位置', `${num(1)}<span class="unit">至</span>${num(19)}<span class="unit">列</span>`, 'Script.LogTimeStart / LogTimeEnd'], ['时间格式', inp('%Y-%m-%d %H:%M:%S', 'mono'), 'Script.LogTimeFormat']]),
+      kv('MATCH', [['成功判定', inp(o.ok) + seg(['关键字', '正则'], 0), 'Script.SuccessLog / SuccessLogMode'], ['失败判定', inp(o.err) + seg(['关键字', '正则'], 0), 'Script.ErrorLog / ErrorLogMode'], ['日志预处理', tog(false), 'Script.LogHookEnabled'], ['推送日志', tog(true), 'Script.PushLogEnabled']]),
+      note('关键字模式用「|」分隔多个子串，任一命中即判定；正则模式按整行匹配。预处理先于判定执行。'),
+    ], actions: ['保存', '测试匹配'] },
+    { name: '游戏', api, blocks: [
+      kv('GAME', [['随脚本启动游戏', tog(!!o.game), 'Game.Enabled'], ['启动方式', seg(['模拟器', '客户端', 'URL 协议'], o.gameType || 1), 'Game.Type'], ['游戏路径', path(o.game || ''), 'Game.Path'], ['进程名', inp(o.gameProc || '', 'mono'), 'Game.ProcessName'], ['启动参数', inp('', 'mono'), 'Game.Arguments'], ['启动后等待', num(30, '秒'), 'Game.WaitTime'], ['结束后强制关闭', tog(true), 'Game.IfForceClose']]),
+      kv('EMULATOR', [['模拟器', sel(['未选择', 'MuMu 12', '雷电 9', 'Android AVD'], o.gameType === 0 ? 1 : 0), 'Game.EmulatorId'], ['实例', sel(['未选择', 'MuMu-0', 'MuMu-1', 'MuMu-2'], o.gameType === 0 ? 1 : 0), 'Game.EmulatorIndex']]),
+    ], actions: ['保存'] },
+    { name: '限制', api, blocks: [
+      kv('RUN LIMIT', [['单账号总时限', num(120, '分钟'), 'Run.HardTimeLimit'], ['单次运行时限', num(o.limit || 60, '分钟'), 'Run.RunTimeLimit'], ['单次重试次数', num(3, '次'), 'Run.RunTimesLimit'], ['每日代理上限', num(0, '次 · 0 为不限'), 'Run.ProxyTimesLimit']]),
+      stats('TODAY', [['已代理', '1'], ['已重试', '0'], ['剩余时限', '118m']]),
+      note('总时限包含等待游戏与全部重试；单次超时会先按清理清单结束进程，再按重启清单补跑。'),
+    ], actions: ['保存', '恢复默认'] },
+    { name: '账号', api: 'POST /api/scripts/user/update', blocks: [
+      table('USERS', ['名称', '启用', '剩余天数', '配置来源', '上次代理'], o.users.map(u => [u[0], tog(u[1]), u[2], sel(['独立', '共享', '原生'], u[3] || 0), u[4]])),
+      note('配置来源：独立 = 账号单独一份脚本配置；共享 = 与同脚本账号共用；原生 = 直接使用脚本自身配置。'),
+    ], actions: ['添加账号', '设置脚本', '删除所选'] },
+  ] }
+}
+
+// 模拟器：设备 / 配置 两页，对应 EmulatorConfig 与 /api/emulator/operate
+function emulator(o) {
+  const cfg = [['名称', inp(o.name), 'Info.Name'], ['类型', seg(['通用', 'MuMu', '雷电', '2.0'], o.type), 'Info.Type'], ['安装路径', path(o.path), 'Info.Path'], ['最大等待', num(300, '秒'), 'Info.MaxWaitTime'], ['老板键', inp('Alt+Q', 'mono'), 'Info.BossKey'], ['关闭时清理残留', tog(false), 'Info.ForceKillOnClose'], ['启动前关闭全部', tog(false), 'Info.ForceKillBeforeLaunch']]
+  if (o.type === 3) cfg.push(['稳定模式', tog(true), 'Info.StableMode'], ['配置守卫', tog(true), 'Info.ConfigGuard'])
+  return { name: o.name, en: o.en, tabs: [
+    { name: '设备', api: 'POST /api/emulator/operate', blocks: [
+      table('DEVICES', ['名称', '状态', 'ADB 地址', '操作'], o.devices.map(d => [d[0], d[1], `<span style="font:13px Consolas,monospace">${d[2]}</span>`, mini(d[1] === RUN ? '关闭' : '启动', '显示')])),
+      stats('SUMMARY', [['实例', String(o.devices.length)], ['运行中', String(o.devices.filter(d => d[1] === RUN).length)], ['被任务占用', o.devices.some(d => d[1] === RUN) ? '1' : '0']]),
+    ], actions: ['刷新设备', '全部关闭'] },
+    { name: '配置', api: 'POST /api/emulator/update', blocks: [kv('CONFIG', cfg)], actions: ['保存', '自动搜索', '删除'] },
+  ] }
+}
+
+// 调度队列：调度 / 定时 / 队列项 三页，对应 QueueConfig、TimeSet、QueueItem
+function queue(o) {
+  return { name: o.name, en: o.en, tabs: [
+    { name: '调度', api: 'POST /api/queue/update', blocks: [
+      kv('SCHEDULE', [['队列名称', inp(o.name), 'Info.Name'], ['定时启动', tog(o.cycle ? false : true, ' data-x="time"') , 'Info.TimeEnabled'], ['循环队列', tog(!!o.cycle, ' data-x="cycle"'), 'Info.CycleEnabled'], ['启动时运行', seg(['从不', '每次', '每日首次'], o.startup || 0), 'Info.StartUpMode'], ['完成后', sel(POWER, o.after || 0), 'Info.AfterAccomplish'], ['延时执行', num(0, '分钟'), 'Info.AfterAccomplishDelay']]),
+      kv('HOOKS', [['运行前脚本', tog(false), 'Info.IfScriptBeforeTask'], ['前脚本路径', path(''), 'Info.ScriptBeforeTask'], ['运行后脚本', tog(!!o.after_script), 'Info.IfScriptAfterTask'], ['后脚本路径', path(o.after_script || ''), 'Info.ScriptAfterTask']]),
+    ], actions: ['保存', '立即运行', '删除队列'] },
+    { name: '定时', api: 'POST /api/queue/time/update', blocks: [
+      table('TIME SET', ['启用', '周期', '时间'], o.times.map(t => [tog(t[0]), chips(t[1]), `<input class="inp num" type="time" value="${t[2]}" style="flex-basis:96px">`])),
+      note(o.cycle ? '循环队列与定时启动互斥：开启循环后，按「队列项」中各脚本自己的周期持续运行。' : '同一队列可设置多个定时；周期为空时该定时不会触发。'),
+    ], actions: ['添加定时', '删除所选'] },
+    { name: '队列项', api: 'POST /api/queue/item/update', blocks: [
+      table('ITEMS', ['脚本', '参与循环', '方式', '时间 / 间隔', '下次运行'], o.items.map(it => [sel(['BGI 每日', '鸣潮日常', '星铁清体力', '自定义脚本'], it[0]), tog(it[1]), seg(['定时', '间隔'], it[2]), it[2] ? `${num(it[3], '分钟')}` : `<input class="inp num" type="time" value="${it[3]}" style="flex-basis:96px">`, it[4]])),
+      note('「参与循环」「方式」「间隔」只在循环队列中生效；间隔可从上次开始或上次结束计时。'),
+    ], actions: ['添加脚本', '上移', '下移', '删除所选'] },
+  ] }
+}
+
+const SECTIONS = {
+  '01': { caption: '主页：快速启动队列或脚本，查看各账号的代理状态。', items: [
+    { name: '快速启动', en: 'QUICK START', api: 'POST /api/dispatch/start', blocks: [
+      kv('START', [['任务对象', sel(['日常托管 · 队列', '周常收尾 · 队列', '夜间循环 · 循环队列', 'BGI 每日 · 脚本'], 0, ' data-k="queue"'), 'taskId'], ['运行模式', seg(['自动代理', '设置脚本', '循环运行'], 0), 'mode'], ['完成后', sel(POWER), 'POST /api/dispatch/set/power'], ['上次运行', '今天 06:00 · 全部完成'], ['下次定时', '今天 18:00 · 日常托管']]),
+      stats('TODAY', [['今日已代理', '<span data-k="done">6</span>'], ['待运行', '<span data-k="left">2</span>'], ['异常', '0']]),
+      { t: 'run', title: 'RUN STATUS', wide: true },
+    ], actions: ['开始执行', '停止'] },
+    { name: '代理状态', en: 'PROXY STATUS', api: 'GET /api/dispatch/runtime-snapshot', blocks: [
+      stats('NOW', [['运行中队列', '1'], ['运行中账号', '1'], ['本轮剩余', '3']]),
+      table('ACCOUNTS', ['账号', '托管', '上次代理', '今日', '状态'], [['主号', 'BGI 每日', '06:12', '1 / 2', OK], ['小号', 'BGI 每日', '昨天', '0 / 2', RUN], ['鸣潮主号', '鸣潮日常', '06:40', '1 / 1', OK], ['星铁', '星铁清体力', '06:52', '1 / 2', ERR], ['默认', '自定义脚本', '周日', '0 / 1', WAIT]]),
+    ], actions: ['刷新', '查看历史记录'] },
+  ] },
+  '02': { caption: '通用脚本托管：程序、日志判定、游戏启动、运行限制与账号，按功能分页。', items: [
+    general({ name: 'BGI 每日', en: 'GENERAL · RDP', root: 'D:\\BetterGI', exe: 'D:\\BetterGI\\BetterGI.exe', args: '--startOneDragon', cfg: 'D:\\BetterGI\\User\\config.json', track: 'BetterGI.exe', log: 'D:\\BetterGI\\log\\better-genshin-impact%Y%m%d.log', ok: '一条龙完成', err: '任务异常|ERROR', game: 'D:\\Genshin Impact\\YuanShen.exe', gameProc: 'YuanShen.exe', users: [['主号', true, '永久', 0, '今天 06:12'], ['小号', true, '30 天', 0, '昨天 06:30'], ['测试号', false, '—', 1, '—']] }),
+    general({ name: '鸣潮日常', en: 'GENERAL', root: 'D:\\ok-ww', exe: 'D:\\ok-ww\\ok-ww.exe', args: '-t 1 -e', cfg: 'D:\\ok-ww\\configs', folder: true, log: 'D:\\ok-ww\\logs\\ok-script.log', ok: '任务完成', err: 'Exception', game: 'D:\\Wuthering Waves\\launcher.exe', gameProc: 'Client-Win64-Shipping.exe', users: [['鸣潮主号', true, '永久', 2, '今天 06:40']] }),
+    general({ name: '星铁清体力', en: 'GENERAL', root: 'D:\\M7A', exe: 'D:\\M7A\\March7th Assistant.exe', cfg: 'D:\\M7A\\config.yaml', track: 'March7th Assistant.exe', log: 'D:\\M7A\\logs\\%Y-%m-%d.log', ok: '任务完成', err: 'ERROR', game: 'D:\\Star Rail\\StarRail.exe', gameProc: 'StarRail.exe', limit: 45, users: [['星铁', true, '12 天', 0, '今天 06:52'], ['星铁小号', false, '—', 0, '—']] }),
+    general({ name: '自定义脚本', en: 'GENERAL', root: 'C:\\Tools', exe: 'C:\\Tools\\daily.bat', cfg: '', log: 'C:\\Tools\\daily.log', ok: 'done', err: 'fail', gameType: 2, users: [['默认', true, '永久', 0, '周日 22:10']] }),
+  ] },
+  '03': { caption: '模拟器：实例启动、关闭、显示与设备检测；配置与 2.0 稳定模式。', items: [
+    emulator({ name: 'MuMu 12', en: 'EMULATOR', type: 1, path: 'D:\\MuMuPlayer-12.0', devices: [['MuMu-0', RUN, '127.0.0.1:16384'], ['MuMu-1', WAIT, '127.0.0.1:16416'], ['MuMu-2', WAIT, '127.0.0.1:16448']] }),
+    emulator({ name: '雷电 9', en: 'EMULATOR', type: 2, path: 'D:\\leidian\\LDPlayer9', devices: [['雷电-0', WAIT, 'emulator-5554']] }),
+    emulator({ name: 'Android AVD', en: 'EMULATOR 2.0', type: 3, path: 'C:\\Android\\Sdk', devices: [['Pixel_7', WAIT, 'emulator-5556'], ['Tablet', WAIT, 'emulator-5558']] }),
+  ] },
+  '04': { caption: '调度队列：定时与循环、启动时运行、完成后动作与队列项。', items: [
+    queue({ name: '日常托管', en: 'QUEUE', startup: 2, after_script: 'C:\\Tools\\after.bat', times: [[true, '1111111', '06:00'], [true, '1111111', '18:00']], items: [[0, true, 0, '06:00', '今天 18:00'], [1, true, 0, '06:30', '明天 06:30'], [2, true, 0, '06:45', '明天 06:45']] }),
+    queue({ name: '周常收尾', en: 'QUEUE', after: 3, times: [[true, '0000001', '22:00']], items: [[3, true, 0, '22:00', '周日 22:00']] }),
+    queue({ name: '夜间循环', en: 'QUEUE · CYCLE', cycle: true, after: 6, times: [[false, '0000000', '23:30']], items: [[0, true, 1, 480, '今天 23:30'], [2, false, 1, 240, '—']] }),
+  ] },
+  '05': { caption: '调度中心：执行面板、任务总览、托管切换与实时日志。', items: [
+    { name: '主执行面板', en: 'PANEL 01', tabs: [
+      { name: '总览', api: 'GET /api/dispatch/runtime-snapshot', blocks: [
+        kv('TASK', [['任务', '队列 · 日常托管'], ['模式', '自动代理'], ['状态', RUN + ' 已运行 02:13'], ['完成后', '无动作 · 可在主页修改']]),
+        table('TASK TREE', ['托管', '账号', '状态'], [['BGI 每日', '主号', OK], ['BGI 每日', '小号', RUN], ['鸣潮日常', '鸣潮主号', WAIT], ['星铁清体力', '星铁', WAIT]]),
+      ], actions: ['停止任务', '上一个托管', '下一个托管'] },
+      { name: '日志', api: 'WS /api/core/ws', blocks: [
+        log('LIVE LOG', ['<span>06:00:02</span> 队列开始：日常托管', '<span>06:00:03</span> 本地远程桌面分身：连接中', '<span>06:00:05</span> BGI 每日 · 主号：启动 BetterGI.exe --startOneDragon', '<span>06:00:41</span> 等待游戏窗口 YuanShen.exe', '<span>06:03:10</span> 日志：开始执行一条龙', '<span class="s">06:12:40</span> <span class="s">主号 · 一条龙完成 → Success!</span>', '<span>06:12:42</span> 清理进程：BetterGI.exe、YuanShen.exe', '<span>06:12:44</span> BGI 每日 · 小号：启动中…', '<span>06:13:20</span> 等待游戏窗口 YuanShen.exe'], true),
+      ], actions: ['停止任务', '清空日志'] },
+    ] },
+    { name: '面板 02', en: 'PANEL 02', api: 'POST /api/dispatch/start', blocks: [
+      kv('TASK', [['任务对象', sel(['未选择', '日常托管 · 队列', '周常收尾 · 队列', 'BGI 每日 · 脚本']), 'taskId'], ['运行模式', seg(['自动代理', '设置脚本', '循环运行'], 0), 'mode'], ['状态', WAIT + ' 空闲']]),
+      log('LOG', ['<span>—</span> 选择队列或脚本后开始执行']),
+    ], actions: ['开始执行', '关闭面板'] },
+  ] },
+  '06': { caption: '本地控制：远程桌面分身、虚拟显示器、全局热键与连接端口。', items: [
+    { name: '远程桌面分身', en: 'CHILD SESSION · RDP', api: 'POST /api/setting/update', blocks: [
+      kv('CHILD SESSION', [['启用分身执行', tog(true), 'ChildSession.Enabled'], ['宿主端口', num(36165), 'ChildSession.HostPort'], ['分辨率', sel(['2560x1440', '1920x1080', '1600x900']), 'ChildSession.Resolution'], ['启动时隐藏预览', tog(false), 'ChildSession.StartHidden'], ['观看模式', tog(true), 'ChildSession.WatchMode']]),
+      kv('STATUS', [['会话', WAIT + ' 已登录 · 空闲'], ['占用', '无任务占用']]),
+      note('观看模式会屏蔽本机键鼠进入分身，避免误触打断任务。'),
+    ], actions: ['打开分身', '重新连接', '注销会话'] },
+    { name: '虚拟显示器', en: 'VIRTUAL DISPLAY', api: 'POST /api/setting/virtual-display/check', blocks: [
+      kv('DISPLAY', [['无人值守时挂载', tog(true), 'Display.IfEnableVirtualDisplay'], ['刷新率', seg(['1920×1080 @60', '1920×1080 @30'], 0), 'Display.VirtualDisplayMode'], ['驱动', 'Parsec 虚拟显示驱动 · 已安装'], ['当前状态', '未挂载 · 有真实显示输出']]),
+      note('所有真实显示输出断开后，挂一块 1920×1080 的虚拟屏，避免游戏窗口被压小。驱动需自行安装。'),
+    ], actions: ['检测', '立即卸下'] },
+    { name: '全局热键', en: 'HOTKEY', api: 'POST /api/dispatch/hotkey/reload', blocks: [
+      kv('BINDINGS', [['启用全局热键', tog(true), 'Hotkey.Enabled'], ['启动 / 停止', inp('Ctrl+Alt+S', 'mono') + mini('录制'), 'Hotkey.ToggleStartStop'], ['上一个托管', inp('Ctrl+Alt+Left', 'mono') + mini('录制'), 'Hotkey.PreviousTask'], ['下一个托管', inp('Ctrl+Alt+Right', 'mono') + mini('录制'), 'Hotkey.NextTask']]),
+    ], actions: ['保存并重新加载'] },
+    { name: '连接端口', en: 'HOST', api: 'GET /api/info/version', blocks: [kv('PORTS', [['页面端口', '36262'], ['后端端口', '36263'], ['实例标识', '372fa7a8…'], ['后端状态', OK + ' 已连接']])], actions: ['复制地址'] },
+  ] },
+  '07': { caption: '游戏社区签到：签到设置、账号组与签到结果。', items: [
+    { name: '签到设置', en: 'SIGN', api: 'POST /api/tools/update', blocks: [
+      kv('SIGN', [['启用签到', tog(true), 'GameSign.Enabled'], ['启动时签到', tog(true), 'GameSign.RunOnStartup'], ['每日自动签到', tog(true), 'GameSign.AutoStart'], ['结果通知', tog(false), 'GameSign.NotifyEnabled'], ['活动查询', tog(true), 'GameSign.ActivityEnabled'], ['上次签到', '今天 08:00 · 全部成功']]),
+    ], actions: ['立即签到'] },
+    { name: '账号组', en: 'ACCOUNTS', api: 'POST /api/tools/sign/account/update', blocks: [
+      table('GROUPS', ['账号组', '启用', '米游社', '森空岛', '库街区', '塔吉多'], [['用户 1', tog(true), OK, OK, WAIT, WAIT], ['用户 2', tog(true), OK, WAIT, OK, WAIT], ['用户 3', tog(false), WAIT, WAIT, WAIT, WAIT]]),
+      note('各平台凭据通过扫码登录写入账号组，签到时按组依次执行。'),
+    ], actions: ['添加账号组', '扫码登录', '删除所选'] },
+    { name: '签到结果', en: 'RESULT', api: 'POST /api/tools/sign', blocks: [
+      table('TODAY', ['平台', '账号组', '结果', '时间'], [['米游社 · 原神', '用户 1', OK, '08:00:12'], ['米游社 · 星铁', '用户 1', OK, '08:00:15'], ['森空岛', '用户 1', OK, '08:00:18'], ['库街区', '用户 2', ERR, '需要重新登录'], ['米游社 · 原神', '用户 2', OK, '08:00:24']]),
+    ], actions: ['重新签到失败项'] },
+  ] },
+  '08': { caption: '历史记录：按日、周、月合并查看每个账号的代理结果与日志。', items: [
+    { name: '查询', en: 'SEARCH', api: 'POST /api/history/search', blocks: [
+      kv('FILTER', [['开始日期', '<input class="inp num" type="date" value="2026-11-14" style="flex-basis:160px">', 'start_date'], ['结束日期', '<input class="inp num" type="date" value="2026-11-20" style="flex-basis:160px">', 'end_date'], ['合并方式', seg(['按日', '按周', '按月'], 0), 'mode']]),
+      stats('RANGE', [['代理次数', '41'], ['成功', '38'], ['异常', '3']]),
+    ], actions: ['查询', '导出'] },
+    { name: '11-20', en: 'TODAY', api: 'POST /api/history/data', blocks: [stats('SUMMARY', [['代理次数', '6'], ['成功', '5'], ['异常', '1']]), table('RECORDS', ['时间', '账号', '托管', '结果'], [['06:12', '主号', 'BGI 每日', OK], ['06:30', '小号', 'BGI 每日', OK], ['06:40', '鸣潮主号', '鸣潮日常', OK], ['06:52', '星铁', '星铁清体力', ERR]])], actions: ['查看日志', '查看录像'] },
+    { name: '11-19', en: 'HISTORY', api: 'POST /api/history/data', blocks: [stats('SUMMARY', [['代理次数', '8'], ['成功', '8'], ['异常', '0']]), table('RECORDS', ['时间', '账号', '托管', '结果'], [['06:10', '主号', 'BGI 每日', OK], ['06:31', '小号', 'BGI 每日', OK], ['18:02', '鸣潮主号', '鸣潮日常', OK]])], actions: ['查看日志', '查看录像'] },
+    { name: '11-18', en: 'HISTORY', api: 'POST /api/history/data', blocks: [stats('SUMMARY', [['代理次数', '7'], ['成功', '6'], ['异常', '1']]), table('RECORDS', ['时间', '账号', '托管', '结果'], [['06:15', '小号', 'BGI 每日', ERR], ['06:40', '主号', 'BGI 每日', OK]])], actions: ['查看日志', '查看录像'] },
+  ] },
+  '09': { caption: '游戏活动：版本、活动时间、剩余时间与卡池。', items: [
+    { name: '终末地', en: 'ENDFIELD', api: 'POST /api/info/endfield/version-art', blocks: [banner({ v: '1.6 版本', title: '丹青渡', left: '6 天 5 时', bg: 'linear-gradient(120deg,#203030,#5b6a4c 55%,#d6c28c)' }), kv('PERIOD', [['活动时间', '10/15 12:00 – 11/26 06:00']]), list('POOLS', [['特许', '烟火邀星河'], ['武器', '丹青长卷']])], actions: ['打开活动页'] },
+    { name: '崩坏：星穹铁道', en: 'STAR RAIL', api: 'POST /api/info/stella/activity', blocks: [banner({ v: '3.7 版本', title: '向星而行', left: '12 天 3 时', bg: 'linear-gradient(120deg,#1a1d3a,#4a3f7a 55%,#d9a8c7)' }), kv('PERIOD', [['活动时间', '11/12 – 12/02']])], actions: ['打开活动页'] },
+    { name: '原神', en: 'GENSHIN', api: 'POST /api/tools/community/activity/query', blocks: [banner({ v: '6.2 版本', title: '霜夜灵嗣', left: '20 天', bg: 'linear-gradient(120deg,#1d3346,#3f6f8a 55%,#e3d3a1)' }), kv('PERIOD', [['活动时间', '11/19 – 12/30']])], actions: ['打开活动页'] },
+    { name: '鸣潮', en: 'WUTHERING', api: 'POST /api/tools/community/activity/query', blocks: [banner({ v: '2.8 版本', title: '回声之岸', left: '4 天 11 时', bg: 'linear-gradient(120deg,#16242a,#2f5d5e 55%,#b9d3c5)' }), kv('PERIOD', [['活动时间', '10/30 – 11/24']])], actions: ['打开活动页'] },
+    { name: '明日方舟', en: 'ARKNIGHTS', api: 'POST /api/info/arknights/activity', blocks: [banner({ v: 'SIDE STORY', title: '新活动', left: '9 天', bg: 'linear-gradient(120deg,#222,#555 55%,#bbb)' }), kv('PERIOD', [['活动时间', '11/14 – 11/28']])], actions: ['打开活动页'] },
+  ] },
+  '10': { caption: '设置：启动与界面、功能、通知、更新、录像与关于。', items: [
+    { name: '启动与界面', en: 'START · UI', api: 'POST /api/setting/update', blocks: [kv('START', [['开机自启', tog(true), 'Start.IfSelfStart'], ['启动后最小化', tog(false), 'Start.IfMinimizeDirectly'], ['显示托盘图标', tog(true), 'UI.IfShowTray'], ['关闭到托盘', tog(true), 'UI.IfToTray'], ['隐藏关闭按钮', tog(false), 'UI.IfHideCloseButton'], ['主题', seg(['跟随系统', '浅色', '深色'], 0)], ['语言', sel(['简体中文', 'English'])]])], actions: ['保存', '恢复默认'] },
+    { name: '功能', en: 'FUNCTION', api: 'POST /api/setting/update', blocks: [kv('BEHAVIOR', [['历史记录保留', sel(['7 天', '15 天', '30 天', '60 天', '90 天', '180 天', '365 天', '永久'], 7), 'Function.HistoryRetentionTime'], ['运行时允许睡眠', tog(false), 'Function.IfAllowSleep'], ['静默模式', tog(false), 'Function.IfSilence'], ['屏蔽模拟器广告', tog(true), 'Function.IfBlockAd'], ['匿名遥测', tog(true), 'Function.IfEnableTelemetry'], ['语音提示', tog(false), 'Voice.Enabled'], ['语音风格', seg(['简洁', '热闹'], 0), 'Voice.Type']])], actions: ['保存'] },
+    { name: '通知', en: 'NOTIFY', api: 'POST /api/setting/update', blocks: [kv('CHANNELS', [['任务结果推送', seg(['不推送', '任何时刻', '仅失败时'], 2), 'Notify.SendTaskResultTime'], ['发送统计', tog(true), 'Notify.IfSendStatistic'], ['系统通知', tog(true), 'Notify.IfPushPlyer'], ['邮件', tog(false), 'Notify.IfSendMail'], ['Server 酱', tog(true), 'Notify.IfServerChan'], ['Koishi', tog(false), 'Notify.IfKoishiSupport'], ['OpenClaw QQ', tog(false), 'Notify.IfOpenClawQQ'], ['自定义 Webhook', '2 个 · 已启用 1 个', 'Notify.CustomWebhooks']])], actions: ['测试通知', '管理 Webhook'] },
+    { name: '更新', en: 'UPDATE', api: 'POST /api/setting/update', blocks: [kv('UPDATE', [['当前版本', 'v5.7.0'], ['自动更新', tog(true), 'Update.IfAutoUpdate'], ['更新源', sel(['GitHub', 'Mirror 酱', 'AutoSite', 'CNB']), 'Update.Source'], ['更新渠道', seg(['稳定版', '测试版'], 0), 'Update.Channel'], ['GitHub 加速', seg(['自动', '关闭'], 0), 'Update.GitHubMirror'], ['代理地址', inp('', 'mono'), 'Update.ProxyAddress']])], actions: ['检查更新', '暂停更新 7 天'] },
+    { name: '录像回放', en: 'REPLAY · OBS', api: 'POST /api/setting/obs/save', blocks: [kv('OBS', [['任务录像', tog(false), 'Replay.Enabled'], ['OBS 端口', num(4455), 'Replay.Port'], ['最多保留', num(20, '段'), 'Replay.MaxReplayCount']]), note('通过 OBS WebSocket 录制每个账号的任务过程，可在历史记录中回看。')], actions: ['检查连接', '保存'] },
+    { name: '高级与关于', en: 'ADVANCED', api: 'POST /api/setting/backup', blocks: [kv('ADVANCED', [['日志导出', '打包 logs / debug'], ['数据备份', '导出全部配置'], ['字体', 'MiSans（小米）· 许可见 NOTICE'], ['视觉参考', 'LBEILC / RhineLabUI（MIT）']])], actions: ['导出日志', '导出备份', '查看许可'] },
+  ] },
+}
+
+function renderBlock(b) {
+  const head = b.title ? `<div class="blk-h"><i></i>${b.title}</div>` : ''
+  let body = ''
+  if (b.t === 'kv') body = `<div class="kv">${b.rows.map(([k, v, key]) => `<div class="k"${key ? ` title="${key}"` : ''}>${k}</div><div>${v}</div>`).join('')}</div>`
+  else if (b.t === 'table') body = `<table class="tbl"><thead><tr><th>#</th>${b.cols.map(c => `<th>${c}</th>`).join('')}</tr></thead><tbody>${b.rows.map((r, i) => `<tr><td class="n">${String(i + 1).padStart(2, '0')}</td>${r.map(c => `<td>${c}</td>`).join('')}</tr>`).join('')}</tbody></table>`
+  else if (b.t === 'stats') body = `<div class="stats">${b.rows.map(([k, v]) => `<div><b>${v}</b><span>${k}</span></div>`).join('')}</div>`
+  else if (b.t === 'quote') body = `<div class="quote">“${b.text}”</div><div class="by">${b.by}</div>`
+  else if (b.t === 'list') body = `<div class="lst">${b.rows.map(([a, c]) => `<div><em>${a}</em>${c}</div>`).join('')}</div>`
+  else if (b.t === 'log') body = `<pre class="log${b.tall ? ' tall' : ''}">${b.lines.join('\n')}</pre>`
+  else if (b.t === 'note') body = `<div class="note">${b.text}</div>`
+  else if (b.t === 'run') body = `<div class="run" data-state="idle"><div class="run-bar"><i></i></div><div class="run-line"><b>待命</b><span>选择队列后开始执行</span></div></div>`
+  else if (b.t === 'banner') body = `<div class="banner" style="--bg-b:${b.bg}"><span class="v">● ${b.v}</span><h3>${b.title}</h3><div class="cd">活动剩余时间<b>${b.left}</b></div></div>`
+  return `<div class="blk${b.wide ? ' wide' : ''}">${head}${body}</div>`
+}
+
+const sect = document.getElementById('sect')
+const panel = document.getElementById('s-panel')
+const state = { open: -1, items: [], pos: 0, target: 0, tab: 0, shown: -1, morph: null, timers: [] }
+const later = (ms, fn) => state.timers.push(setTimeout(fn, ms))
+
+const currentEl = document.getElementById('r-current')
+const sGlass = document.getElementById('s-glass')
+const pager = document.getElementById('s-pager')
+const plate = document.getElementById('s-plate')
+const heroNum = document.getElementById('s-hero-num')
+const heroRot = document.querySelector('#s-hero .rot')
+const $s = id => document.getElementById(id)
+// 铭牌、分页、剪影随当前条目更新
+function showCurrent(swap) {
+  const d = DEPTS[state.open]
+  const item = state.items[state.target]
+  if (!d || !item) return
+  // 铭牌与编号滚动更新（借鉴 RhineLabUI）；首次进入直接显示
+  const dir = state.target >= (state.prevTarget ?? 0) ? 1 : -1
+  state.prevTarget = state.target
+  if (!swap) { ['s-role', 's-name', 's-en'].forEach(id => { delete $s(id).dataset.v }); $s('s-code').classList.remove('digits'); heroNum.classList.remove('digits') }
+  roll($s('s-role'), `${d.code.replace('\n', ' ')} / ${d.zh}`, dir)
+  roll($s('s-name'), item.name, dir)
+  rollDigits($s('s-code'), `${d.n}-${String(state.target + 1).padStart(2, '0')}`, dir)
+  roll($s('s-en'), item.en, dir)
+  rollDigits(heroNum, String(state.target + 1).padStart(2, '0'), dir)
+  heroRot.style.setProperty('--rot', state.target * 24 + 'deg')
+  ;[...pager.children].forEach((b, k) => { b.classList.toggle('on', k === state.target); b.setAttribute('aria-current', k === state.target ? 'true' : 'false') })
+}
+const kick = () => { window.chain?.setTarget(state.target); showCurrent(true) }
+// 玻璃卡随鼠标轻微倾斜
+sect.addEventListener('mousemove', e => {
+  const r = sect.getBoundingClientRect()
+  const nx = (e.clientX - r.left) / r.width - 0.5, ny = (e.clientY - r.top) / r.height - 0.5
+  sGlass.style.setProperty('--ty', (nx * 3).toFixed(2) + 'deg')
+  sGlass.style.setProperty('--tx', (-ny * 2).toFixed(2) + 'deg')
+})
+
+const sGlassFrost = document.querySelector('#s-glass .frost')
+const decBar = document.querySelector('#s-glass .dec-bar')
+// 解密揭示：对角线两端向中央合拢 → 保持 → 向中央收束并淡出；磨砂边界自上而下退去；正文遮挡条依次退开
+function decrypt() {
+  if (REDUCE) return
+  panel.classList.add('redact')
+  panel.classList.remove('open')
+  ;[...panel.querySelectorAll('.kv > div:not(.k), .tbl td:not(.n), .stats b, .note, .lst div, .run-line')].forEach((el, k) => el.style.setProperty('--d', Math.min(k * 22, 520) + 'ms'))
+  const [l, r] = decBar.children
+  l.getAnimations().forEach(a => a.cancel()); r.getAnimations().forEach(a => a.cancel()); decBar.getAnimations().forEach(a => a.cancel())
+  const T = 1500
+  decBar.animate([{ opacity: 1 }, { opacity: 1, offset: .78 }, { opacity: 0 }], { duration: T, fill: 'forwards' })
+  l.animate([{ clipPath: 'inset(0 100% 0 0)' }, { clipPath: 'inset(0 0 0 0)', offset: .32 }, { clipPath: 'inset(0 0 0 0)', offset: .55 }, { clipPath: 'inset(0 0 0 100%)', offset: .8 }, { clipPath: 'inset(0 0 0 100%)' }], { duration: T, easing: 'cubic-bezier(.6,0,.3,1)', fill: 'forwards' })
+  r.animate([{ clipPath: 'inset(0 0 0 100%)' }, { clipPath: 'inset(0 0 0 0)', offset: .32 }, { clipPath: 'inset(0 0 0 0)', offset: .55 }, { clipPath: 'inset(0 100% 0 0)', offset: .8 }, { clipPath: 'inset(0 100% 0 0)' }], { duration: T, easing: 'cubic-bezier(.6,0,.3,1)', fill: 'forwards' })
+  sGlassFrost.getAnimations().forEach(a => a.cancel())
+  sGlassFrost.style.setProperty('--clear', '0')
+  decBar.style.opacity = ''
+  sGlassFrost.animate([{ '--clear': 0 }, { '--clear': 0, offset: .45 }, { '--clear': 1 }], { duration: T, easing: 'cubic-bezier(.4,0,.2,1)', fill: 'forwards' })
+  later(T * 0.45, () => panel.classList.add('open'))
+  // 收尾：落到最终状态（后台页动画时间线暂停时也不会停在磨砂）
+  later(T + 60, () => {
+    ;[decBar, l, r, sGlassFrost].forEach(el => el.getAnimations().forEach(a => a.cancel()))
+    decBar.style.opacity = '0'
+    sGlassFrost.style.setProperty('--clear', '1')
+  })
+  later(T + 600, () => panel.classList.remove('redact', 'open'))
+}
+
+function pageOf(item) { return item.tabs ? item.tabs[Math.min(state.tab, item.tabs.length - 1)] : { api: item.api, blocks: item.blocks, actions: item.actions } }
+function pageHtml(page) {
+  return {
+    body: page.blocks.map(renderBlock).join(''),
+    actions: page.actions.map((a, i) => `<button class="btn${i === 0 ? ' pri' : ''}${/删除|停止|注销|卸下/.test(a) ? ' dng' : ''}" type="button">${a}</button>`).join(''),
+  }
+}
+function moveUnderline(instant) {
+  const bar = panel.querySelector('.sp-tabs'), on = bar?.querySelector('button.on'), ul = bar?.querySelector('.ul')
+  if (!on || !ul) return
+  if (instant) ul.style.transition = 'none'
+  ul.style.left = on.offsetLeft + 'px'
+  ul.style.width = (on.offsetWidth - 14) + 'px'
+  if (instant) { void ul.offsetWidth; ul.style.transition = '' }
+}
+function renderPanel(swap) {
+  const d = DEPTS[state.open]
+  const item = state.items[state.target]
+  const page = pageOf(item)
+  const paint = () => {
+    clearInterval(runTimer)
+    panel.classList.remove('show')
+    const h = pageHtml(page)
+    panel.innerHTML = `
+      <div class="sp-head">
+        <div class="sp-meta"><span><span class="a">X-0${d.n}</span>&nbsp;&nbsp;${d.n}-${String(state.target + 1).padStart(2, '0')}&nbsp;&nbsp;${item.name}</span><span class="api">${page.api || ''}</span></div>
+        ${item.tabs ? `<div class="sp-tabs" role="tablist">${item.tabs.map((t, k) => `<button type="button" role="tab" data-tab="${k}" aria-selected="${k === state.tab}"${k === state.tab ? ' class="on"' : ''}><b>${String(k + 1).padStart(2, '0')}</b>${t.name}</button>`).join('')}<i class="ul"></i></div>` : ''}
+      </div>
+      <div class="sp-body" role="tabpanel">${h.body}</div>
+      <div class="sp-actions">${h.actions}</div>`
+    // 逐块错开显现
+    ;[...panel.querySelectorAll('.sp-head, .blk, .sp-actions')].forEach((el, k) => { el.style.transitionDelay = `${k * 60}ms` })
+    panel.offsetWidth
+    moveUnderline(true)
+    panel.classList.add('show')
+    state.shown = state.target
+    decrypt()
+  }
+  if (swap && panel.classList.contains('show')) {
+    // 切换条目：旧内容上滑淡出，新内容自下方接入，并重新解密
+    panel.classList.add('leave')
+    later(160, () => { panel.classList.remove('leave'); paint() })
+  } else paint()
+}
+// 切换页签：只换正文与操作，下划线 180ms 移动，正文 150ms 淡入（借鉴 RhineLabUI 的页签过渡）
+function selectTab(k) {
+  const item = state.items[state.target]
+  if (!item?.tabs || k < 0 || k >= item.tabs.length || k === state.tab) return
+  state.tab = k
+  clearInterval(runTimer)
+  ;[...panel.querySelectorAll('.sp-tabs button')].forEach((b, j) => { b.classList.toggle('on', j === k); b.setAttribute('aria-selected', j === k) })
+  moveUnderline(false)
+  const page = pageOf(item), h = pageHtml(page)
+  const body = panel.querySelector('.sp-body'), act = panel.querySelector('.sp-actions')
+  panel.querySelector('.sp-meta .api').textContent = page.api || ''
+  ;[body, act].forEach(el => { el.classList.remove('fadein'); el.classList.add('fade') })
+  body.innerHTML = h.body
+  act.innerHTML = h.actions
+  void body.offsetWidth
+  ;[body, act].forEach(el => { el.classList.remove('fade'); el.classList.add('fadein') })
+}
+
+// ── 确认弹窗：删除类操作二次确认；进入中途关闭从当前状态接续；Esc 只关弹窗 ──
+const modal = document.getElementById('modal')
+let modalReturn = null, modalTimer = 0
+function openModal(name, api) {
+  $s('m-text').textContent = `将删除「${name}」。此操作会写入后端，删除后无法撤销。`
+  $s('m-api').textContent = api
+  modalReturn = document.activeElement
+  clearTimeout(modalTimer)
+  modal.classList.add('show', 'enter')
+  void modal.offsetWidth
+  modal.classList.remove('enter')
+  modal.classList.add('in')
+  $s('m-cancel').focus({ preventScroll: true })
+}
+function closeModal(done) {
+  if (!modal.classList.contains('show')) return
+  modal.classList.remove('in')
+  clearTimeout(modalTimer)
+  modalTimer = setTimeout(() => { modal.classList.remove('show'); modalReturn?.focus?.({ preventScroll: true }); done?.() }, 200)
+}
+$s('m-cancel').addEventListener('click', () => closeModal())
+$s('m-ok').addEventListener('click', () => { const api = $s('m-api').textContent; closeModal(() => toast(`已删除 · ${api}`)) })
+modal.addEventListener('click', e => { if (e.target === modal) closeModal() })
+addEventListener('keydown', e => {
+  if (!modal.classList.contains('show')) return
+  if (e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); closeModal() }
+  else if (e.key === 'Tab') { e.preventDefault(); (document.activeElement === $s('m-ok') ? $s('m-cancel') : $s('m-ok')).focus() }
+}, true)
+
+// ── 面板交互：开关、按钮反馈、快速启动的模拟运行 ──
+const toastEl = document.getElementById('toast')
+let toastTimer = 0
+function toast(text) {
+  toastEl.textContent = text
+  toastEl.classList.add('on')
+  clearTimeout(toastTimer)
+  toastTimer = setTimeout(() => toastEl.classList.remove('on'), 1800)
+}
+let runTimer = 0
+function setRun(state, pct, title, text) {
+  const run = panel.querySelector('.run')
+  if (!run) return
+  run.dataset.state = state
+  run.querySelector('.run-bar i').style.width = pct + '%'
+  run.querySelector('.run-line b').textContent = title
+  run.querySelector('.run-line span').textContent = text
+}
+const RUN_STEPS = ['主号 · BGI 每日', '小号 · BGI 每日', '鸣潮主号 · 鸣潮日常', '星铁 · 星铁清体力']
+function startRun() {
+  clearInterval(runTimer)
+  const queue = panel.querySelector('[data-k="queue"]')?.value || '日常托管'
+  let n = 0
+  setRun('run', 4, '运行', `${queue} · ${RUN_STEPS[0]}`)
+  toast(`已开始执行：${queue}`)
+  runTimer = setInterval(() => {
+    n++
+    if (n >= RUN_STEPS.length * 3) {
+      clearInterval(runTimer)
+      setRun('done', 100, '完成', `${queue} · 本轮全部完成`)
+      const d = panel.querySelector('[data-k="done"]'), l = panel.querySelector('[data-k="left"]')
+      if (d) d.textContent = '8'
+      if (l) l.textContent = '0'
+      return
+    }
+    setRun('run', Math.round(n / (RUN_STEPS.length * 3) * 100), '运行', `${queue} · ${RUN_STEPS[Math.floor(n / 3)]}`)
+  }, 700)
+}
+function setTog(t, on) {
+  t.classList.toggle('on', on)
+  t.setAttribute('aria-checked', on)
+  t.lastChild.textContent = on ? '开' : '关'
+}
+const pageApi = () => panel.querySelector('.sp-meta .api')?.textContent || ''
+panel.addEventListener('click', e => {
+  const tab = e.target.closest('[data-tab]')
+  if (tab) return selectTab(+tab.dataset.tab)
+  const t = e.target.closest('.tog')
+  if (t) {
+    const on = !t.classList.contains('on')
+    setTog(t, on)
+    // 定时启动与循环队列互斥（QueueConfig.TimeEnabled / CycleEnabled）
+    const x = t.dataset.x
+    if (on && x) {
+      const other = panel.querySelector(`.tog[data-x="${x === 'time' ? 'cycle' : 'time'}"]`)
+      if (other?.classList.contains('on')) { setTog(other, false); toast(x === 'time' ? '已关闭循环队列：定时与循环互斥' : '已关闭定时启动：定时与循环互斥') }
+    }
+    return
+  }
+  const sb = e.target.closest('.seg button')
+  if (sb) {
+    ;[...sb.parentNode.children].forEach(b => { b.classList.toggle('on', b === sb); b.setAttribute('aria-checked', b === sb) })
+    return
+  }
+  const cb = e.target.closest('.chips button')
+  if (cb) { cb.classList.toggle('on'); cb.setAttribute('aria-pressed', cb.classList.contains('on')); return }
+  const m = e.target.closest('.mini')
+  if (m) {
+    if (m.hasAttribute('data-pick')) toast('演示：打开文件选择框')
+    else if (m.textContent === '录制') { m.previousElementSibling.value = '按下组合键…'; m.previousElementSibling.focus(); toast('演示：按下新的组合键') }
+    else if (m.textContent === '启动' || m.textContent === '关闭') {
+      const row = m.closest('tr')
+      const starting = m.textContent === '启动'
+      row.children[2].innerHTML = starting ? RUN : WAIT
+      m.textContent = starting ? '关闭' : '启动'
+      toast(`${starting ? '启动' : '关闭'} ${row.children[1].textContent} · POST /api/emulator/operate`)
+    } else toast(`演示：${m.textContent}`)
+    return
+  }
+  const b = e.target.closest('.btn')
+  if (!b) return
+  const text = b.textContent
+  if (text === '开始执行') startRun()
+  else if (text === '停止') { clearInterval(runTimer); setRun('idle', 0, '已停止', '队列已手动停止'); toast('队列已停止') }
+  else if (/删除/.test(text)) openModal(state.items[state.target].name, pageApi())
+  else if (/保存/.test(text)) toast(`已保存 · ${pageApi()}`)
+  else toast(`演示：${text} · ${pageApi()}`)
+})
+panel.addEventListener('keydown', e => {
+  const t = e.target.closest('.tog')
+  if (t && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); e.stopPropagation(); t.click() }
+})
+
+let selectTimer = 0
+function select(i) {
+  if (state.open < 0) return
+  const next = Math.max(0, Math.min(state.items.length - 1, i))
+  if (next === state.target) return
+  state.target = next
+  state.tab = 0
+  kick()
+  clearTimeout(selectTimer)
+  selectTimer = setTimeout(() => { if (state.shown !== state.target) renderPanel(true) }, 140)
+}
+
+// 三次贝塞尔缓动（与 CSS cubic-bezier 相同的定义）
+function bezier(x1, y1, x2, y2) {
+  const cx = 3 * x1, bx = 3 * (x2 - x1) - cx, ax = 1 - cx - bx
+  const cy = 3 * y1, by = 3 * (y2 - y1) - cy, ay = 1 - cy - by
+  const X = t => ((ax * t + bx) * t + cx) * t, Y = t => ((ay * t + by) * t + cy) * t, dX = t => (3 * ax * t + 2 * bx) * t + cx
+  return x => {
+    if (x <= 0) return 0
+    if (x >= 1) return 1
+    let t = x
+    for (let k = 0; k < 8; k++) { const dx = dX(t); if (Math.abs(dx) < 1e-6) break; t = Math.min(1, Math.max(0, t - (X(t) - x) / dx)) }
+    return Y(t)
+  }
+}
+const E_MOVE = bezier(.7, 0, .2, 1), E_SIZE = bezier(.5, 0, .1, 1), E_SOFT = bezier(.2, .8, .2, 1), E_IN = bezier(.6, 0, .9, .4)
+const clamp01 = v => Math.max(0, Math.min(1, v))
+const mix = (a, b, t) => a + (b - a) * t
+// 每种过渡给出 p∈[0,1] 时的矩形（中心 cx, cy 与宽高 w, h）。位置与尺寸始终同时变化，而非先移动后拉伸。
+const MORPHS = {
+  // 弧线：沿二次贝塞尔曲线移动，尺寸同步插值
+  arc: { ms: 720, at(a, b, p) {
+    const q = E_MOVE(p), s = E_SIZE(p)
+    const mx = (a.cx + b.cx) / 2, my = (a.cy + b.cy) / 2, dx = b.cx - a.cx, dy = b.cy - a.cy
+    const L = Math.hypot(dx, dy) || 1, off = Math.min(220, L * 0.32) * this.sign
+    const kx = mx - dy / L * off, ky = my + dx / L * off
+    const u = 1 - q
+    return { cx: u * u * a.cx + 2 * u * q * kx + q * q * b.cx, cy: u * u * a.cy + 2 * u * q * ky + q * q * b.cy, w: mix(a.w, b.w, s), h: mix(a.h, b.h, s) }
+  } },
+  // 拉伸：沿运动方向拉长、垂直方向压扁，途中最明显，落点回弹
+  stretch: { ms: 640, at(a, b, p) {
+    const q = E_MOVE(p), s = E_SIZE(p), k = Math.sin(Math.PI * q) * 0.45
+    const dx = b.cx - a.cx, dy = b.cy - a.cy, L = Math.hypot(dx, dy) || 1, hx = Math.abs(dx) / L, hy = Math.abs(dy) / L
+    const w = mix(a.w, b.w, s), h = mix(a.h, b.h, s)
+    return { cx: mix(a.cx, b.cx, q), cy: mix(a.cy, b.cy, q), w: w * (1 + k * hx - k * 0.5 * hy), h: h * (1 + k * hy - k * 0.5 * hx) }
+  } },
+  // 折叠：压成细条 → 细条滑向目标并展宽 → 向下展开；三段相互重叠，保持连续
+  fold: { ms: 820, at(a, b, p) {
+    const p1 = E_SOFT(clamp01(p / 0.34)), p2 = E_MOVE(clamp01((p - 0.14) / 0.6)), p3 = E_SOFT(clamp01((p - 0.6) / 0.4))
+    const bar = 6
+    return { cx: mix(a.cx, b.cx, p2), cy: mix(a.cy, b.cy - b.h / 2 + bar / 2, p2) + (b.h / 2 - bar / 2) * p3, w: mix(a.w, b.w, p2), h: p3 > 0 ? mix(bar, b.h, p3) : mix(a.h, bar, p1) }
+  } },
+  // 残影：弧线运动并拖出两道渐隐的残影
+  echo: { ms: 760, ghosts: [0.09, 0.18], at(a, b, p) { return MORPHS.arc.at.call(this, a, b, p) } },
+}
+const INK = [11, 12, 11]
+function rgbOf(el) {
+  const m = getComputedStyle(el).backgroundColor.match(/[\d.]+/g) || ['0', '0', '0', '0']
+  const [r, g, b, al = 1] = m.map(Number)
+  return al === 0 ? [...INK, 0] : [r, g, b, al]
+}
+// 播放方块与部门卡之间的过渡；reverse 为返回索引
+function playMorph(i, reverse, done) {
+  const d = DEPTS[i]
+  const secEl = $s('s-sec'), box = secEl.querySelector('.box')
+  const tileRect = { cx: d.x, cy: d.y, w: d.w, h: d.h }
+  const cardRect = { cx: secEl.offsetLeft + box.offsetLeft + box.offsetWidth / 2, cy: secEl.offsetTop + box.offsetTop + box.offsetHeight / 2, w: box.offsetWidth, h: box.offsetHeight }
+  const keys = Object.keys(MORPHS)
+  const kind = reverse && state.morph ? state.morph.kind : keys[Math.floor(Math.random() * keys.length)]
+  const conf = Object.create(MORPHS[kind])
+  conf.sign = reverse && state.morph ? state.morph.sign : (Math.random() < 0.5 ? -1 : 1)
+  const from = rgbOf(tiles[i].el)
+  const mk = ghost => {
+    const el = document.createElement('div')
+    el.className = 's-morph' + (ghost ? ' ghost' : '')
+    hub.appendChild(el)
+    return el
+  }
+  const main = mk(false)
+  // 方块原有内容：等比缩放跟随，前段淡出（不做非等比拉伸，文字不变形）
+  const inner = tiles[i].el.cloneNode(true)
+  inner.classList.remove('focus'); inner.classList.add('s-clone'); inner.removeAttribute('aria-label'); inner.tabIndex = -1
+  Object.assign(inner.style, { width: d.w + 'px', height: d.h + 'px', transitionDelay: '0ms' })
+  main.appendChild(inner)
+  const ghosts = (conf.ghosts || []).map(lag => ({ lag, el: mk(true) }))
+  const paint = (el, p, alpha) => {
+    const r = conf.at(tileRect, cardRect, clamp01(p))
+    Object.assign(el.style, { left: r.cx - r.w / 2 + 'px', top: r.cy - r.h / 2 + 'px', width: r.w + 'px', height: r.h + 'px' })
+    const c = E_SOFT(clamp01(p / 0.7))
+    el.style.backgroundColor = `rgba(${from.slice(0, 3).map((v, k) => Math.round(mix(v, INK[k], c))).join(',')},${(mix(from[3], 1, c) * alpha).toFixed(3)})`
+    return r
+  }
+  const t0 = performance.now()
+  let finished = false
+  const frame = now => {
+    if (finished) return
+    const lin = clamp01((now - t0) / conf.ms)
+    const p = reverse ? 1 - lin : lin
+    const r = paint(main, p, 1)
+    inner.style.transform = `translate(-50%, -50%) scale(${Math.min(r.w / d.w, r.h / d.h)})`
+    inner.style.opacity = String(1 - clamp01(p / 0.4))
+    ghosts.forEach(g => {
+      const gp = reverse ? 1 - (lin - g.lag) : lin - g.lag
+      g.el.style.visibility = lin > g.lag && lin < 1 ? 'visible' : 'hidden'
+      paint(g.el, gp, g.lag < 0.1 ? 0.35 : 0.16)
+    })
+    if (lin >= 1) return finish()
+    requestAnimationFrame(frame)
+  }
+  const finish = () => {
+    if (finished) return
+    finished = true
+    ghosts.forEach(g => g.el.remove())
+    done(main)
+  }
+  state.morph = { kind, sign: conf.sign, el: main }
+  requestAnimationFrame(frame)
+  // 后台页 rAF 可能暂停：到时间仍未结束则直接落到终点
+  later(conf.ms + 400, () => { if (!finished) { const r = paint(main, reverse ? 0 : 1, 1); inner.style.opacity = reverse ? '1' : '0'; void r; finish() } })
+  return kind
+}
+
+function openSection(i) {
+  if (state.open >= 0 || booting) return
+  const d = DEPTS[i]
+  const conf = SECTIONS[d.n]
+  state.open = i; state.items = conf.items; state.target = 0; state.tab = 0; state.shown = -1
+  focusTile(i)
+  hub.classList.add('sectioned')
+  // 部门卡、分页、字幕
+  $s('s-sec-code').innerHTML = codeHtml({ ...d, size: d.code.includes('\n') ? 104 : 120 })
+  $s('s-sec-sub').textContent = d.sub
+  $s('s-sec-zh').textContent = d.zh
+  $s('s-limit-k').textContent = `${d.code.replace('\n', ' ')} SECTION`
+  $s('s-sub').textContent = `${conf.caption} 共 ${conf.items.length} 项。`
+  pager.innerHTML = ''
+  conf.items.forEach((it, k) => {
+    const b = document.createElement('button')
+    b.type = 'button'
+    b.setAttribute('aria-label', `${String(k + 1).padStart(2, '0')} ${it.name}`)
+    b.addEventListener('click', () => select(k))
+    pager.appendChild(b)
+  })
+  showCurrent(false)
+  // ① 方块随机选一种方式飞向左侧部门卡：位置、尺寸、颜色同时变化；落地后由真实部门卡接替
+  playMorph(i, false, el => { sect.classList.add('landed'); requestAnimationFrame(() => el.remove()); later(60, () => el.remove()) })
+  // ② 竖线、品牌、录像带串入场（与飞行并行）
+  later(260, () => { sect.classList.add('on', 'reel-in'); window.chain?.open(conf.items, d) })
+  // ③ 右侧档案
+  later(620, () => renderPanel(false))
+  later(800, () => $s('s-back').focus({ preventScroll: true }))
+}
+
+function closeSection() {
+  if (state.open < 0 || state.closing) return
+  const i = state.open
+  state.closing = true
+  state.timers.forEach(clearTimeout); state.timers = []
+  clearInterval(runTimer)
+  panel.classList.remove('show')
+  sect.classList.remove('reel-in', 'landed')
+  window.chain?.close()
+  hub.querySelectorAll('.s-morph').forEach(el => el.remove())
+  // 索引与其余方块在飞回途中就淡入；目标方块先藏着，等替身落地同一帧再换成真身
+  tiles[i].el.style.visibility = 'hidden'
+  hub.classList.remove('sectioned')
+  sect.classList.remove('on')
+  // 部门卡按同一种方式飞回方块原位
+  playMorph(i, true, el => {
+    tiles[i].el.style.visibility = ''
+    panel.innerHTML = ''; currentEl.innerHTML = ''
+    el.remove()
+    state.open = -1; state.closing = false; state.morph = null
+    tiles[i].el.focus({ preventScroll: true })
+  })
+}
+
+sect.addEventListener('wheel', e => {
+  if (state.open < 0) return
+  if (e.target.closest('input, select')) return
+  e.preventDefault()
+  select(state.target + (e.deltaY > 0 ? 1 : -1))
+}, { passive: false })
+document.getElementById('s-back').addEventListener('click', closeSection)
+
+addEventListener('keydown', e => {
+  if (booting) { if (e.key === 'Escape' || e.key === ' ') finishBoot(); return }
+  if (state.open >= 0) {
+    if (e.key !== 'Escape' && e.target.closest?.('input, select')) return
+    if (e.key === 'Escape') closeSection()
+    else if (e.key === 'ArrowDown' || e.key === 'ArrowRight') { e.preventDefault(); select(state.target + 1) }
+    else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') { e.preventDefault(); select(state.target - 1) }
+    else if (/^[1-9]$/.test(e.key) && !e.target.closest('input, select')) selectTab(+e.key - 1)
+    return
+  }
+  if (/^[0-9]$/.test(e.key)) { const i = e.key === '0' ? 9 : +e.key - 1; tiles[i].el.focus() }
+})
+
+const clock = document.getElementById('clock')
+setInterval(() => rollDigits(clock, new Date().toLocaleTimeString('zh-CN', { hour12: false })), 1000)
+
+// ── 启动动画时间轴（ms）。段落：黑场标志 → 接入输入 → 标志绘制与品牌 → 身份 → 授权圆环 → 欢迎 → 白场入索引 ──
+const boot = document.getElementById('boot')
+const skip = document.getElementById('skip')
+const $ = id => document.getElementById(id)
+let timers = [], booting = false
+const at = (ms, fn) => timers.push(setTimeout(fn, ms))
+function typeLine(el, text, start, per = 42, keepCaret = false) {
+  for (let k = 0; k <= text.length; k++) at(start + k * per, () => {
+    el.innerHTML = text.slice(0, k) + (k < text.length || keepCaret ? '<span class="caret"></span>' : '')
+  })
+  return start + text.length * per
+}
+function resetBoot() {
+  timers.forEach(clearTimeout); timers = []
+  boot.className = ''; boot.style.display = ''
+  $('b-black').className = ''
+  $('b-type').innerHTML = ''; $('b-ident').innerHTML = ''
+  $('b-logo').setAttribute('class', ''); $('b-logo').style.opacity = 1
+  $('b-brand').className = ''; $('b-brand').style.opacity = 1
+  document.querySelectorAll('.brand-line').forEach(l => l.classList.remove('in'))
+  $('b-auth').setAttribute('class', '')
+  $('b-welcome').className = ''
+  hub.classList.remove('in')
+  skip.style.display = ''
+}
+function runBoot() {
+  resetBoot(); booting = true
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return finishBoot()
+  at(1300, () => $('b-black').classList.add('off'))
+  const t1 = typeLine($('b-type'), 'ACCESSING  AUTO-MAS  TERMINAL', 1650)
+  at(t1 + 450, () => { $('b-type').innerHTML = ''; $('b-logo').setAttribute('class', 'play') })
+  at(t1 + 1900, () => $('b-logo').setAttribute('class', 'play shift'))
+  document.querySelectorAll('.brand-line').forEach((l, k) => at(t1 + 2150 + k * 80, () => l.classList.add('in')))
+  at(t1 + 3300, () => { $('b-logo').style.opacity = 0; $('b-brand').classList.add('corner') })
+  // 身份段
+  const ident = $('b-ident')
+  const lines = ['ID CONFIRMED : OPERATOR', 'REQUEST RECEIVED', 'START PROCESSING...']
+  let t = t1 + 3800
+  lines.forEach((txt, k) => {
+    const div = document.createElement('div')
+    at(t, () => { if (k === 2) div.innerHTML = ''; ident.appendChild(div) })
+    t = typeLine(div, txt, t, 38) + 380
+    if (k === 2) at(t - 300, () => { div.innerHTML = '<span class="spin"></span>' + txt })
+  })
+  // 授权段
+  at(t + 700, () => { ident.innerHTML = ''; $('b-auth').setAttribute('class', 'play') })
+  const tw = t + 700 + 3600
+  // 欢迎段：黑白闪切 → 名称黑底扫过 → INTERNAL DATABASE 闪现
+  at(tw, () => { $('b-auth').setAttribute('class', ''); boot.classList.add('flash') })
+  at(tw + 80, () => boot.classList.remove('flash'))
+  at(tw + 160, () => boot.classList.add('flash'))
+  at(tw + 240, () => { boot.classList.remove('flash'); $('b-welcome').classList.add('play') })
+  at(tw + 1900, () => { $('b-brand').style.opacity = 0; boot.classList.add('leave') })
+  at(tw + 2300, () => hub.classList.add('in'))
+  at(tw + 2700, () => finishBoot())
+}
+function finishBoot() {
+  timers.forEach(clearTimeout); timers = []
+  booting = false
+  boot.style.display = 'none'; skip.style.display = 'none'
+  hub.classList.add('in')
+  focusTile(CENTER)
+  tiles[CENTER].el.focus({ preventScroll: true })
+}
+skip.addEventListener('click', finishBoot)
+boot.addEventListener('click', finishBoot)
+document.getElementById('replay').addEventListener('click', () => { closeSection(); runBoot() })
+runBoot()
+</script>
+<script type="module">
+// 左下角 3D 录像带串：条目即卡带，沿斜向曲线排布；选中的卡带抽出并转向镜头。
+// 只在动画进行时渲染（静止即停帧），时间步长随 requestAnimationFrame 与刷新率同步。
+import * as THREE from 'three'
+import { RoundedBoxGeometry } from './vendor/three/examples/jsm/geometries/RoundedBoxGeometry.js'
+
+const W = 900
+const H = 640
+const PAD = 6 // 条目前后补的空白卡带
+const canvas = document.getElementById('chain')
+const current = document.getElementById('r-current')
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, powerPreference: 'low-power' })
+renderer.setClearColor(0x000000, 0)
+renderer.outputColorSpace = THREE.SRGBColorSpace
+
+const scene = new THREE.Scene()
+// 画布 900×640（舞台左下角）；z=0 平面约 1 单位 ≈ 96px
+const camera = new THREE.PerspectiveCamera(30, W / H, 0.1, 100)
+camera.position.set(0, 0, 12.4)
+camera.lookAt(0, 0, 0)
+scene.add(new THREE.AmbientLight(0xffffff, 1.9))
+const key = new THREE.DirectionalLight(0xffffff, 1.4)
+key.position.set(-5, 7, 9)
+scene.add(key)
+
+const BODY = new RoundedBoxGeometry(2.6, 1.7, 0.26, 3, 0.07)
+const FACE = new THREE.PlaneGeometry(2.46, 1.56)
+const EDGE = new THREE.EdgesGeometry(new THREE.BoxGeometry(2.6, 1.7, 0.26))
+
+function faceTexture(index, name) {
+  const c = document.createElement('canvas')
+  c.width = 512
+  c.height = 324
+  const g = c.getContext('2d')
+  g.clearRect(0, 0, 512, 324)
+  // 磨砂内窗与刻线
+  g.fillStyle = 'rgba(255,255,255,0.35)'
+  g.fillRect(14, 14, 484, 296)
+  g.strokeStyle = 'rgba(40,40,36,0.28)'
+  g.lineWidth = 2
+  g.strokeRect(14, 14, 484, 296)
+  g.fillStyle = 'rgba(40,40,36,0.5)'
+  for (const [x, y] of [[30, 30], [482, 30], [30, 294], [482, 294]]) {
+    g.beginPath(); g.arc(x, y, 5, 0, Math.PI * 2); g.fill()
+  }
+  // 档案章标志：切角方框 + A 形折线 + 琥珀方块
+  g.fillStyle = 'rgba(42,43,42,0.85)'
+  g.fillRect(70, 70, 160, 160)
+  g.save()
+  g.translate(90, 90)
+  g.scale(3, 3)
+  g.strokeStyle = 'rgba(255,255,255,0.95)'
+  g.lineWidth = 2.6
+  g.stroke(new Path2D('M9 2H38V26M26 38H2V9L9 2'))
+  g.lineWidth = 3.25
+  g.stroke(new Path2D('M10 31 20 9 30 31M14.5 23H25.5'))
+  g.fillStyle = '#e8701f'
+  g.fillRect(31, 31, 7, 7)
+  g.restore()
+  if (name) {
+    g.fillStyle = 'rgba(20,20,18,0.85)'
+    g.font = '700 30px "AUTO-MAS MiSans", "Microsoft YaHei", sans-serif'
+    g.fillText(index, 268, 128)
+    g.font = '700 38px "AUTO-MAS MiSans", "Microsoft YaHei", sans-serif'
+    const text = name.length > 7 ? name.slice(0, 7) + '…' : name
+    g.fillText(text, 268, 186)
+    g.fillStyle = 'rgba(20,20,18,0.45)'
+    g.fillRect(268, 206, 190, 3)
+  } else {
+    g.fillStyle = 'rgba(20,20,18,0.25)'
+    g.fillRect(268, 140, 170, 12)
+    g.fillRect(268, 170, 120, 8)
+  }
+  const tex = new THREE.CanvasTexture(c)
+  tex.colorSpace = THREE.SRGBColorSpace
+  tex.anisotropy = 4
+  return tex
+}
+
+const group = new THREE.Group()
+scene.add(group)
+let cassettes = []
+let cur = -8
+let target = 0
+let intro = 0
+let introTarget = 0
+let running = false
+let hovered = -1
+let onDone = null
+// 借鉴 RhineLabUI：停止操作 2.5 秒后渐入呼吸（8 秒与 13 秒周期叠加，相邻错相）；悬停卡带抬起
+let idleT = 0, breath = 0, clockT = 0, lastDraw = 0
+
+// 曲线：s 为相对选中位置的槽位，越大越靠右下、越靠近镜头
+function place(s) {
+  const f = Math.max(0, 1 - Math.abs(s))
+  const e = f * f * (3 - 2 * f)
+  // 选中的卡带两侧让位：前后卡带沿串向外推开
+  const t = s + Math.sign(s) * Math.min(1, Math.abs(s)) * 0.95
+  return {
+    // 串从左上斜向右下，越往下越靠近镜头；选中项向画面中心（右上）抽出并放大 20%
+    x: -1.2 + 0.74 * t + 1.1 * e,
+    y: -0.7 - 0.66 * t + 0.55 * e,
+    z: 0.3 * t + 0.9 * e,
+    rx: -0.18 + 0.1 * e,
+    ry: 0.5 - 0.38 * e,
+    rz: 0.05 - 0.05 * e,
+    scale: 1 + 0.2 * e,
+    focus: e,
+  }
+}
+
+function build(items, deptN) {
+  for (const c of cassettes) {
+    c.face.material.map.dispose()
+    c.face.material.dispose()
+    c.body.material.dispose()
+    c.edge.material.dispose()
+    group.remove(c.root)
+  }
+  cassettes = []
+  for (let k = -PAD; k < items.length + PAD; k++) {
+    const item = items[k]
+    const root = new THREE.Group()
+    const body = new THREE.Mesh(
+      BODY,
+      new THREE.MeshStandardMaterial({ color: 0xf3f1ec, roughness: 0.38, metalness: 0, transparent: true, opacity: 0.55, depthWrite: false })
+    )
+    const face = new THREE.Mesh(
+      FACE,
+      new THREE.MeshBasicMaterial({ map: faceTexture(item ? `${deptN}-${String(k + 1).padStart(2, '0')}` : '', item?.name || ''), transparent: true, depthWrite: false })
+    )
+    face.position.z = 0.135
+    const edge = new THREE.LineSegments(EDGE, new THREE.LineBasicMaterial({ color: 0x9e9a90, transparent: true, opacity: 0.55 }))
+    root.add(body, face, edge)
+    root.userData.lift = 0
+    body.userData.k = item ? k : -1
+    group.add(root)
+    cassettes.push({ k, root, body, face, edge })
+  }
+}
+
+function layout() {
+  const shift = -9 * (1 - intro) // 入场：整串沿曲线从左上滑入
+  for (const c of cassettes) {
+    const s = c.k - cur - shift
+    const p = place(s)
+    const b = breath * 0.06 * (0.6 * Math.sin(clockT * Math.PI / 4 + c.k * 0.7) + 0.4 * Math.sin(clockT * Math.PI / 6.5 + c.k * 1.3))
+    c.root.position.set(p.x, p.y + b + c.root.userData.lift * 0.22, p.z)
+    c.root.rotation.set(p.rx, p.ry, p.rz)
+    c.root.scale.setScalar(p.scale)
+    const fade = Math.max(0, Math.min(1, 1.8 - Math.abs(s) / 4.2)) * Math.min(1, intro * 1.4)
+    const real = c.body.userData.k >= 0
+    c.body.material.opacity = Math.min(0.8, 0.32 + 0.48 * p.focus + (c.k === hovered ? 0.12 : 0)) * fade // 选中 80% 不透明
+    c.face.material.opacity = (real ? 0.75 + 0.25 * p.focus : 0.5) * fade
+    c.edge.material.opacity = (0.35 + 0.5 * p.focus) * fade
+    c.root.renderOrder = Math.round(100 + s * 4)
+    c.root.visible = fade > 0.01
+  }
+  // 选中条目的标题跟随抽出卡带的屏幕位置
+  const p = place(0)
+  const v = new THREE.Vector3(p.x + 1.45, p.y + 0.2, p.z).project(camera)
+  current.style.left = ((v.x + 1) / 2) * W + 'px'
+  current.style.top = ((1 - v.y) / 2) * H + 'px'
+  current.style.opacity = Math.max(0, intro * 2 - 1)
+}
+
+function resize() {
+  const stageScale = Math.min(innerWidth / 1920, innerHeight / 1080)
+  renderer.setPixelRatio(Math.min(2, devicePixelRatio * stageScale))
+  renderer.setSize(W, H, false)
+  if (!running) { layout(); renderer.render(scene, camera) }
+}
+addEventListener('resize', resize)
+
+let last = 0
+function frame(t) {
+  const dt = last ? Math.min(0.05, (t - last) / 1000) : 1 / 60
+  last = t
+  const k = 1 - Math.pow(0.0008, dt) // 与帧率无关的临界阻尼
+  cur += (target - cur) * k
+  intro += (introTarget - intro) * (1 - Math.pow(0.004, dt))
+  if (Math.abs(target - cur) < 0.0005) cur = target
+  if (Math.abs(introTarget - intro) < 0.002) intro = introTarget
+  const settling = cur !== target || intro !== introTarget
+  idleT = settling ? 0 : idleT + dt
+  clockT += dt
+  const goal = !REDUCE && idleT > 2.5 && introTarget === 1 ? 1 : 0
+  breath += (goal - breath) * Math.min(1, dt * 0.8)
+  if (Math.abs(goal - breath) < 0.001) breath = goal
+  let lifting = false
+  for (const c of cassettes) {
+    const lt = c.k === hovered ? 1 : 0
+    c.root.userData.lift += (lt - c.root.userData.lift) * Math.min(1, dt * 12)
+    if (Math.abs(lt - c.root.userData.lift) < 0.002) c.root.userData.lift = lt
+    else lifting = true
+  }
+  // 只剩呼吸时按 30 帧绘制，降低持续占用
+  if (settling || lifting || t - lastDraw > 33) { layout(); renderer.render(scene, camera); lastDraw = t }
+  if (settling || lifting || breath > 0 || goal > 0) requestAnimationFrame(frame)
+  else {
+    running = false
+    last = 0
+    if (onDone) { const fn = onDone; onDone = null; fn() }
+  }
+}
+function wake() {
+  if (!running) { running = true; requestAnimationFrame(frame) }
+}
+
+const ray = new THREE.Raycaster()
+function pick(e) {
+  const r = canvas.getBoundingClientRect()
+  const ndc = new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1)
+  ray.setFromCamera(ndc, camera)
+  const hit = ray.intersectObjects(cassettes.map(c => c.body))[0]
+  return hit ? hit.object.userData.k : -1
+}
+canvas.addEventListener('pointermove', e => {
+  const k = pick(e)
+  canvas.style.cursor = k >= 0 ? 'pointer' : 'default'
+  if (k !== hovered) { hovered = k; idleT = 0; wake() }
+})
+canvas.addEventListener('click', e => {
+  const k = pick(e)
+  if (k >= 0) window.select(k)
+})
+
+window.chain = {
+  open(items, d) {
+    build(items, d.n)
+    cur = 0
+    target = 0
+    intro = 0
+    introTarget = 1
+    canvas.style.visibility = 'visible'
+    resize()
+    wake()
+  },
+  setTarget(i) {
+    target = i
+    idleT = 0
+    wake()
+  },
+  close() {
+    introTarget = 0
+    onDone = () => { canvas.style.visibility = 'hidden' }
+    wake()
+  },
+}
+canvas.style.visibility = 'hidden'
+resize()
+</script>
+</body>
+</html>

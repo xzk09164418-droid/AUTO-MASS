@@ -1,9 +1,9 @@
 name: 构建 Windows 解压包
-description: 构建 Node.js 浏览器前端、Python 源码和原生 Windows 启动器。
+description: 构建 Qt 前端、Python 后端和原生 Windows 桌面分身宿主。
 
 inputs:
   github-token:
-    description: 兼容旧调用的保留输入，浏览器构建无需下载 Runtime。
+    description: 兼容发布调用的保留输入，Qt 构建无需下载 Runtime。
     required: true
   sentry-auth-token:
     description: 可选的 Sentry Auth Token；CI 构建留空。
@@ -21,22 +21,23 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: 设置 Node.js 环境
-      uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+    - name: 设置 uv 和 Python
+      uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
       with:
-        node-version: '22.18.0'
+        version: '0.12.3'
+        python-version: '3.12'
 
     - name: 构建应用程序
-      working-directory: frontend
       env:
         SENTRY_AUTH_TOKEN: ${{ inputs.sentry-auth-token }}
         SENTRY_ORG: ${{ inputs.sentry-org }}
         SENTRY_PROJECT: ${{ inputs.sentry-project }}
       shell: pwsh
       run: |
-        corepack enable
-        corepack prepare yarn@4.18.1 --activate
-        yarn install
-        yarn build
-        if ($LASTEXITCODE -ne 0) { throw '浏览器构建失败' }
-        & ../scripts/build-web-package.ps1
+        uv sync --locked --no-dev
+        if ($LASTEXITCODE -ne 0) { throw '后端依赖安装失败' }
+        uv pip install --python .venv/Scripts/python.exe -r qt/requirements.txt pip
+        if ($LASTEXITCODE -ne 0) { throw 'Qt 依赖安装失败' }
+        $runtime = & .venv/Scripts/python.exe -c "import sys; print(sys.base_prefix)"
+        & .venv/Scripts/python.exe scripts/build-qt-portable.py --python-runtime $runtime --output dist/win-unpacked
+        if ($LASTEXITCODE -ne 0) { throw 'Qt 构建失败' }

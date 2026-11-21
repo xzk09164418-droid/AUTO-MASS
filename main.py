@@ -378,9 +378,6 @@ def main(argv: list[str] | None = None):
 
                 await HotkeyManager.start()
 
-            async def init_stage_info() -> None:
-                await Config.get_stage(wait_stale=False)
-
             async def start_notifications() -> None:
                 from app.services.notification import Notify
 
@@ -436,9 +433,6 @@ def main(argv: list[str] | None = None):
                     )
                     startup.create_task(
                         run_optional_step("通知渠道", start_notifications)
-                    )
-                    startup.create_task(
-                        run_optional_step("活动关卡信息获取", init_stage_info)
                     )
 
                 from app.core.desktop_recovery import DesktopRecovery
@@ -576,7 +570,6 @@ def main(argv: list[str] | None = None):
         info_router,
         ocr_router,
         openclaw_qq_router,
-        plan_router,
         qr_login_router,
         queue_router,
         scripts_router,
@@ -595,7 +588,7 @@ def main(argv: list[str] | None = None):
     app = FastAPI(
         dependencies=[Depends(enforce_network_policy)],
         title="AUTO-MAS",
-        description="API for managing automation scripts, plans, and tasks",
+        description="API for managing automation scripts and tasks",
         version="1.0.0",
         lifespan=lifespan,
     )
@@ -616,7 +609,6 @@ def main(argv: list[str] | None = None):
     app.include_router(child_session_router)
     app.include_router(info_router)
     app.include_router(scripts_router)
-    app.include_router(plan_router)
     app.include_router(emulator_router)
     app.include_router(emulator2_router)
     app.include_router(queue_router)

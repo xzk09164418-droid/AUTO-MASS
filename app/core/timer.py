@@ -163,7 +163,6 @@ class _MainTimer:
             for name, clean in (
                 ("历史记录清理", Config.clean_old_history),
                 ("诊断文件清理", Config.clean_debug_diagnostics),
-                ("MaaFW 原生日志清理", Config.clean_maafw_native_debug_logs),
             ):
                 # 三个清理函数是纯同步文件 IO，丢工作线程执行，别占用事件循环
                 await self._run_loop_step(name, partial(asyncio.to_thread, clean))

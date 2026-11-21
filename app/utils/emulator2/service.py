@@ -228,10 +228,8 @@ def find_affected_scripts(emulator_id: str, slots: list[str]) -> list[AffectedSc
 
 
 def script_supports_mod_avd(script: Any) -> bool:
-    """脚本能不能用魔改 AVD：MAA 脚本，或者 MaaFW 脚本（通用项目与 M9A 等特调都是 ``MaaFWConfig``）。"""
-    from app.models.config import MaaConfig, MaaFWConfig
-
-    return isinstance(script, (MaaConfig, MaaFWConfig))
+    """脚本能不能用魔改 AVD：原先只有已移除的 MAA / MaaFW 专项支持，通用脚本不支持。"""
+    return False
 
 
 async def is_mod_avd_device(emulator_id: Any, index: Any) -> bool:

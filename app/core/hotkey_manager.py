@@ -14,7 +14,7 @@ from ctypes import wintypes
 from typing import Any, Callable, Coroutine
 
 from app.core.hotkey_capture import current_capture
-from app.task.MaaFW.tools.core.runner.hotkey import _canonical_key, _win32_keycode
+from app.utils.hotkey_keys import _canonical_key, _win32_keycode
 from app.utils.logger import get_logger
 
 logger = get_logger("全局热键")

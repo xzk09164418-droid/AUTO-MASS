@@ -30,7 +30,6 @@ from .history import router as history_router
 from .info import router as info_router
 from .ocr import router as ocr_router
 from .openclaw_qq import router as openclaw_qq_router
-from .plan import router as plan_router
 from .qr_login import router as qr_login_router
 from .queue import router as queue_router
 from .scripts import router as scripts_router
@@ -45,7 +44,6 @@ __all__ = [
     "core_router",
     "info_router",
     "scripts_router",
-    "plan_router",
     "emulator_router",
     "emulator2_router",
     "queue_router",

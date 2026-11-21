@@ -19,7 +19,7 @@
 
 <p align="center">
   简体中文 |
-  <a href="../../README.md">English</a>
+  <a href="../../README-UPSTREAM.md">English</a>
 </p>
 
 ## 软件介绍
