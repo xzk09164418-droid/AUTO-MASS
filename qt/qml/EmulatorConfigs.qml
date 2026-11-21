@@ -105,10 +105,13 @@ Item {
     function save(entry) {
         const wait=Live.fieldValue(entry,"Info.MaxWaitTime")
         if (!Number.isInteger(wait) || wait<10 || wait>9999) {message("最大等待时间应为 10 至 9999 秒");return}
-        function refreshTitle(){
-            const name=Live.fieldValue(entry,"Info.Name") || "未命名模拟器"
-            const type=Live.fieldValue(entry,"Info.Type")
-            store(records.map(e=>e.uid===entry.uid ? Object.assign({},e,{name:name,en:"EMULATOR · "+type.toUpperCase()}) : e))
+        const name = Live.fieldValue(entry,"Info.Name") || "未命名模拟器"
+        const type = Live.fieldValue(entry,"Info.Type")
+        function refreshTitle() {
+            store(records.map(e => e.uid === entry.uid ? Object.assign({}, e, {
+                name: name, en: "EMULATOR · " + type.toUpperCase(), deviceType: type,
+                tabs: type === "emulator2" ? [e.tabs[0]] : [e.tabs[0], e.devicePage]
+            }) : e))
         }
         if (online) host.save(refreshTitle)
         else {Live.clearDirty(entry);refreshTitle();message("已保存预览配置")}

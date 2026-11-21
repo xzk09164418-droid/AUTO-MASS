@@ -158,6 +158,12 @@ Item {
     function refresh() {
         if (!page) return
         if (shown === null) { lastItem = item; apply(); startDec(); return }
+        if (item !== lastItem && item?.runtimeKey && item.runtimeKey === lastItem?.runtimeKey) {
+            lastItem = item
+            shown = page
+            blockCount = page.blocks.length
+            return
+        }
         if (item !== lastItem) { lastItem = item; swapOut.restart(); return }
         apply()
         if (Theme.richMotion) tabFadeAnim.restart()
@@ -207,7 +213,7 @@ Item {
         if (scripts && ["编辑并写回原文件","打开源程序设置","Webhook"].includes(name)) {
             if (item.live && unsaved) {
                 const record=item, selectedPage=page
-                host.save(() => { if (item===record && page===selectedPage) editSpecial(name) })
+                host.save(() => { if (item?.uid===record.uid && page===selectedPage) editSpecial(name) })
             }
             else editSpecial(name)
             return
@@ -1034,7 +1040,7 @@ Item {
                         text: modelData
                         primary: panel.emulatorManager ? modelData === "保存" : index === 0
                         danger: /删除|停止|注销|卸下/.test(modelData)
-                        enabled: { panel.edits; return (!panel.emulatorManager || panel.emulatorManager.canAct(modelData,panel.item)) && !(panel.saving && modelData === "保存") && !(modelData === "开始执行" && panel.item.en === "QUICK START" && (!panel.selectedTasks.length || panel.homeRuns.submitting))
+                        enabled: { panel.edits; return !!panel.item && (!panel.emulatorManager || panel.emulatorManager.canAct(modelData,panel.item)) && !(panel.saving && modelData === "保存") && !(modelData === "开始执行" && panel.item.en === "QUICK START" && (!panel.selectedTasks.length || panel.homeRuns.submitting))
                             && !(modelData === "保存" && panel.runLocked && panel.item.lockAll) && !Live.opOff(panel.mergedOps[modelData], panel.runLocked, panel.env) }
                         opacity: enabled ? 1 : 0.35
                         onClicked: panel.act(modelData)

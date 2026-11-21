@@ -384,7 +384,7 @@ function emulatorRecord(uid, info) {
     const devices = {name:"实例", api:"POST /api/emulator/status", blocks:[devTable],
         ops:{"刷新":{path:"/api/emulator/status", body:{emulatorId:uid}, poll:true, done:"已刷新"}}, actions:["刷新"]}
     return {uid:uid, name:info.Name || "未命名模拟器", en:"EMULATOR · "+info.Type.toUpperCase(),
-            live:true, deviceType: info.Type, tabs: info.Type === "emulator2" ? [config] : [config, devices]}
+            live:true, devicePage: devices, deviceType: info.Type, tabs: info.Type === "emulator2" ? [config] : [config, devices]}
 }
 
 // ── 10 设置 / 06 本地控制（GlobalConfig） ─────────────────────────────
@@ -737,7 +737,7 @@ function dispatchCenter(snapshot, queueNames, launch) {
             tabs.push({ name: "循环", api: api, blocks: [SD.table("下次运行", ["脚本", "下次运行", "状态"], t.cycleNextList.map(function (c) {
                 return [c.scriptName, c.nextRunAt.slice(5, 16), c.isRunning ? RUN : c.isDue ? SD.tag("到点", "run") : WAIT]
             }), [2.4, 1.4, 1])], actions: ["停止任务"] })
-        return { name: title(t, i), en: t.mode.toUpperCase() + (t.isCycle ? " · CYCLE" : "") + " · " + String(i + 1).padStart(2, "0"), live: true,
+        return { runtimeKey: t.taskId, name: title(t, i), en: t.mode.toUpperCase() + (t.isCycle ? " · CYCLE" : "") + " · " + String(i + 1).padStart(2, "0"), live: true,
             ops: { "停止任务": { confirm: "将停止「" + title(t, i) + "」。", path: "/api/dispatch/stop", body: { taskId: t.taskId }, reload: true },
                    "上一个托管": { path: "/api/dispatch/navigation/previous", body: {} }, "下一个托管": { path: "/api/dispatch/navigation/next", body: {} } },
             tabs: tabs }

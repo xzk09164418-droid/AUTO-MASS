@@ -31,12 +31,13 @@ Item {
         }
     }
     NumberAnimation { id: followMotion; target: list; property: "contentY"; duration: 180; easing.type: Easing.OutCubic }
+    Timer { id: deferredFollow; interval: 0; onTriggered: status.follow() }
     Connections {
         target: status.runs
         function onAdvanced(row, child) {
             status.latest = row
             status.latestChild = child
-            Qt.callLater(status.follow)
+            deferredFollow.restart()
         }
     }
     HoverHandler { id: pointer; onHoveredChanged: if (hovered) followMotion.stop() }

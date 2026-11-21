@@ -32,8 +32,30 @@ Item {
     onSortableModeChanged: reset()
 
     function store(list) {
-        if (online) view.setLive("scripts",list)
-        else preview = list
+        if (!online) preview = list
+        else if (view.d && view.d.key === "scripts") view.setLive("scripts",list)
+        else view.live = Object.assign({},view.live,{scripts:list})
+    }
+    function acknowledge(request) {
+        const body = request.body
+        const record = records.find(s => s.uid === body.scriptId)
+        if (!record || !record.src) return
+        const accounts = record.src.ur
+        const data = body.userId ? accounts.data[body.userId] : record.src.c
+        if (!data) return
+        for (const group of Object.keys(body.data))
+            data[group] = Object.assign({}, data[group], body.data[group])
+        const next = Object.assign({}, record)
+        if (body.userId) {
+            next.accounts = accounts.index.map(u => accounts.data[u.uid]?.Info?.Name || "账号")
+            const page = next.tabs.find(t => t.userId === body.userId)
+            if (page) page.sortLabel = data.Info.Name || page.name
+        } else {
+            next.name = data.Info.Name || "未命名脚本"
+            next.icon = data.Script.ScriptPath || ""
+            next.ops["删除脚本"].confirm = "将删除脚本「" + next.name + "」及其全部账号。"
+        }
+        store(records.map(s => s.uid === record.uid ? next : s))
     }
     function focusRecord(id) {
         if (!visible) return

@@ -120,6 +120,39 @@ FocusScope {
         onTriggered: view.pollRuntime()
     }
     property var lastSnapshot: null
+    property var schedulerNames: null
+    property int schedulerGeneration: 0
+    property bool snapshotPending: false
+    function currentScheduler(generation) {
+        return generation === schedulerGeneration && opened && api && d?.key === "scheduler"
+    }
+    function refreshScheduler() {
+        const generation = schedulerGeneration
+        if (!currentScheduler(generation) || !schedulerNames || snapshotPending) return
+        snapshotPending = true
+        api.get("/api/dispatch/runtime-snapshot", text => {
+            if (!currentScheduler(generation)) return
+            snapshotPending = false
+            let snap
+            try { snap = demoSnapshot || JSON.parse(text) } catch (e) { return }
+            if (!Array.isArray(snap?.tasks) || JSON.stringify(snap) === JSON.stringify(lastSnapshot)) return
+            lastSnapshot = snap
+            const previous = item?.runtimeKey
+            const previousTab = panel.tab
+            const list = [live.scheduler[0]].concat(Live.dispatchCenter(snap, schedulerNames, null))
+            const position = previous ? list.findIndex(row => row.runtimeKey === previous) : target
+            setLive("scheduler", list)
+            if (previous) {
+                select(position < 0 ? 1 : position)
+                panel.tab = position < 0 ? 0 : Math.min(previousTab, list[position].tabs.length - 1)
+            }
+        })
+    }
+    Timer {
+        interval: 1500; repeat: true
+        running: view.opened && !!view.api && view.d?.key === "scheduler" && !!view.schedulerNames
+        onTriggered: view.refreshScheduler()
+    }
     property var demoSnapshot: null         // 演示 / 自检：用模拟的运行快照代替后端返回（不启动任何真实任务）
     function today(offset) {
         const d = new Date(Date.now() + (offset || 0) * 86400000)
@@ -178,6 +211,9 @@ FocusScope {
         })
     }
     function fetchLive(key) {
+        const generation = ++schedulerGeneration
+        schedulerNames = null
+        snapshotPending = false
         if (!api) { liveState = ""; return }
         if (key === "home") { loadQuickStart(); loadOverview(); return }
         const supported = ["home", "scripts", "emulators", "queue", "scheduler", "localControls", "gamesign", "history", "settings"]
@@ -225,14 +261,16 @@ FocusScope {
             // 发起任务需要：任务列表、脚本名、各队列的队列项（从某脚本开始）、各脚本账号（账号范围）、当前电源动作
             callAll([["q", "/api/queue/get", {}], ["t", "/api/info/combox/task", {}], ["cs", "/api/info/combox/script", {}],
                      ["s", "/api/scripts/get", { includeUsers: true }], ["p", "/api/dispatch/get/power", {}]], m => {
-                if (!api) return
+                if (!currentScheduler(generation)) return
                 const queues = m.q
                 const steps = queues.code === 200 ? queues.index.map(q => ["i" + q.uid, "/api/queue/item/get", { queueId: q.uid }]) : []
                 callAll(steps, items => {
+                    if (!currentScheduler(generation)) return
                     api.get("/api/dispatch/runtime-snapshot", text => {
-                        let snap = { tasks: [], scheduledScripts: [] }
-                        try { snap = JSON.parse(text) } catch (e) {}
-                        if (demoSnapshot) snap = demoSnapshot
+                        if (!currentScheduler(generation)) return
+                        let snap
+                        try { snap = demoSnapshot || JSON.parse(text) } catch (e) {}
+                        if (!Array.isArray(snap?.tasks)) { fail({message:"无法读取运行状态"}); return }
                         lastSnapshot = snap
                         const names = {}
                         if (queues.code === 200) queues.index.forEach(q => { const d = queues.data[q.uid]; if (d && d.Info) names[q.uid] = d.Info.Name })
@@ -248,11 +286,15 @@ FocusScope {
                         const users = {}
                         if (m.s.code === 200) m.s.index.forEach(x => {
                             const ur = m.s.users && m.s.users[x.uid]
-                            users[x.uid] = ur ? ur.index.map(u => ({ value: u.uid, label: (ur.data[u.uid] && ur.data[u.uid].Info && ur.data[u.uid].Info.Name) || "账号" })) : []
+                            users[x.uid] = ur ? ur.index.filter(u => {
+                                const info = ur.data[u.uid]?.Info
+                                return info?.Status && info.RemainedDay !== 0
+                            }).map(u => ({value:u.uid, label:ur.data[u.uid].Info.Name || u.uid})) : []
                         })
                         const launch = { tasks: m.t.code === 200 ? m.t.data.filter(o => o.value) : [], queueScripts: queueScripts, users: users,
                                          power: m.p.code === 200 ? m.p.signal : "NoAction" }
                         setLive(key, Live.dispatchCenter(snap, names, launch))
+                        schedulerNames = names
                     })
                 })
             })
@@ -287,7 +329,11 @@ FocusScope {
             }
             const q = reqs[i++]
             call(q.path, q.body, r => {
-                if (r.code === 200) next()
+                if (r.code === 200) {
+                    if (q.path === "/api/scripts/update" || q.path === "/api/scripts/user/update")
+                        scriptShelf.acknowledge(q)
+                    next()
+                }
                 else { saving = false; toast.show("保存失败：" + (r.message || q.path)) }
             })
         }
