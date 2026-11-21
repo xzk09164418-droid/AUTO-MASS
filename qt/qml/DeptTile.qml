@@ -67,6 +67,25 @@ Item {
         border.color: Theme.accent
     }
 
+    // 将部门线稿裁在入口范围内，保留原排字和交互边界。
+    Item {
+        anchors.fill: parent
+        clip: true
+
+        DepartmentArt {
+            department: tile.d.key
+            ink: tile.textColor
+            accent: Theme.accent
+            width: parent.width * (tile.isBlock || tile.isCard ? 1.12 : 0.8)
+            height: width * 0.625
+            anchors.right: parent.right
+            anchors.rightMargin: -parent.width * 0.12
+            anchors.bottom: parent.bottom
+            anchors.bottomMargin: -height * 0.14
+            opacity: tile.isBlock ? 0.17 : 0.13
+        }
+    }
+
     // PV 部门标旁的橙色角块
     Rectangle {
         visible: !!tile.d.accent
@@ -136,20 +155,6 @@ Item {
             font.weight: Font.DemiBold
             font.letterSpacing: 4
         }
-    }
-
-    // 右上角的档案章标志（取代原先嵌在字形里的圆环标志）
-    Emblem {
-        face: Emblem.Hub
-        visible: tile.isCard || tile.isBlock
-        anchors.right: parent.right
-        anchors.top: parent.top
-        anchors.margins: tile.d.center ? 16 : 10
-        width: tile.d.center ? 30 : 20
-        height: width
-        ink: tile.textColor
-        core: Theme.accent
-        opacity: tile.isCard || tile.isBlock ? 0.9 : 0.75
     }
 
     MouseArea {
