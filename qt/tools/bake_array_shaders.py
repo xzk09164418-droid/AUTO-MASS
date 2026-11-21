@@ -17,6 +17,7 @@ from PySide6.QtCore import (
     qVersion,
 )
 from PySide6.QtGui import QGuiApplication
+from PySide6.QtQml import QQmlExpression, qmlContext
 
 QT_DIR = Path(__file__).resolve().parents[1]
 
@@ -38,13 +39,28 @@ def render(staging: Path) -> int:
         os.environ["QSG_RHI_PIPELINE_CACHE_LOAD"] = str(staging / "empty.pipeline")
         os.environ["QSG_RHI_PIPELINE_CACHE_SAVE"] = str(staging / "array.pipeline")
         QTimer.singleShot(4500, inspect)
+        QTimer.singleShot(30000, QGuiApplication.quit)
+
+    def dark_scene(scene: QObject) -> None:
+        # 深色阵列有额外点光，需要另一组管线；在同一个设备上烘入同一份缓存。
+        theme = QQmlExpression(qmlContext(scene), scene, 'Theme.mode = "dark"; Theme.dark')
+        enabled, _ = theme.evaluate()
+        if theme.hasError() or not enabled:
+            print(theme.error().toString(), file=sys.stderr)
+            QGuiApplication.quit()
+            return
+        QTimer.singleShot(2000, finish)
+
+    def finish() -> None:
+        (staging / "rendered").touch()
+        QGuiApplication.quit()
 
     def inspect() -> None:
         for window in QGuiApplication.topLevelWindows():
             section = window.findChild(QObject, "sections")
             scene = section.property("arrayItem") if section else None
             if scene and QMetaObject.invokeMethod(scene, "open"):
-                (staging / "rendered").touch()
+                QTimer.singleShot(1800, lambda: dark_scene(scene))
                 return
         QTimer.singleShot(250, inspect)
 
@@ -61,10 +77,6 @@ def render(staging: Path) -> int:
         "light",
         "--size",
         "1280x720",
-        "--after",
-        "10000",
-        "--capture",
-        str(staging / "scene.png"),
     ]
     return client.main()
 

@@ -1,4 +1,4 @@
-// 漫射板专用：与 arraypart.vert 相同，另把局部坐标与格位（列、行）传给片元，画每盒各不相同的内部图案。
+// 漫射板专用：与 arraypart.vert 相同，另把局部坐标传给片元，用于把双卷盘和斜纹固定在内衬上。
 // 档案阵列的实例化部件：波浪、呼吸、选择涟漪、悬停抬起与换下的盒落回都在这里逐顶点计算，
 // CPU 每帧只更新少量 uniform（实例表只在换档时重建）。数值与演示基线 / 原项目 motion.ts 一致。
 // INSTANCE_DATA = (列, 行, 实例表里已烘入的静态高度, 0)
@@ -6,7 +6,6 @@ VARYING float vPanel;
 VARYING float vRaised;
 VARYING float vClarity;
 VARYING vec3 vLocal;
-VARYING vec2 vCell;
 
 float smoothT(float t) { t = clamp(t, 0.0, 1.0); return t * t * t * (10.0 + t * (-15.0 + 6.0 * t)); }
 float bell(float x, float w) { float q = x / w; return exp(-0.5 * q * q); }
@@ -51,7 +50,6 @@ void MAIN()
     float a = (field(r + 0.5, l) - field(r - 0.5, l)) * 0.024 * (1.0 - uDetail) * (1.0-vRaised);
     vec3 v = VERTEX;
     vLocal = v;
-    vCell = vec2(l, r);
     vPanel = v.y / 3.7;
     float c = cos(a), s = sin(a);
     VERTEX = vec3(v.x, c * v.y - s * v.z, s * v.y + c * v.z) + vec3(0.0, y, 0.0);

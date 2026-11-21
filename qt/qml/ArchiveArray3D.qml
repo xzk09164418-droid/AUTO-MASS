@@ -7,7 +7,7 @@ import "."
 // 增强挡位：多列档案阵列（以 design/qt-demo/array.html 为基线，按 LBEILC/RhineLabUI 的实现移植，MIT）。
 // 托管管理：列 = 通用脚本，列内 = 程序、启动等实际分页及各账号；调度队列：列 = 队列，列内 = 队列配置 + 各队列项。
 // 首尾按周期无缝循环，每列记住上次的选择。读取时选中的录像带抬起、镜头转向把它放到画面左侧，
-// 玻璃由磨砂变清晰，露出内部的程序图标唱片（参考 Rhine Music Database 把封面放进录像带）。
+// 选中一盒时盖板随抬升从上向下变清晰，露出双卷盘内衬和程序图标。
 //
 // 画面以演示基线为准：环境光照（RoomEnvironment + 半球光烘成的 HDR）、主光与补光、软阴影、透射磨砂外壳与竖向渐变。
 // 省 CPU：阵列的波浪、呼吸、涟漪、悬停与飞入都在顶点着色器里算（arraypart.vert），
@@ -27,6 +27,7 @@ Item {
     }
     property string mode: "scripts"          // scripts / queue
     property var columns: []                 // [{ name, en, icon, accounts: [行名…], rowIcons: [每行图标…] }]
+    property real viewportScale: 1
     property bool active: visible
     readonly property int laneCount: Math.max(1, columns.length)
     readonly property int lane: wrap(cellLane - (isQueue ? 0 : 2), laneCount)
@@ -43,10 +44,10 @@ Item {
     readonly property bool isQueue: mode === "queue"
     readonly property string rowName: !column && !isQueue ? emptyText : column?.rows ? column.rows[row] || "" :
         hasConfig && row === 0 ? column?.name || "" : column?.accounts?.[itemIdx] || "（空队列）"
-    readonly property string rowIcon: column?.rowIcons ? column.rowIcons[row] || "" : column?.icon || ""
+    readonly property string rowIcon: column?.rowIcons?.[row] || column?.icon || ""
     readonly property string labelNo: "NO." + String(lane * 10 + row + 1).padStart(3, "0")
-    readonly property string discTitle: rowIcon ? rowIcon.split(/[\\/]/).pop() : "AUTO-MAS"
-    readonly property string discSub: rowName + " · " + (column?.name || "")
+    readonly property string discTitle: column?.name || rowName
+    readonly property string discSub: rowName === discTitle ? "" : rowName
 
     signal opened(int lane, int row)
     signal closed()
@@ -256,15 +257,18 @@ Item {
     View3D {
         id: view
         anchors.fill: parent
+        // 参考舞台固定为 1920×1080，离屏纹理只需覆盖窗口中实际显示的像素。
+        readonly property real pixelScale: Math.min(1, root.viewportScale) * Screen.devicePixelRatio
+        explicitTextureWidth: Math.max(1, Math.ceil(width * pixelScale))
+        explicitTextureHeight: Math.max(1, Math.ceil(height * pixelScale))
         environment: ExtendedSceneEnvironment {
             backgroundMode: SceneEnvironment.Color
             clearColor: Theme.dark ? "#11181b" : "#eae5e1"
             antialiasingMode: SceneEnvironment.MSAA
-            antialiasingQuality: SceneEnvironment.VeryHigh
+            antialiasingQuality: SceneEnvironment.High
             tonemapMode: SceneEnvironment.TonemapModeAces
             exposure: 1.05
             // 环境光照：演示基线的 RoomEnvironment（强度 0.48）+ 半球光，烘成一张 HDR（qt/tools/make_room_env.py）
-            // Qt 的透射采样比 three.js 清晰（不按粗糙度模糊），透出的内层更深：环境光略提、透射降到 0.3，与演示截图逐区对齐
             // 深色主题：环境光压低，暗色盒阵里只有抬起的那盒（保持浅暖色）显得发亮
             probeExposure: Theme.dark ? 0.75 : 1.3
             lightProbe: Texture { source: Qt.resolvedUrl("../assets3d/room-env.ktx"); mappingMode: Texture.LightProbe }
@@ -278,7 +282,7 @@ Item {
             }
             depthOfFieldEnabled: true
             depthOfFieldFocusDistance: root.focusDistance
-            depthOfFieldFocusRange: 30
+            depthOfFieldFocusRange: 6
             depthOfFieldBlurAmount: 2 + 2 * root.detail
         }
 
@@ -296,8 +300,8 @@ Item {
             brightness: (Theme.dark ? 0.9 : 1.4) / Math.PI
             position: Qt.vector3d(-6, 14, -5)
             castsShadow: true
-            shadowMapQuality: Light.ShadowMapQualityVeryHigh
-            softShadowQuality: Light.PCF16
+            shadowMapQuality: Light.ShadowMapQualityHigh
+            softShadowQuality: Light.PCF8
             pcfFactor: 4
             shadowFactor: 100
             shadowBias: 3
@@ -321,6 +325,17 @@ Item {
 
         Node {
             id: arrayRoot
+            PointLight {
+                id: tapeLight
+                visible: Theme.dark
+                onVisibleChanged: if (visible && root.entries.length) root.updateTapeLight()
+                color: "#ffb877"
+                brightness: 0
+                constantFade: 1
+                linearFade: 0
+                quadraticFade: 0.35
+                castsShadow: false
+            }
             // 阵列：同一个模型的实例化副本（实例表位置为阵列内的绝对坐标，整体随轨道平移）
             InstanceList { id: instances; instanceCountOverride: root.singleColumn ? 37 : root.maxInstances }
             component GridPart: Model {
@@ -368,17 +383,7 @@ Item {
                             property real coverage: detailNode.amount
                         }
                     }
-                    // 深色主题：抽出的那盒就是光源，暖光随抽出量渐亮、按距离衰减，映亮相邻几盒（参考 Rhine Music Database 的夜间光场）
-                    PointLight {
-                        visible: Theme.dark && detailNode.current
-                        position: Qt.vector3d(0, 1.9, 0)
-                        color: "#ffb877"
-                        brightness: 4.5 * detailNode.amount
-                        constantFade: 1
-                        linearFade: 0
-                        quadraticFade: 0.35
-                        castsShadow: false
-                    }
+                    // 密排时只露出壳边，刻线、标签与饰条仅随抬起及回落的盒子绘制。
                     DetailPart { source: "../assets3d/cassette/Printed_Label.mesh"; tint: "#eae5dc"; rough: 0.65 }
                     DetailPart { source: "../assets3d/cassette/Case_Engraving.mesh"; tint: "#918a80"; metal: 0.12 }
                     DetailPart { source: "../assets3d/cassette/Case_Engraving_Highlight.mesh"; tint: "#e6ded4"; metal: 0.16 }
@@ -395,13 +400,15 @@ Item {
                     }
                     Model {
                         source: "#Rectangle"
-                        position: Qt.vector3d(0.22,1.86,0.12)
-                        scale: Qt.vector3d(0.0264,0.0264,1)
-                        castsShadows: false; opacity: detailNode.amount
+                        position: Qt.vector3d(0, 1.82, 0.152)
+                        scale: Qt.vector3d(0.045,0.032,1)
+                        castsShadows: false
                         materials: PrincipledMaterial {
-                            roughness: 0.55; metalness: 0.02
-                            alphaMode: PrincipledMaterial.Blend; cullMode: Material.NoCulling
+                            // 透射外壳只采样不透明阶段；圆盘的透明边缘用裁切保留。
+                            lighting: PrincipledMaterial.NoLighting
+                            alphaMode: PrincipledMaterial.Mask; cullMode: Material.NoCulling
                             baseColorMap: Texture { sourceItem: DiscArt {
+                                logoIndex: root.wrap(Math.imul(detailNode.gridLane, 73856093) ^ Math.imul(detailNode.gridRow, 19349663), 12)
                                 icon: detailNode.current ? root.rowIcon : detailNode.lastIcon
                                 title: detailNode.current ? root.discTitle : detailNode.lastTitle
                                 sub: detailNode.current ? root.discSub : detailNode.lastSub
@@ -455,23 +462,19 @@ Item {
     PartMaterial {
         id: matShell
         uRaisedColor: root.lin(Theme.dark ? "#d8d1c7" : "#fffdfa")
-        // 深色主题：外壳为炭黑，选中抬起的那盒仍混到 uRaisedColor（浅暖色）
-        uGlow: Theme.dark ? 0.18 : 0
-        uColor: root.lin(Theme.dark ? "#30363a" : "#fff7ed"); uRoughness: 0.28; uTransmission: 0.3; uThickness: 0.12
-        uAttenuation: root.lin(Theme.dark ? "#22282b" : "#eee6df"); uAttenuationDistance: 2; uClearcoat: 0.3; uClearcoatRoughness: 0.25; uGradient: 1
+        // 深色阵列保留暖色抬升光；选中与回落时的盖板清晰度独立过渡。
+        uGlow: Theme.dark ? 0.08 : 0
+        uColor: root.lin(Theme.dark ? "#30363a" : "#fff7ed"); uRoughness: 0.36; uTransmission: Theme.dark ? 0.30 : 0.64; uThickness: 0.12
+        uAttenuation: root.lin(Theme.dark ? "#22282b" : "#eee6df"); uAttenuationDistance: 2; uClearcoat: 0.3; uClearcoatRoughness: 0.25; uGradient: Theme.dark ? 1 : 0.52
     }
     // 其余部件不透光：用不写透射的着色器，才会画进屏幕纹理、透过磨砂外壳显出来
-    PartMaterial { id: matEdges; uRaisedColor: root.lin(Theme.dark ? "#c9c0b6" : "#f0e7df"); fragmentShader: "shaders/arraypart_opaque.frag"; uColor: root.lin(Theme.dark ? "#272c2f" : "#fff5e9"); uRoughness: 0.38; uMetalness: 0.02 }
-    // 漫射板：每盒按格位随机一种内部图案，抽出时随橙色扫描线自下而上显现
+    PartMaterial { id: matEdges; uRaisedColor: Theme.dark ? root.lin("#c9c0b6") : uColor; fragmentShader: "shaders/arraypart_opaque.frag"; uColor: root.lin(Theme.dark ? "#272c2f" : "#e7dfd7"); uRoughness: 0.38; uMetalness: 0.02 }
+    // 双卷盘内衬与格位标志在盖板后绘制，外沿使用源模型的刻线与金属件。
     PartMaterial {
         id: matDiffuser
-        uRaisedColor: root.lin("#e2dad4")
+        uRaisedColor: root.lin("#c6bdb0")
         vertexShader: "shaders/arraypart_pattern.vert"; fragmentShader: "shaders/arraypart_pattern.frag"
-        uColor: root.lin(Theme.dark ? "#3a3129" : "#806447"); uRoughness: 0.7
-        property vector3d uPatternColor: root.lin("#4a4036")
-        property vector3d uAccentColor: root.lin("#e8701f")
-        property vector3d uScanColor: root.lin("#ff8a3a")
-        property real uPatternAmount: 1
+        uColor: root.lin(Theme.dark ? "#3a3129" : "#c6bcb1"); uRoughness: 0.7
         uGlow: Theme.dark ? 0.3 : 0
     }
     PartMaterial { id: matIndex; uRaisedColor: root.lin("#e4d6c5"); fragmentShader: "shaders/arraypart_opaque.frag"; uColor: root.lin(Theme.dark ? "#4a4741" : "#e4d6c5"); uRoughness: 0.52; uMetalness: 0.05 }
@@ -573,6 +576,21 @@ Item {
         while (slots.length < 4) slots.push(Qt.vector4d(0,0,0,0))
         out0=slots[0]; out1=slots[1]; out2=slots[2]; out3=slots[3]
     }
+    // 换盒时由仍然抬起的盒子共同决定暖光的位置与亮度，避免先熄灭再点亮。
+    function updateTapeLight() {
+        const current = decorations.objectAt(selectedSlot)
+        if (!current) return
+        let weight = current.amount
+        let position = current.position.times(weight)
+        for (const o of outgoing) {
+            const node = decorations.objectAt(o.slot)
+            weight += node.amount
+            position = position.plus(node.position.times(node.amount))
+        }
+        if (weight > 0)
+            tapeLight.position = position.times(1 / weight).plus(Qt.vector3d(0, 1.9, 0))
+        tapeLight.brightness = 4.5 * Math.min(weight, 1)
+    }
     function step(dt) {
         clock += dt
         const t = clock
@@ -596,8 +614,8 @@ Item {
         damp(S.lift, detailOpen ? inspectionLift : 0.4 * targetReveal, Theme.richMotion ? 4.2 : 35, dt)
         const camTarget = detailOpen && holdDetailCamera ? 1 : detailOpen ? ease((S.lift.v - 0.8) / 2.4) : ease((S.lift.v - 0.4) / (inspectionLift - 0.4))
         detail += (camTarget - detail) * (1 - Math.exp(-dt * (Theme.richMotion ? 2.8 : 35)))
-        const clearTarget = detailOpen && detail > 0.78 && S.lift.v > 3.3
-        clarity = clearTarget ? Math.min(1, clarity + dt / 1.6) : Math.max(0, clarity - dt * 4)
+        const clearTarget = targetReveal === 1 && (!!column || detailOpen)
+        clarity = clearTarget ? Math.min(1, clarity + dt / 0.45) : Math.max(0, clarity - dt * 4)
         uShoulder = S.shoulder.v; uFocus = S.focus.v; uDetail = detail
         if (visualLane() !== builtLane || visualRow() !== builtRow) rebuild()
         const trackX = S.track.v, rail = S.rail.v
@@ -605,6 +623,7 @@ Item {
         stepOutgoing(dt, t)
         selectedCell = Qt.vector4d(cellLane,cellRow,S.lift.v,ease(clarity))
         pose(selectedSlot,cellLane,cellRow,S.lift.v,t)
+        if (Theme.dark) updateTapeLight()
         const selY = -4.6 + field(cellRow,cellLane,t) + S.lift.v + (hoverLifts[cellLane+":"+cellRow] || 0)
 
         // 镜头：长焦，阵列 140 单位外取景；读取时拉近到 72，录像带放到画面左侧
@@ -696,17 +715,37 @@ Item {
         Mark { x: 915; y: 254; width: 84; height: 84; ink: "#171713" }
     }
     component DiscArt: Item {
+        id: art
+        required property int logoIndex
         property string icon: ""
         property string title: ""
         property string sub: ""
-        width: 512; height: 512
-        IconDisc { anchors.fill: parent; path: parent.icon || "AUTO-MAS" }     // 无启动程序时由图标提供器给出档案章占位
-        Column {
-            anchors.horizontalCenter: parent.horizontalCenter
-            y: 352
-            spacing: 4
-            Text { anchors.horizontalCenter: parent.horizontalCenter; text: parent.parent.title; color: Qt.rgba(0.12, 0.12, 0.1, 0.82); font.family: Theme.font; font.pixelSize: 26; font.bold: true }
-            Text { anchors.horizontalCenter: parent.horizontalCenter; text: parent.parent.sub; color: Qt.rgba(0.12, 0.12, 0.1, 0.55); font.family: Theme.font; font.pixelSize: 15 }
+        width: 900; height: 640
+        // 每世界单位 200 像素。两枚图标贴在同一层内衬上，共享盖板的透射与清晰度。
+        Image {
+            x: 133; y: 185; width: 270; height: 270
+            asynchronous: true
+            source: art.icon ? "image://exeicon/cassette/" + encodeURIComponent(art.icon) : ""
+            fillMode: Image.PreserveAspectFit
+            smooth: true; mipmap: true
+        }
+        Image {
+            x: 497; y: 185; width: 270; height: 270
+            source: "../assets3d/cassette-logos.png"
+            sourceClipRect: Qt.rect((art.logoIndex % 4) * 256, Math.floor(art.logoIndex / 4) * 256, 256, 256)
+            smooth: true; mipmap: true
+        }
+        Rectangle {
+            x: 82; y: 546; width: 736; height: 53
+            visible: !!art.title
+            color: "#dcd5c8"
+            Rectangle { width: 10; height: parent.height; color: "#cf692c" }
+            Text {
+                anchors.fill: parent; anchors.leftMargin: 26; anchors.rightMargin: 16
+                verticalAlignment: Text.AlignVCenter; elide: Text.ElideRight
+                text: art.title + (art.sub ? "   /   " + art.sub : "")
+                color: "#302d2a"; font.family: Theme.font; font.pixelSize: 30; font.bold: true
+            }
         }
     }
     // ── 界面（原项目的档案选择版式） ──────────────────────────────────────
@@ -715,6 +754,30 @@ Item {
     // 摘要行 0.7 秒淡入并上移 8px、读取行 0.7 秒淡入，二者延迟 0.4 秒。离开 / 进入读取时按同样的时长反向
     readonly property var cssEase: [0.25, 0.1, 0.25, 1, 1, 1]
     readonly property var outExpo: [0.22, 1, 0.36, 1, 1, 1]
+    // 原版阵列的暖灰氛围：远处盒脊融入上缘，近处底部淡出；详情右侧留给正文。
+    Rectangle {
+        anchors.fill: parent
+        visible: !Theme.dark
+        gradient: Gradient {
+            GradientStop { position: 0; color: "#eae5e1" }
+            GradientStop { position: 0.11; color: "#d1eae5e1" }
+            GradientStop { position: 0.40; color: "#20eae5e1" }
+            GradientStop { position: 0.81; color: "#20eae5e1" }
+            GradientStop { position: 1; color: "#efeae5e1" }
+        }
+    }
+    Rectangle {
+        anchors.fill: parent
+        visible: !Theme.dark && root.detail > 0
+        opacity: root.detail
+        gradient: Gradient {
+            orientation: Gradient.Horizontal
+            GradientStop { position: 0.4; color: "#00e8e5e1" }
+            GradientStop { position: 0.59; color: "#33e8e5e1" }
+            GradientStop { position: 0.68; color: "#ebe8e5e1" }
+            GradientStop { position: 1; color: "#e8e5e1" }
+        }
+    }
     // 文字衬底：右侧档案信息与底部操作区各铺一层柔边底色，叠在录像带上的文字在浅色 / 深色下都清楚
     Item {
         id: scrims

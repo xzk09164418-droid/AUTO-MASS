@@ -141,16 +141,20 @@ Window {
             // 组件异步孵化。预过滤光照与预转换网格可直接上传，索引下预热的场景随后复用。
             readonly property bool ready: arrayLoader.status === Loader.Ready
             z: showing ? 0 : -1
-            visible: ready && (showing || warmup.running)
+            visible: ready && (showing || (wanted && warmup.running))
             Timer { id: warmup; interval: 500 }
             Loader {
                 id: arrayLoader
                 anchors.fill: parent
                 asynchronous: true
-                active: arrayHost.wanted
-                source: active ? Qt.resolvedUrl("ArchiveArray3D.qml") : ""
+                // 首次使用增强后，标准挡位停放同一场景；减少挡位释放它。
+                property bool loadedOnce: false
+                active: arrayHost.wanted || (loadedOnce && Theme.motion === "standard" && Theme.enhancedAvailable)
+                source: "ArchiveArray3D.qml"
                 onLoaded: {
+                    loadedOnce = true
                     if (root.enhanced) root.enhanced.markLoaded()
+                    item.viewportScale = Qt.binding(() => stage.scale)
                     item.enabled = Qt.binding(() => arrayHost.showing)
                     // 只在显示时逐帧推进；预渲染与停靠期间画面静止，不占用 CPU
                     item.active = Qt.binding(() => arrayHost.showing)
@@ -201,6 +205,8 @@ Window {
     Connections {
         target: Theme
         function onMotionRequested(next) { motionShift.run(next) }
+        function onMotionChanged() { if (Theme.motion === "reduced") arrayLoader.loadedOnce = false }
+        function onEnhancedAvailableChanged() { if (!Theme.enhancedAvailable) arrayLoader.loadedOnce = false }
     }
 
     Connections {

@@ -101,13 +101,19 @@ class ExeIconProvider(QQuickImageProvider):
         self._memory: dict[str, QImage] = {}
 
     def requestImage(self, id_: str, size: QSize, requested: QSize) -> QImage:  # noqa: N802
-        path = unquote(id_)
-        image = self._memory.get(path)
+        # 增强录像盒已有格位标志；提取失败时留出透明窗口显示它。
+        cassette = id_.startswith("cassette/")
+        path = unquote(id_[len("cassette/"):] if cassette else id_)
+        image = self._memory.get(id_)
         if image is None:
             image = icon_for(path)
             if image.isNull():
-                image = placeholder_icon()
-            self._memory[path] = image
+                if cassette:
+                    image = QImage(1, 1, QImage.Format.Format_ARGB32_Premultiplied)
+                    image.fill(Qt.GlobalColor.transparent)
+                else:
+                    image = placeholder_icon()
+            self._memory[id_] = image
         if size is not None:
             size.setWidth(image.width())
             size.setHeight(image.height())

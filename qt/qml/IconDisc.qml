@@ -21,6 +21,7 @@ Item {
             anchors.centerIn: parent
             width: parent.width * 0.9
             height: width
+            asynchronous: true
             source: disc.source
             sourceSize: Qt.size(256, 256)
             opacity: 0.16
@@ -41,6 +42,7 @@ Item {
         anchors.centerIn: parent
         width: parent.width * 0.48
         height: width
+        asynchronous: true
         source: disc.source
         sourceSize: Qt.size(256, 256)
         smooth: true

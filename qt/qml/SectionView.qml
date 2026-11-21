@@ -803,7 +803,7 @@ FocusScope {
 
     // ── 左上：品牌、竖线、数据库标签 ─────────────────────────────────────
     Rectangle {
-        id: brandLine
+        visible: !view.arrayMode
         x: 430
         width: 2
         height: 640
@@ -811,16 +811,21 @@ FocusScope {
         transformOrigin: Item.Top
         scale: 1
         opacity: view.reveal > 0 ? 1 : 0
-        // 增强阵列读取录像带时竖线向上收回，不压在录像带上
-        property real keep: view.arrayDetail ? 0 : 1
-        Behavior on keep { enabled: Theme.richMotion; NumberAnimation { duration: 520; easing.type: Easing.OutCubic } }
-        transform: Scale { yScale: Math.min(1, view.reveal * 1.3) * brandLine.keep }
+        transform: Scale { yScale: Math.min(1, view.reveal * 1.3) }
     }
     Column {
-        x: 64 - 20 * (1 - view.reveal)
-        y: 122
+        x: (view.arrayMode ? 59 : 64) - 20 * (1 - view.reveal)
+        y: view.arrayMode ? 109 : 122
         opacity: view.reveal
-        Text { text: "AUTO-MAS"; color: Theme.ink; font.family: Theme.font; font.pixelSize: 35; font.letterSpacing: 4 }
+        Text {
+            text: "AUTO-MAS"; color: Theme.ink; font.family: Theme.font
+            font.pixelSize: view.arrayMode ? 44 : 35; font.letterSpacing: view.arrayMode ? 2.3 : 4
+            font.weight: view.arrayMode ? Font.Bold : Font.Normal
+        }
+        Text {
+            visible: view.arrayMode; text: "LOCAL DATABASE"; color: Theme.ink
+            font.family: Theme.font; font.pixelSize: 19; font.weight: Font.DemiBold
+        }
         Row {
             Text { text: "ANALYSIS "; color: Theme.ink; font.family: Theme.font; font.pixelSize: 35; font.letterSpacing: 4 }
             Text { text: "OS"; color: Theme.ink; font.family: Theme.font; font.pixelSize: 35; font.weight: Font.Bold; font.letterSpacing: 4 }
@@ -829,6 +834,7 @@ FocusScope {
     Column {
         x: 50
         y: 370
+        visible: !view.arrayMode
         spacing: 22
         opacity: view.reveal
         Rectangle { width: 14; height: 3; color: Theme.ink }

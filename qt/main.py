@@ -103,7 +103,7 @@ def configure_graphics_cache() -> None:
         directory = QT_DIR / "assets3d" / "shaders" / f"d3d11-{qVersion()}-x64"
         if (directory / "array.pipeline").is_file():
             seed = directory / "array.pipeline"
-            revision = f"QtArrayPipeline-{qVersion()}-v2"
+            revision = f"QtArrayPipeline-{qVersion()}-v6-rhine"
             cache = cache.with_name(revision + ".bin")
             seed_material_cache(directory, revision)
     os.environ.setdefault("QSG_RHI_PIPELINE_CACHE_SAVE", str(cache))

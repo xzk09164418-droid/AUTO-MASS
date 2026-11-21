@@ -7,15 +7,18 @@ VARYING float vClarity;
 void MAIN()
 {
     vec3 col = uColor;
-    if (uGradient > 0.5)
-        col *= mix(vec3(0.40, 0.30, 0.20), vec3(1.0, 0.98, 0.94), smoothstep(0.1, 1.0, vPanel));
-    BASE_COLOR = vec4(mix(col,uRaisedColor,vRaised), 1.0);
-    ROUGHNESS = mix(uRoughness,mix(0.21,0.025,vClarity),vRaised);
+    vec3 tint = mix(vec3(0.40, 0.30, 0.20), vec3(1.0, 0.98, 0.94), smoothstep(0.1, 1.0, vPanel));
+    col *= mix(vec3(1.0), tint, uGradient);
+    // 顶边先清晰，底边最后清晰；抬升本身不触发解密。
+    float front = 1.0 - 1.24 * vClarity;
+    float clear = smoothstep(front, front + 0.24, clamp(vPanel, 0.0, 1.0));
+    BASE_COLOR = vec4(mix(col, uRaisedColor, clear), 1.0);
+    ROUGHNESS = mix(uRoughness, 0.025, clear);
     METALNESS = uMetalness;
-    TRANSMISSION_FACTOR = mix(uTransmission,mix(0.9,0.985,vClarity),vRaised);
-    THICKNESS_FACTOR = mix(uThickness,0.018,vClarity);
+    TRANSMISSION_FACTOR = mix(uTransmission, 0.985, clear);
+    THICKNESS_FACTOR = mix(uThickness,0.018,clear);
     ATTENUATION_COLOR = uAttenuation;
-    ATTENUATION_DISTANCE = mix(uAttenuationDistance,8.0,vClarity);
+    ATTENUATION_DISTANCE = mix(uAttenuationDistance,8.0,clear);
     CLEARCOAT_AMOUNT = uClearcoat;
     CLEARCOAT_ROUGHNESS = uClearcoatRoughness;
     // 深色主题：抽出的那盒自身发出柔光（uGlow 只在深色下非 0）
