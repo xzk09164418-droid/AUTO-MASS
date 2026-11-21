@@ -33,6 +33,8 @@ HEALTH_PATH = "/api/core/health"
 POLL_INTERVAL_MS = 500
 START_TIMEOUT_MS = 120_000
 MAX_LOG_LINES = 200
+# 后端日志带终端配色（ANSI 转义序列），显示前去掉
+ANSI_PATTERN = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]")
 LOG_LEVEL_PATTERN = re.compile(r"\|\s*(DEBUG|INFO|SUCCESS|WARNING|ERROR|CRITICAL)\s*\|")
 
 # 启动阶段与进度（0–1）。后端日志里的固定标记推进进度，健康检查的 backgroundStatus 收尾。
@@ -192,7 +194,7 @@ class BackendSupervisor(QObject):
             self._set_progress(value, self.tr("初始化：{0}").format(done.group(1).strip()))
 
     def _append_log(self, line: str) -> None:
-        line = line.rstrip()
+        line = ANSI_PATTERN.sub("", line).rstrip()
         if not line:
             return
         self._track_stage(line)

@@ -17,6 +17,8 @@ Window {
     property var enhanced: null             // EnhancedComponent：3D 增强组件（可选安装）
     property real simulateLoad: 0           // >0：按真实阶段模拟一次耗时 N 秒的后端启动
     property bool booted: false
+    // --skip-boot 只在后端已就绪时直接跳过；后端还在启动时仍由启动动画的授权段承接等待（显示实时进度），就绪后快速收尾
+    property bool bootHold: false
 
     width: 1600
     height: 900
@@ -65,7 +67,10 @@ Window {
         Theme.mode = themeMode
         Theme.enhancedAvailable = !!enhanced && enhanced.installed
         Theme.motion = motionMode === "enhanced" && !Theme.enhancedAvailable ? "standard" : motionMode
-        if (skipBoot) finishBoot()
+        if (skipBoot) {
+            if (!source || source.status === "ready") finishBoot()
+            else { bootHold = true; bootSeq.clockBase = 0; bootSeq.frame = bootSeq.holdFrame }
+        }
     }
 
     function finishBoot() {
@@ -175,7 +180,7 @@ Window {
             id: bootSeq
             anchors.fill: parent
             visible: !root.booted
-            running: !root.skipBoot
+            running: !root.skipBoot || root.bootHold
             // 有后端（或模拟后端）时，加载到 100% 立即收尾；离线预览仍完整播放
             quickExitOnReady: root.source !== null
             // 后端未就绪时停在授权段；出错也放行，交给 BackendPanel 呈现
