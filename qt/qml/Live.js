@@ -368,7 +368,7 @@ function emulatorRecord(uid, info) {
         ["配置守卫", B(SD.tog(info.ConfigGuard), "Info.ConfigGuard"), "", ["emulator2"]],
         ["设备管理", Object.assign(SD.mini(["路径与实例"]), {ops:[{workspace:"自动识别管理"}]}), "", ["emulator2"]]
     ]
-    const config = {name:"配置", api:save.path, save:save, blocks:[SD.kv("模拟器配置",rows)], actions:["搜索","添加","删除","保存"]}
+    const config = {name:"配置", api:save.path, save:save, blocks:[SD.kv("模拟器配置",rows)], ops:{"路径与实例":{workspace:"自动识别管理"}}, actions:info.Type === "emulator2" ? ["路径与实例","搜索","添加","删除","保存"] : ["搜索","添加","删除","保存"]}
     // 实例：状态每 3 秒刷新（与网页版相同）；在线时可显示，离线 / 异常时可启动，在线或启动中可关闭
     const STATUS = {0:["在线","ok"],1:["离线","idle"],2:["启动中","run"],3:["关闭中","idle"],4:["错误","err"],5:["未找到","err"],10:["未知","idle"]}
     function deviceRows(env) {

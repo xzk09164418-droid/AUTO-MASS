@@ -114,7 +114,7 @@ Item {
                 const blocks = [config.blocks[0]]
                 if (type !== "emulator2") blocks.push(e.deviceTable)
                 return Object.assign({}, e, {name:name, en:Live.emulatorCaption(type),
-                    deviceType:type, tabs:[Object.assign({}, config, {blocks:blocks})]})
+                    deviceType:type, tabs:[Object.assign({}, config, {blocks:blocks, actions:type === "emulator2" ? ["路径与实例","搜索","添加","删除","保存"] : ["搜索","添加","删除","保存"]})]})
             }))
         }
         if (online) host.save(refreshTitle)

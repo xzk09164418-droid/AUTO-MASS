@@ -1090,7 +1090,7 @@ Item {
                         }
                         Loader {
                             width: parent.width
-                            sourceComponent: blk.modelData.t === "kv" ? kvC : blk.modelData.t === "table" ? tableC
+                            sourceComponent: blk.modelData.t === "calendar" ? calendarC : blk.modelData.t === "kv" ? kvC : blk.modelData.t === "table" ? tableC
                                 : blk.modelData.t === "stats" ? statsC : blk.modelData.t === "note" ? noteC
                                 : blk.modelData.t === "log" ? logC : blk.modelData.t === "banner" ? bannerC
                                 : blk.modelData.t === "qr" ? qrC : blk.modelData.t === "multiline" ? multilineC : blk.modelData.t === "list" ? listC : blk.modelData.t === "taskPicker" ? pickerC : runC
@@ -1101,6 +1101,7 @@ Item {
                                 onTextChanged: if (!readOnly) blk.modelData.v=text
                                 background:Rectangle { color:Theme.paper; border.color:Theme.hair }
                             } }
+                            Component { id: calendarC; GameActivityPanel { block:blk.modelData } }
                             Component { id: kvC; KvBlock { b: blk.modelData } }
                             Component { id: tableC; TableBlock { b: blk.modelData } }
                             Component { id: statsC; StatsBlock { b: blk.modelData } }
