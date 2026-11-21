@@ -175,8 +175,9 @@ function general(uid, c, ur, i) {
             SD.kv("基本信息", [["托管名称", B(SD.inp(I.Name), "Info.Name")], ["脚本根目录", B(Object.assign(SD.path(I.RootPath),{browse:"选择文件夹"}), "Info.RootPath")]]),
             SD.kv("源程序配置", [
                 ["原生配置类型", B(SD.seg(["单个配置文件","配置目录"],idx(["File","Folder"],S.ConfigPathMode)), "Script.ConfigPathMode",["File","Folder"])],
-                ["原生配置路径", B(Object.assign(SD.path(S.ConfigPath),{browse:"选择配置路径"}), "Script.ConfigPath")],
-                ["", Object.assign(SD.mini(["编辑并写回原文件","打开源程序设置"]),{commands:true,lock:true})]
+                // 「选择配置路径」与编辑、打开设置放在同一行
+                ["原生配置路径", B(Object.assign(SD.path(S.ConfigPath),{noBrowse:true}), "Script.ConfigPath")],
+                ["", Object.assign(SD.mini(["选择配置路径","编辑并写回原文件","打开源程序设置"]),{commands:true,lock:true})]
             ])
         ], actions: ["保存", "添加账号", "立即运行", "删除脚本"] },
         // 原「配置」一页有 17 行，按「启动 / 日志 / 规则」拆成三页，各页不需要滚动

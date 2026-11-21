@@ -122,33 +122,54 @@ Item {
         else if (entry && entry.live) host.liveAction(action)
     }
 
-    C.Popup {
+    // 搜索结果：莱茵生命风格的二级页面，按页显示（刻度翻页），不滚动
+    RhineDialog {
         id: choices
         objectName: "emulatorSearchResults"
-        parent: C.Overlay.overlay; anchors.centerIn: parent
-        width: Math.min(660,parent.width-32)
-        height: Math.min(parent.height-40,150+Math.min(manager.results.length,6)*74)
-        modal:true; focus:true; padding:18
+        code: "EMUL  /  SEARCH"
+        title: manager.online ? "搜索到的模拟器" : "搜索结果（演示）"
+        note: "共 " + manager.results.length + " 个"
+        serial: "X-003  ·  SCAN"
+        width: Math.min(820, parent.width - 40)
+        height: Math.min(640, parent.height - 40)
         closePolicy: manager.busy ? C.Popup.NoAutoClose : C.Popup.CloseOnEscape | C.Popup.CloseOnPressOutside
-        background: Rectangle {color:Theme.paper;border.color:Theme.ink;border.width:2}
-        contentItem: ColumnLayout {
-            Text {text:manager.online?"搜索到的模拟器":"搜索结果（演示）";color:Theme.ink;font.family:Theme.font;font.pixelSize:22;font.bold:true}
-            ListView {
-                Layout.fillWidth:true;Layout.fillHeight:true
-                clip:true;model:manager.results
-                C.ScrollBar.vertical: C.ScrollBar {}
-                delegate: RowLayout {
-                    required property var modelData
-                    width:ListView.view.width-12;height:72
-                    ColumnLayout {
-                        Layout.fillWidth:true
-                        Text {Layout.fillWidth:true;text:modelData.name;elide:Text.ElideRight;color:Theme.ink;font.bold:true}
-                        Text {Layout.fillWidth:true;text:modelData.path;wrapMode:Text.WrapAnywhere;maximumLineCount:2;elide:Text.ElideMiddle;color:Theme.muted}
+        readonly property int perPage: 5
+        onOpened: pager.pageIndex = 0
+        ColumnLayout {
+            anchors.fill: parent
+            spacing: 12
+            Item {
+                Layout.fillWidth: true; Layout.fillHeight: true
+                WheelHandler { onWheel: event => pager.turnWheel(event.pixelDelta.y, event.angleDelta.y) }
+                Column {
+                    width: parent.width
+                    Repeater {
+                        model: manager.results.slice(pager.pageIndex * choices.perPage, (pager.pageIndex + 1) * choices.perPage)
+                        Item {
+                            id: found
+                            required property var modelData
+                            required property int index
+                            width: parent.width; height: 70
+                            Rectangle { anchors.fill: parent; color: Theme.ink; opacity: foundHover.hovered ? 0.05 : 0 }
+                            HoverHandler { id: foundHover }
+                            Text { x: 4; y: 12; text: String(pager.pageIndex * choices.perPage + found.index + 1).padStart(2, "0"); color: Theme.accent; font.family: Theme.font; font.pixelSize: 13; font.weight: Font.Bold }
+                            Column {
+                                x: 44; y: 10; width: parent.width - 44 - importBtn.width - 16; spacing: 4
+                                Text { width: parent.width; text: found.modelData.name; elide: Text.ElideRight; color: Theme.ink; font.family: Theme.font; font.pixelSize: 16; font.weight: Font.Bold }
+                                Text { width: parent.width; text: found.modelData.path; elide: Text.ElideMiddle; color: Theme.muted; font.family: "Consolas"; font.pixelSize: 13 }
+                            }
+                            RhineButton { id: importBtn; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; small: true; text: "导入"; enabled: !manager.busy; onClicked: manager.add(found.modelData) }
+                            Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: Theme.hair; opacity: 0.7 }
+                        }
                     }
-                    C.Button {text:"导入";enabled:!manager.busy;onClicked:manager.add(modelData)}
                 }
             }
-            C.Button {Layout.alignment:Qt.AlignRight;text:"关闭";enabled:!manager.busy;onClicked:choices.close()}
+            PageScale { id: pager; Layout.preferredWidth: parent.width / 3; Layout.preferredHeight: 40; pages: Math.max(1, Math.ceil(manager.results.length / choices.perPage)) }
+            RowLayout {
+                Layout.fillWidth: true
+                Item { Layout.fillWidth: true }
+                RhineButton { text: "关闭"; enabled: !manager.busy; onClicked: choices.close() }
+            }
         }
     }
 }

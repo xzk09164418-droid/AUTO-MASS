@@ -177,6 +177,17 @@ Item {
 
     function act(name) {
         if (emulatorManager) { emulatorManager.act(name,item); return }
+        if (scripts && name === "选择配置路径") {
+            // 单个配置文件选文件、配置目录选文件夹；起点为当前路径，相对路径按脚本根目录解析
+            let spec = null
+            Live.eachSpec(item, sp => { if (sp.key === "Script.ConfigPath") spec = sp })
+            if (!spec) return
+            const folder = Live.fieldValue(item, "Script.ConfigPathMode") === "Folder"
+            filePicker.browse(spec.v, Live.fieldValue(item, "Info.RootPath") || "", folder, path => {
+                spec.v = path; spec.dirty = true; edits++; rebuild()
+            })
+            return
+        }
         if (scripts && ["编辑并写回原文件","打开源程序设置","Webhook"].includes(name)) {
             if (item.live && unsaved) {
                 const record=item, selectedPage=page
@@ -362,56 +373,6 @@ Item {
             }
         }
     }
-    component Sel: C.ComboBox {
-        id: cb
-        property var spec
-        model: spec.opts
-        currentIndex: spec.v
-        implicitHeight: 30
-        implicitWidth: Math.max(110, contentWidthHint + 40)
-        property real contentWidthHint: 0
-        font.family: Theme.font
-        font.pixelSize: 15
-        onActivated: {
-            // onPick：选择即执行（如切换热键控制的队列），不进入保存
-            if (spec.onPick) { spec.v = currentIndex; panel.liveOp(spec.onPick(currentIndex)); return }
-            if (spec.v !== currentIndex) { spec.v = currentIndex; spec.dirty = true; panel.edits++ }
-        }
-        Component.onCompleted: {
-            let w = 0
-            for (const o of spec.opts) w = Math.max(w, metrics.advanceWidth(o))
-            contentWidthHint = w
-        }
-        FontMetrics { id: metrics; font: cb.font }
-        contentItem: Text {
-            leftPadding: 2
-            text: cb.displayText
-            color: Theme.ink
-            font: cb.font
-            verticalAlignment: Text.AlignVCenter
-            elide: Text.ElideRight
-        }
-        indicator: Text {
-            x: cb.width - width - 4
-            anchors.verticalCenter: parent.verticalCenter
-            text: "▾"
-            color: cb.hovered ? Theme.accent : Theme.ink
-            font.pixelSize: 13
-        }
-        background: Rectangle {
-            color: "transparent"
-            Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1.5; color: cb.activeFocus || cb.hovered ? Theme.accent : Theme.ink }
-        }
-        delegate: C.ItemDelegate {
-            required property string modelData
-            required property int index
-            width: cb.width
-            highlighted: cb.highlightedIndex === index
-            contentItem: Text { text: modelData; color: highlighted ? Theme.paper : Theme.ink; font: cb.font; verticalAlignment: Text.AlignVCenter }
-            background: Rectangle { color: highlighted ? Theme.ink : Theme.paper }
-        }
-        popup.background: Rectangle { color: Theme.paper; border.width: 1.5; border.color: Theme.ink }
-    }
     component Chips: Row {
         id: ch
         property var spec
@@ -511,7 +472,7 @@ Item {
             RowLayout {
                 spacing: 10
                 Field { id: pathValue; Layout.fillWidth: true; text: ctl.spec.v; mono: true; onTextEdited: { ctl.spec.v = text; ctl.spec.dirty = true; panel.edits++ } }
-                Btn { text: ctl.spec.browse || "浏览"; small: true; onClicked: {
+                Btn { visible: !ctl.spec.noBrowse; text: ctl.spec.browse || "浏览"; small: true; onClicked: {
                     const key = ctl.spec.key || ""
                     const base = panel.scripts ? Live.fieldValue(panel.item,"Info.RootPath") || "" : ""
                     const folder = key === "Info.RootPath" || (key === "Script.ConfigPath" && Live.fieldValue(panel.item,"Script.ConfigPathMode") === "Folder")
@@ -534,7 +495,22 @@ Item {
                 }
             }
         }
-        Component { id: cSel; Sel { spec: ctl.spec } }
+        // 所有下拉与主页「完成后」同一实现：展开时外框由一点描出，悬停项以橙色下划线标出
+        Component {
+            id: cSel
+            CardPowerSelect {
+                card: panel
+                options: ctl.spec.opts
+                selectedIndex: ctl.spec.v
+                minWidth: 110
+                onPicked: index => {
+                    selectedIndex = index
+                    // onPick：选择即执行（如切换热键控制的队列），不进入保存
+                    if (ctl.spec.onPick) { ctl.spec.v = index; panel.liveOp(ctl.spec.onPick(index)); return }
+                    if (ctl.spec.v !== index) { ctl.spec.v = index; ctl.spec.dirty = true; panel.edits++ }
+                }
+            }
+        }
         Component { id: cChips; Chips { spec: ctl.spec } }
         Component { id: cTag; Tag { spec: ctl.spec } }
         Component {

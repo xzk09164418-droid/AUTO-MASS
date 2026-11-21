@@ -4,12 +4,15 @@ import QtQuick.Controls.Basic as C
 import "."
 
 // 菜单在档案卡的视觉树内展开，两层文字共用卡片的缩放和透视。
+// 全部下拉（档案卡字段、表格单元格、二级页面）统一用它，视觉一致。
 C.AbstractButton {
     id: field
     required property Item card
     required property var options
     required property int selectedIndex
     signal picked(int index)
+    property string label: "完成后"                 // 读屏用的字段名
+    property real minWidth: 0
     property bool expanded: false
     property var menuIndexes: []
     property int keyboardRow: -1
@@ -42,12 +45,12 @@ C.AbstractButton {
     }
     font.family: Theme.font
     font.pixelSize: 15
-    implicitWidth: Math.ceil(longestLabel)
+    implicitWidth: Math.max(minWidth, Math.ceil(longestLabel))
     implicitHeight: 30
     padding: 0
     text: options[selectedIndex] || ""
     Accessible.role: Accessible.ComboBox
-    Accessible.name: "完成后：" + text
+    Accessible.name: label + "：" + text
 
     function openLineWidth(index) {
         const span = longestLabel - shortestLabel
@@ -98,6 +101,8 @@ C.AbstractButton {
         font: field.font
         color: Theme.ink
         verticalAlignment: Text.AlignVCenter
+        elide: Text.ElideRight
+        rightPadding: 14
     }
     background: Rectangle {
         color: field.reveal > 0 || field.expanded ? Theme.paper : "transparent"
@@ -167,6 +172,7 @@ C.AbstractButton {
                         font: field.font
                         color: Theme.ink
                         verticalAlignment: Text.AlignVCenter
+                        elide: Text.ElideRight
                     }
                 }
             }

@@ -3,13 +3,16 @@ import QtQuick.Controls.Basic as C
 import QtQuick.Layouts
 import "."
 
-C.Popup {
+RhineDialog {
     id: box
     required property var picker
-    parent: C.Overlay.overlay; anchors.centerIn: parent
-    width: Math.min(650,parent.width-24); height: Math.min(520,parent.height-24)
-    modal: true; focus: true; padding: 20
-    background: Rectangle { color: Theme.paper; border.color: Theme.ink; border.width: 2 }
+    code: "CSTD  /  RECOVERY"
+    title: restart ? "重启清单" : "清理清单"
+    note: "共 " + rows.length + " 项"
+    serial: "X-002  ·  LIST"
+    width: Math.min(860,parent.width-40); height: Math.min(760,parent.height-40)
+    // 条目按页显示（刻度翻页），不滚动
+    readonly property int perPage: restart ? 2 : 4
     property var spec
     property var done
     property var rows: []
@@ -20,6 +23,7 @@ C.Popup {
     }
     function add() {
         rows=rows.concat(restart ? {Path:"",Arguments:"",WorkingDirectory:"",WaitSeconds:50,IsMain:!rows.length} : {Name:"",Path:""})
+        pager.pageIndex=Math.floor((rows.length-1)/perPage)
     }
     function move(index,delta) {
         const list=rows.slice()
@@ -33,54 +37,62 @@ C.Popup {
         if (restart && rows.length && rows.filter(r=>r.IsMain).length!==1) {error="请指定一个主体程序";return}
         spec.v=rows; spec.dirty=true; done(); close()
     }
-    contentItem: ColumnLayout {
-        Text { text:"CSTD  /  RECOVERY";color:Theme.accent;font.bold:true }
-        LabelText { text:box.restart?"重启清单":"清理清单";font.pixelSize:24 }
-        C.ScrollView {
-            Layout.fillWidth:true; Layout.fillHeight:true; contentWidth:availableWidth; clip:true
+    ColumnLayout {
+        anchors.fill: parent
+        spacing: 12
+        Item {
+            Layout.fillWidth: true; Layout.fillHeight: true
+            WheelHandler { onWheel: event => pager.turnWheel(event.pixelDelta.y, event.angleDelta.y) }
+            Text { visible: !box.rows.length; text: "清单为空"; color: Theme.muted; font.family: Theme.font; font.pixelSize: 14 }
             Column {
-                width:parent.width; spacing:8
+                width: parent.width; spacing: 14
                 Repeater {
-                    model:box.rows
+                    model: box.rows.slice(pager.pageIndex*box.perPage, (pager.pageIndex+1)*box.perPage)
                     ColumnLayout {
                         id:entry
                         required property int index
                         required property var modelData
-                        width:parent.width
+                        readonly property int at: pager.pageIndex*box.perPage+index
+                        width:parent.width; spacing:4
                         RowLayout {
-                            LabelText { text:String(entry.index+1).padStart(2,"0") }
-                            C.CheckBox { visible:box.restart; text:"主体"; checked:!!entry.modelData.IsMain
-                                onClicked:{box.rows.forEach((r,i)=>r.IsMain=i===entry.index);box.rows=box.rows.slice()} }
+                            spacing: 10
+                            Rectangle { width: 4; height: 18; color: Theme.accent }
+                            Text { text:String(entry.at+1).padStart(2,"0"); color:Theme.accent; font.family:Theme.font; font.pixelSize:14; font.weight:Font.Bold }
+                            RhineSwitch { visible:box.restart; text:"主体"; checked:!!entry.modelData.IsMain
+                                onToggled:{box.rows.forEach((r,i)=>r.IsMain=i===entry.at);box.rows=box.rows.slice()} }
                             Item {Layout.fillWidth:true}
-                            C.Button { text:"↑"; enabled:entry.index>0; onClicked:box.move(entry.index,-1) }
-                            C.Button { text:"↓"; enabled:entry.index+1<box.rows.length; onClicked:box.move(entry.index,1) }
-                            C.Button { text:"移除"; onClicked:box.rows=box.rows.filter((_,i)=>i!==entry.index) }
+                            RhineButton { small:true; text:"上移"; enabled:entry.at>0; onClicked:box.move(entry.at,-1) }
+                            RhineButton { small:true; text:"下移"; enabled:entry.at+1<box.rows.length; onClicked:box.move(entry.at,1) }
+                            RhineButton { small:true; danger:true; text:"移除"; onClicked:box.rows=box.rows.filter((_,i)=>i!==entry.at) }
                         }
                         Repeater {
                             model:box.restart?["Path","Arguments","WorkingDirectory","WaitSeconds"]:["Name","Path"]
                             RowLayout {
                                 id:line
                                 required property string modelData
-                                Layout.fillWidth:true
-                                LabelText { Layout.preferredWidth:78; text:({Name:"进程名称",Path:"程序路径",Arguments:"启动参数",WorkingDirectory:"工作目录",WaitSeconds:"等待秒数"})[line.modelData] }
-                                C.TextField { id:value; Layout.fillWidth:true; text:String(entry.modelData[line.modelData]??"")
+                                Layout.fillWidth:true; spacing:12
+                                LabelText { Layout.preferredWidth:84; color:Theme.muted; text:({Name:"进程名称",Path:"程序路径",Arguments:"启动参数",WorkingDirectory:"工作目录",WaitSeconds:"等待秒数"})[line.modelData] }
+                                RhineField { id:value; Layout.fillWidth:true; mono:line.modelData!=="Name"; text:String(entry.modelData[line.modelData]??"")
                                     onTextEdited:entry.modelData[line.modelData]=line.modelData==="WaitSeconds"?Number(text):text }
-                                C.Button { visible:["Path","WorkingDirectory"].includes(line.modelData);text:"浏览";onClicked:box.picker.browse(value.text,"",line.modelData==="WorkingDirectory",p=>{
+                                RhineButton { small:true; visible:["Path","WorkingDirectory"].includes(line.modelData);text:"浏览";onClicked:box.picker.browse(value.text,"",line.modelData==="WorkingDirectory",p=>{
                                     entry.modelData[line.modelData]=p;value.text=p
                                     if (!box.restart && !entry.modelData.Name) {entry.modelData.Name=p.split(/[\\/]/).pop();box.rows=box.rows.slice()}
                                 }) }
                             }
                         }
+                        Rectangle { Layout.fillWidth:true; height:1; color:Theme.hair; Layout.topMargin:4 }
                     }
                 }
             }
         }
+        PageScale { id: pager; Layout.preferredWidth: parent.width/3; Layout.preferredHeight: 40; pages: Math.max(1, Math.ceil(box.rows.length/box.perPage)) }
         RowLayout {
-            C.Button { text:"＋ 添加";onClicked:box.add() }
+            Layout.fillWidth: true; spacing: 10
+            RhineButton { text:"＋ 添加"; onClicked:box.add() }
             LabelText { Layout.fillWidth:true;text:box.error;color:Theme.error }
-            C.Button { text:"取消";onClicked:box.close() }
-            C.Button { text:"应用";onClicked:box.apply() }
+            RhineButton { text:"取消";onClicked:box.close() }
+            RhineButton { text:"应用";primary:true;onClicked:box.apply() }
         }
     }
-    component LabelText: Text {color:Theme.ink;font.family:Theme.font}
+    component LabelText: Text {color:Theme.ink;font.family:Theme.font;font.pixelSize:14}
 }

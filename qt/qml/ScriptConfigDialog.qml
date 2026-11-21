@@ -3,7 +3,7 @@ import QtQuick.Controls.Basic as C
 import QtQuick.Layouts
 import "."
 
-C.Popup {
+RhineDialog {
     id: dialog
     property var host
     property string action: ""
@@ -22,10 +22,11 @@ C.Popup {
     property bool confirmRemove: false
     readonly property bool editingFile: action === "编辑并写回原文件"
     readonly property bool session: action === "打开源程序设置"
-    parent: C.Overlay.overlay; anchors.centerIn: parent
-    width: Math.min(640,parent.width-24); height: Math.min(session ? 225 : 550,parent.height-24)
-    modal: true; focus:true; padding:20; closePolicy:C.Popup.NoAutoClose
-    background: Rectangle { color:Theme.paper; border.color:Theme.ink; border.width:2 }
+    code: "CSTD  /  CONFIGURATION"
+    title: action
+    serial: "X-002  ·  CFG"
+    width: Math.min(820,parent.width-40); height: Math.min(session ? 330 : 720,parent.height-40)
+    closePolicy: C.Popup.NoAutoClose
     function request(url,body,done) {
         busy=true; message=""
         host.call(url,body,r=>{
@@ -104,37 +105,41 @@ C.Popup {
             })
         }
     }
-    contentItem: ColumnLayout {
-        Text {text:"CSTD  /  CONFIGURATION";color:Theme.accent;font.bold:true}
-        Text {text:dialog.action;color:Theme.ink;font.pixelSize:24;font.bold:true}
-        C.ComboBox {visible:dialog.editingFile && dialog.files.length>1;Layout.fillWidth:true;model:dialog.files;currentIndex:dialog.files.indexOf(dialog.file)
+    ColumnLayout {
+        anchors.fill: parent
+        spacing: 12
+        RhineCombo {card:dialog.contentItem;label:"配置文件";visible:dialog.editingFile && dialog.files.length>1;Layout.fillWidth:true;model:dialog.files;currentIndex:dialog.files.indexOf(dialog.file)
             enabled:!dialog.busy && editor.text===dialog.original;onActivated:dialog.loadFile(currentText)}
-        C.ScrollView {visible:dialog.editingFile;Layout.fillWidth:true;Layout.fillHeight:true
-            C.TextArea {id:editor; color:Theme.ink; selectByMouse:true;readOnly:dialog.busy || !dialog.file; font.family:"Consolas"} }
-        ColumnLayout {visible:!dialog.editingFile && !dialog.session;Layout.fillWidth:true;Layout.fillHeight:true;enabled:!dialog.busy
-            RowLayout { C.ComboBox {model:dialog.hooks.map(h=>h.Info.Name);currentIndex:dialog.hooks.indexOf(dialog.hook);Layout.fillWidth:true;onActivated: index => dialog.chooseHook(dialog.hooks[index])}
-                C.Button{text:"＋ 添加";onClicked:dialog.hookAction("add")} }
-            GridLayout { columns:2;visible:!!dialog.hook;Layout.fillWidth:true
-                Text{text:"名称";color:Theme.ink} C.TextField{id:hookName;Layout.fillWidth:true}
-                Text{text:"启用";color:Theme.ink} C.CheckBox{id:enabledHook}
-                Text{text:"URL";color:Theme.ink} C.TextField{id:url;Layout.fillWidth:true}
-                Text{text:"请求方式";color:Theme.ink} C.ComboBox{id:method;model:["POST","GET"]}
-                Text{text:"请求头 JSON";color:Theme.ink} C.TextField{id:headers;Layout.fillWidth:true}
-                Text{text:"消息模板";color:Theme.ink} C.TextField{id:template;Layout.fillWidth:true}
+        // 原文件编辑区（文本编辑需要滚动）
+        Rectangle {visible:dialog.editingFile;Layout.fillWidth:true;Layout.fillHeight:true;color:"transparent";border.width:1.5;border.color:editor.activeFocus?Theme.accent:Theme.ink
+            C.ScrollView {anchors.fill:parent;anchors.margins:8
+                C.TextArea {id:editor; color:Theme.ink; selectByMouse:true;readOnly:dialog.busy || !dialog.file; font.family:"Consolas"; font.pixelSize:14; selectionColor:Theme.accent; selectedTextColor:"#ffffff"; background:null} } }
+        ColumnLayout {visible:!dialog.editingFile && !dialog.session;Layout.fillWidth:true;Layout.fillHeight:true;enabled:!dialog.busy;spacing:10
+            RowLayout { spacing:14
+                RhineCombo {card:dialog.contentItem;label:"Webhook";model:dialog.hooks.map(h=>h.Info.Name);currentIndex:dialog.hooks.indexOf(dialog.hook);Layout.fillWidth:true;onActivated: index => dialog.chooseHook(dialog.hooks[index])}
+                RhineButton{text:"＋ 添加";small:true;onClicked:dialog.hookAction("add")} }
+            GridLayout { columns:2;visible:!!dialog.hook;Layout.fillWidth:true;columnSpacing:20;rowSpacing:8
+                FieldLabel{text:"名称"} RhineField{id:hookName;Layout.fillWidth:true}
+                FieldLabel{text:"启用"} RhineSwitch{id:enabledHook}
+                FieldLabel{text:"地址"} RhineField{id:url;Layout.fillWidth:true;mono:true}
+                FieldLabel{text:"请求方式"} RhineCombo{id:method;card:dialog.contentItem;label:"请求方式";model:["POST","GET"]}
+                FieldLabel{text:"请求头"} RhineField{id:headers;Layout.fillWidth:true;mono:true;placeholderText:"JSON"}
+                FieldLabel{text:"消息模板"} RhineField{id:template;Layout.fillWidth:true}
             }
-            RowLayout{visible:!!dialog.hook
-                C.Button{text:"保存";onClicked:dialog.hookAction("update")}
-                C.Button{text:"测试";onClicked:dialog.hookAction("test")}
-                C.Button{text:dialog.confirmRemove?"确认删除":"删除";onClicked:dialog.hookAction("delete")}
+            Item {Layout.fillHeight:true}
+            RowLayout{visible:!!dialog.hook;spacing:10
+                RhineButton{text:"保存";primary:true;onClicked:dialog.hookAction("update")}
+                RhineButton{text:"测试";onClicked:dialog.hookAction("test")}
+                RhineButton{text:dialog.confirmRemove?"确认删除":"删除";danger:true;onClicked:dialog.hookAction("delete")}
             }
         }
-        Text { text:dialog.message || (dialog.session?"在源程序内编辑并保存设置。":"");Layout.fillWidth:true;wrapMode:Text.Wrap;color:Theme.muted }
-        RowLayout {Layout.alignment:Qt.AlignRight
-            C.Button {text:dialog.editingFile && editor.text!==dialog.original?"放弃修改并关闭":"关闭";enabled:!dialog.busy && !dialog.sessionId;onClicked:dialog.close()}
-            C.Button {visible:dialog.editingFile;text:"写回原文件";enabled:!dialog.busy && !!dialog.file && (!dialog.online || !!dialog.revision);onClicked:dialog.writeFile()}
-            C.Button {visible:dialog.session;text:dialog.sessionId?"结束会话":"启动源程序设置";enabled:!dialog.busy;onClicked:dialog.sessionAction()}
+        Item {visible:dialog.session;Layout.fillHeight:true}
+        RowLayout {Layout.fillWidth:true;spacing:10
+            Text { text:dialog.message;Layout.fillWidth:true;wrapMode:Text.Wrap;color:Theme.muted;font.family:Theme.font;font.pixelSize:13 }
+            RhineButton {text:dialog.editingFile && editor.text!==dialog.original?"放弃修改并关闭":"关闭";enabled:!dialog.busy && !dialog.sessionId;onClicked:dialog.close()}
+            RhineButton {visible:dialog.editingFile;primary:true;text:"写回原文件";enabled:!dialog.busy && !!dialog.file && (!dialog.online || !!dialog.revision);onClicked:dialog.writeFile()}
+            RhineButton {visible:dialog.session;primary:true;text:dialog.sessionId?"结束会话":"启动源程序设置";enabled:!dialog.busy;onClicked:dialog.sessionAction()}
         }
     }
+    component FieldLabel: Text {color:Theme.muted;font.family:Theme.font;font.pixelSize:14;font.letterSpacing:0.8;Layout.preferredWidth:96}
 }
-
-
