@@ -17,6 +17,7 @@ from pathlib import Path
 
 from PySide6.QtCore import (
     Property,
+    QCoreApplication,
     QObject,
     QProcess,
     QProcessEnvironment,
@@ -64,6 +65,14 @@ def backend_port(root: Path = ROOT_DIR) -> int:
         (root / "res" / "host-instance-defaults.json").read_text(encoding="utf-8")
     )
     return int(defaults["backendPort"])
+
+
+def _read_instance_file() -> dict:
+    path = ROOT_DIR / "config" / "HostInstance.json"
+    try:
+        return json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+    except (OSError, ValueError):
+        return {}
 
 
 def downloads_dir() -> Path:
@@ -243,6 +252,36 @@ class BackendSupervisor(QObject):
                 callback.call([QJSValue(text)])
 
         reply.finished.connect(done)
+
+    @Slot(result="QVariantMap")
+    def ports(self) -> dict:
+        """当前实例端口：页面端口（网页版）与后端端口，来自 config/HostInstance.json。"""
+
+        stored = _read_instance_file()
+        defaults = json.loads((ROOT_DIR / "res" / "host-instance-defaults.json").read_text(encoding="utf-8"))
+        return {
+            "frontendPort": stored.get("frontendPort", defaults["frontendPort"]),
+            "backendPort": stored.get("backendPort", defaults["backendPort"]),
+        }
+
+    @Slot(int, int, result=str)
+    def savePorts(self, frontend_port: int, backend_port: int) -> str:
+        """写入 config/HostInstance.json（与网页宿主同一校验），下次启动时生效；返回错误信息，成功为空串。"""
+
+        for port in (frontend_port, backend_port):
+            if not 1024 <= port <= 65535:
+                return "端口必须为 1024～65535 的整数"
+        if frontend_port == backend_port:
+            return "页面端口与后端端口不能相同"
+        stored = _read_instance_file()
+        stored.update({"instanceId": stored.get("instanceId") or self._expected_id,
+                       "frontendPort": frontend_port, "backendPort": backend_port})
+        target = ROOT_DIR / "config" / "HostInstance.json"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        temporary = target.with_suffix(f".{QCoreApplication.applicationPid()}.tmp")
+        temporary.write_text(json.dumps(stored, ensure_ascii=False, indent=2), encoding="utf-8")
+        temporary.replace(target)
+        return ""
 
     @Slot("QJSValue")
     def exportBackup(self, callback: QJSValue) -> None:

@@ -720,9 +720,6 @@ Item {
                             hoverEnabled: true
                             shelf: panel.sortDock
                             record: tb.b.sort ? { sortId: tb.b.sort.ids[tb.off + tr.index], sortGroup: tb.b.sort.group, name: tb.b.sort.labels[tb.off + tr.index] || "", code: String(tb.off + tr.index + 1).padStart(2, "0") } : null
-                            C.ToolTip.visible: containsMouse && enabled
-                            C.ToolTip.delay: 500
-                            C.ToolTip.text: "按住拖到暂存区，再拖回目标行调整顺序"
                         }
                     }
                     Repeater {

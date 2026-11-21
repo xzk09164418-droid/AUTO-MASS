@@ -177,8 +177,7 @@ function general(uid, c, ur, i) {
                 ["原生配置类型", B(SD.seg(["单个配置文件","配置目录"],idx(["File","Folder"],S.ConfigPathMode)), "Script.ConfigPathMode",["File","Folder"])],
                 ["原生配置路径", B(Object.assign(SD.path(S.ConfigPath),{browse:"选择配置路径"}), "Script.ConfigPath")],
                 ["", Object.assign(SD.mini(["编辑并写回原文件","打开源程序设置"]),{commands:true,lock:true})]
-            ]),
-            SD.note("支持编辑 UTF-8 配置，保存前会自动备份。在源程序内修改设置后，请先保存，再结束设置会话。",true)
+            ])
         ], actions: ["保存", "添加账号", "立即运行", "删除脚本"] },
         // 原「配置」一页有 17 行，按「启动 / 日志 / 规则」拆成三页，各页不需要滚动
         { name: "启动", api: save.path, save: save, blocks: [
@@ -245,7 +244,7 @@ function queues(qresp, times, qitems, scriptOpts, scriptPaths) {
     var power = ["NoAction", "KillSelf", "RestartSelf", "Sleep", "Hibernate", "Logoff", "Shutdown", "ShutdownForce", "Reboot"]
     // 还没有队列时留一张空卡，用来新建第一条队列
     if (!qresp.index.length) return [{ name: "暂无队列", en: "QUEUE · 00", live: true, uid: "", icon: "", accounts: [], configRow: false, api: "POST /api/queue/add",
-        blocks: [SD.note("还没有调度队列。新建后可在这里设置定时、循环与队列项。", true)],
+        blocks: [SD.note("还没有调度队列", true)],
         ops: { "新建队列": { path: "/api/queue/add", body: {}, reload: true, done: "已新建队列" } }, actions: ["新建队列"] }]
     return qresp.index.map(function (q, i) {
         var qid = q.uid, I = qresp.data[qid].Info
@@ -314,15 +313,12 @@ function queues(qresp, times, qitems, scriptOpts, scriptPaths) {
                 // 拖动行号到暂存区再拖回，调整定时顺序
                 tb.sort = { group: "time:" + qid, ids: ts.index.map(function (t) { return t.uid }), labels: ts.index.map(function (t, k) { return "定时 " + (k + 1) + " · " + (ts.data[t.uid].Info.Time || "") }),
                             path: "/api/queue/time/order", body: function (ids) { return { queueId: qid, indexList: ids } } }
-                return tb })(),
-            SD.note("同一队列可设置多个定时；周期为空时该定时不会触发。")
+                return tb })()
         ], actions: ["保存", "添加定时"] })
-        tabs.push({ name: "队列项", api: "POST /api/queue/item/update", blocks: [itemTable,
-            SD.note(cycle ? "关闭「参与循环」后，该项的方式、时间与周期不可编辑。" : "队列按顺序运行各项；执行周期之外的日子会跳过该项。")
+        tabs.push({ name: "队列项", api: "POST /api/queue/item/update", blocks: [itemTable
         ], actions: ["保存", "添加脚本"] })
         if (cycle) tabs.push({ name: "循环", api: "POST /api/queue/item/update", blocks: [
-            SD.table("循环调度", ["脚本", "时间 / 间隔", "周期 / 间隔起点", "操作"], crows, [1.6, 1.3, 2.6, 1.2]),
-            SD.note("定时方式按时间和周期运行；间隔方式从上次开始或上次结束起算。", true)
+            SD.table("循环调度", ["脚本", "时间 / 间隔", "周期 / 间隔起点", "操作"], crows, [1.6, 1.3, 2.6, 1.2])
         ], actions: ["保存"] })
         return { name: I.Name, en: (I.CycleEnabled ? "QUEUE · CYCLE · " : "QUEUE · ") + String(i + 1).padStart(2, "0"), live: true, uid: qid,
             icon: "", accounts: rowNames, rowIcons: rowIcons, configRow: false,
@@ -384,8 +380,7 @@ function emulatorRecord(uid, info) {
     }
     const devTable = SD.table("实例", ["编号", "状态", "名称", "ADB 地址", "操作"], [], [0.7, 0.9, 1.6, 1.6, 1.4])
     devTable.rowsFn = deviceRows
-    const devices = {name:"实例", api:"POST /api/emulator/status", blocks:[devTable,
-        SD.note(info.Type === "emulator2" ? "2.0 模拟器的实例与高级设置请在网页版的 2.0 面板中管理。" : "读取不到实例时请检查模拟器路径是否正确。", true)],
+    const devices = {name:"实例", api:"POST /api/emulator/status", blocks:[devTable],
         ops:{"刷新":{path:"/api/emulator/status", body:{emulatorId:uid}, poll:true, done:"已刷新"}}, actions:["刷新"]}
     return {uid:uid, name:info.Name || "未命名模拟器", en:"EMULATOR · "+info.Type.toUpperCase(),
             live:true, deviceType: info.Type, tabs: info.Type === "emulator2" ? [config] : [config, devices]}
@@ -417,27 +412,24 @@ function settings(g, version, qq) {
         { name: "邮件通知", en: "NOTIFY · MAIL", live: true, api: api, save: save, blocks: [SD.kv("邮件通知", [["启用邮件通知", B(SD.tog(N.IfSendMail), "Notify.IfSendMail"), "Notify.IfSendMail"], ["发信服务器", B(SD.inp(N.SMTPServerAddress, true), "Notify.SMTPServerAddress"), "Notify.SMTPServerAddress"], ["发信邮箱", B(SD.inp(N.FromAddress, true), "Notify.FromAddress"), "Notify.FromAddress"], ["发信授权码", secret(N.AuthorizationCode, "Notify.AuthorizationCode"), "Notify.AuthorizationCode"], ["收信邮箱", B(SD.inp(N.ToAddress, true), "Notify.ToAddress"), "Notify.ToAddress"]])],
           ops: testNotify, actions: ["保存", "测试通知"] },
         { name: "推送渠道", en: "NOTIFY · CHANNELS", live: true, api: api, save: save, blocks: [
-            SD.kv("推送渠道", [["Server 酱", [B(SD.tog(N.IfServerChan), "Notify.IfServerChan"), secret(N.ServerChanKey, "Notify.ServerChanKey")], "Notify.IfServerChan / ServerChanKey"], ["移动 5G 短信", [B(SD.tog(N.IfCMCCNewMsg), "Notify.IfCMCCNewMsg"), secret(N.CMCCNewMsgApiKey, "Notify.CMCCNewMsgApiKey")], "Notify.IfCMCCNewMsg / CMCCNewMsgApiKey"], ["Koishi", B(SD.tog(N.IfKoishiSupport), "Notify.IfKoishiSupport"), "Notify.IfKoishiSupport"], ["Koishi 地址", B(SD.inp(N.KoishiServerAddress, true), "Notify.KoishiServerAddress"), "Notify.KoishiServerAddress"], ["Koishi 令牌", secret(N.KoishiToken, "Notify.KoishiToken"), "Notify.KoishiToken"], ["QQ 官方机器人", [qqOn, qq && qq.connected ? SD.tag("已连接", "ok") : SD.tag("未绑定", "idle")], "Notify.IfOpenClawQQ · 扫码绑定并连接后才能开启"]]),
-            SD.note("QQ 官方机器人需先在网页版设置中扫码绑定；绑定后这里的开关才可用。", true)
+            SD.kv("推送渠道", [["Server 酱", [B(SD.tog(N.IfServerChan), "Notify.IfServerChan"), secret(N.ServerChanKey, "Notify.ServerChanKey")], "Notify.IfServerChan / ServerChanKey"], ["移动 5G 短信", [B(SD.tog(N.IfCMCCNewMsg), "Notify.IfCMCCNewMsg"), secret(N.CMCCNewMsgApiKey, "Notify.CMCCNewMsgApiKey")], "Notify.IfCMCCNewMsg / CMCCNewMsgApiKey"], ["Koishi", B(SD.tog(N.IfKoishiSupport), "Notify.IfKoishiSupport"), "Notify.IfKoishiSupport"], ["Koishi 地址", B(SD.inp(N.KoishiServerAddress, true), "Notify.KoishiServerAddress"), "Notify.KoishiServerAddress"], ["Koishi 令牌", secret(N.KoishiToken, "Notify.KoishiToken"), "Notify.KoishiToken"], ["QQ 官方机器人", [qqOn, qq && qq.connected ? SD.tag("已连接", "ok") : SD.tag("未绑定", "idle")], "Notify.IfOpenClawQQ · 扫码绑定并连接后才能开启"]])
           ], ops: testNotify, actions: ["保存", "测试通知"] },
         { name: "更新", en: "UPDATE", live: true, api: api, save: save, blocks: [SD.kv("更新", [["当前版本", version || "—"], ["自动更新", B(SD.tog(U.IfAutoUpdate), "Update.IfAutoUpdate"), "Update.IfAutoUpdate"], ["暂停更新至", B(SD.inp(U.PauseUntil, true), "Update.PauseUntil"), "Update.PauseUntil · 年-月-日，留空为不暂停"], ["更新源", source, "Update.Source"], ["Mirror 酱 CDK", W(secret(U.MirrorChyanCDK, "Update.MirrorChyanCDK"), source, is("MirrorChyan")), "Update.MirrorChyanCDK · 更新源选 Mirror 酱时可填"], ["更新渠道", B(SD.seg(["稳定版", "公测版"], idx(["stable", "beta"], U.Channel)), "Update.Channel", ["stable", "beta"]), "Update.Channel"], ["GitHub 加速", B(SD.seg(["自动", "关闭"], idx(["Auto", "Off"], U.GitHubMirror)), "Update.GitHubMirror", ["Auto", "Off"]), "Update.GitHubMirror"], ["代理地址", B(SD.inp(U.ProxyAddress, true), "Update.ProxyAddress"), "Update.ProxyAddress"]])], actions: ["保存"] },
         { name: "失败回放", en: "REPLAY · OBS", live: true, api: api, save: save, blocks: [
             SD.kv("失败回放", [["启用失败回放", replayOn, "Replay.Enabled"], ["OBS 端口", W(B(SD.num(R.Port), "Replay.Port"), replayOn), "Replay.Port"], ["最多保留", W(B(SD.num(R.MaxReplayCount, "段"), "Replay.MaxReplayCount"), replayOn), "Replay.MaxReplayCount"],
-                ["OBS 密码", W(B(Object.assign(SD.inp(""), { secret: true, skipEmpty: true }), "Replay.Password"), replayOn), "Replay.Password · " + (R.PasswordConfigured ? "已设置，留空不修改" : "未设置")]]),
-            SD.note("任务最终失败时，从已运行的 OBS 回放缓冲中保存一份视频，可在历史记录中回看。", true)
+                ["OBS 密码", W(B(Object.assign(SD.inp(""), { secret: true, skipEmpty: true }), "Replay.Password"), replayOn), "Replay.Password · " + (R.PasswordConfigured ? "已设置，留空不修改" : "未设置")]])
         ], ops: { "检查连接": { saveFirst: true, path: "/api/setting/obs/check", body: {}, show: true, done: "OBS 连接正常", when: function () { return !!valueOf(replayOn) } },
                   "试存回放": { path: "/api/setting/obs/save", body: {}, show: true, done: "回放已保存", when: function () { return !!valueOf(replayOn) } },
                   "清空密码": { confirm: "清空后将按无密码连接 OBS。", path: "/api/setting/update", body: { data: { Replay: { Password: "" } } }, reload: true, done: "OBS 密码已清空", off: !R.PasswordConfigured, when: function () { return !!valueOf(replayOn) } } },
           actions: ["保存", "检查连接", "试存回放", "清空密码"] },
         { name: "高级与关于", en: "ADVANCED", live: true, api: "GET /api/setting/backup", blocks: [
             SD.kv("数据与日志", [["数据备份", "导出配置、数据与历史记录的压缩包"], ["日志", "打包运行日志，反馈问题时附上"]]),
-            SD.kv("关于", [["版本", version || "—"], ["字体", "MiSans（小米）· 许可见 NOTICE"], ["视觉参考", "LBEILC / RhineLabUI（MIT）"]]),
-            SD.note("导出的文件保存在「下载」文件夹，完成后自动打开所在位置。", true)
+            SD.kv("关于", [["版本", version || "—"], ["字体", "MiSans（小米）· 许可见 NOTICE"], ["视觉参考", "LBEILC / RhineLabUI（MIT）"]])
           ], ops: { "导出数据备份": { exportBackup: true, when: function (e) { return !e.exporting } }, "打包日志": { exportLogs: true, when: function (e) { return !e.exporting } } },
           actions: ["导出数据备份", "打包日志"] }
     ]
 }
-function local(g, port, vd, nav) {
+function local(g, port, vd, nav, ports) {
     var save = { path: "/api/setting/update", base: {} }, api = "POST /api/setting/update"
     var C = g.ChildSession, D = g.Display, H = g.Hotkey
     var vdOn = B(SD.tog(D.IfEnableVirtualDisplay), "Display.IfEnableVirtualDisplay")
@@ -473,8 +465,7 @@ function local(g, port, vd, nav) {
     if (res.indexOf(C.Resolution) < 0) res.unshift(C.Resolution)
     return [
         { name: "远程桌面分身", en: "CHILD SESSION · RDP", live: true, api: api, save: save, blocks: [
-            SD.kv("远程桌面分身", [["启用分身执行", B(SD.tog(C.Enabled), "ChildSession.Enabled"), "ChildSession.Enabled"], ["宿主端口", B(SD.num(C.HostPort), "ChildSession.HostPort"), "ChildSession.HostPort"], ["分辨率", B(SD.sel(res, res.indexOf(C.Resolution)), "ChildSession.Resolution", res), "ChildSession.Resolution"], ["启动时隐藏预览", B(SD.tog(C.StartHidden), "ChildSession.StartHidden"), "ChildSession.StartHidden"], ["观看模式", B(SD.tog(C.WatchMode), "ChildSession.WatchMode"), "ChildSession.WatchMode"]]),
-            SD.note("观看模式会屏蔽本机键鼠进入分身，避免误触打断任务。")
+            SD.kv("远程桌面分身", [["启用分身执行", B(SD.tog(C.Enabled), "ChildSession.Enabled"), "ChildSession.Enabled"], ["宿主端口", B(SD.num(C.HostPort), "ChildSession.HostPort"), "ChildSession.HostPort"], ["分辨率", B(SD.sel(res, res.indexOf(C.Resolution)), "ChildSession.Resolution", res), "ChildSession.Resolution"], ["启动时隐藏预览", B(SD.tog(C.StartHidden), "ChildSession.StartHidden"), "ChildSession.StartHidden"], ["观看模式", B(SD.tog(C.WatchMode), "ChildSession.WatchMode"), "ChildSession.WatchMode"]])
         ], actions: ["保存"] },
         // 远程桌面控制：状态每 3 秒刷新；未连接时观看模式、自适应、置顶与快捷键不可用（与网页版一致）
         { name: "远程桌面控制", en: "CHILD SESSION · CONTROL", live: true, api: "GET /api/child-session/status", blocks: [
@@ -524,15 +515,19 @@ function local(g, port, vd, nav) {
         { name: "虚拟显示器", en: "VIRTUAL DISPLAY", live: true, api: api, save: save, blocks: [
             SD.kv("虚拟显示器", [["无人值守时挂载", vdOn, "Display.IfEnableVirtualDisplay · 驱动不可用时无法开启（已开启的仍可关闭）"], ["刷新率", W(B(SD.seg(["1920×1080 @60", "1920×1080 @30"], idx(["1920x1080@60", "1920x1080@30"], D.VirtualDisplayMode)), "Display.VirtualDisplayMode", ["1920x1080@60", "1920x1080@30"]), vdOn), "Display.VirtualDisplayMode"],
                 ["驱动状态", vd && vd.ready === false ? [SD.tag("不可用", "err"), vd.message || ""] : vd && vd.ready ? SD.tag("可用", "ok") : "未检测"],
-                ["当前挂载", vd && vd.holding ? String(vd.holding) : "未挂载"]]),
-            SD.note("所有真实显示输出断开后，挂一块 1920×1080 的虚拟屏，避免游戏窗口被压小。驱动需自行安装。")
+                ["当前挂载", vd && vd.holding ? String(vd.holding) : "未挂载"]])
         ], ops: { "检测": { path: "/api/setting/virtual-display/check", body: {}, show: true },
                   "立即拆除": { confirm: "将拆除当前挂载的虚拟显示器；正在运行电脑端游戏任务时，游戏窗口会被挪走，本轮任务可能出错。", path: "/api/setting/virtual-display/detach", body: {}, show: true, done: "已拆除虚拟显示器", reload: true, off: !D.IfEnableVirtualDisplay } },
           actions: ["保存", "检测", "立即拆除"] },
         { name: "全局热键", en: "HOTKEY", live: true, api: api, save: save, blocks: [
             SD.kv("全局热键", [["启用全局热键", hkOn, "Hotkey.Enabled"], ["任务启停", hotkey(H.ToggleStartStop, "Hotkey.ToggleStartStop"), "Hotkey.ToggleStartStop"], ["上一个任务", hotkey(H.PreviousTask, "Hotkey.PreviousTask"), "Hotkey.PreviousTask"], ["下一个任务", hotkey(H.NextTask, "Hotkey.NextTask"), "Hotkey.NextTask"]])
         ], ops: { "保存并重新加载": { saveFirst: true, path: "/api/dispatch/hotkey/reload", body: {}, done: "热键已重新加载" } }, actions: ["保存并重新加载"] },
-        { name: "连接端口", en: "HOST", live: true, api: "GET /api/core/health", blocks: [SD.kv("连接", [["后端端口", String(port)], ["后端状态", [OK, "已连接"]]])], actions: [] }
+        // 端口：页面端口（网页版）与后端端口，保存到 config/HostInstance.json，下次启动时生效
+        { name: "连接端口", en: "HOST", live: true, api: "config/HostInstance.json", blocks: [SD.kv("连接", [
+            ["页面端口", Object.assign(SD.num(ports && ports.frontendPort || 36262), { min: 1024, max: 65535, k: "frontendPort" })],
+            ["后端端口", Object.assign(SD.num(ports && ports.backendPort || port), { min: 1024, max: 65535, k: "backendPort" })],
+            ["当前连接", [SD.tag("已连接", "ok"), "127.0.0.1:" + port]]])],
+          ops: { "保存端口": { savePorts: true } }, actions: ["保存端口"] }
     ]
 }
 
@@ -568,8 +563,7 @@ function sign(tools, accounts) {
             sortId: a.uid, sortGroup: "signGroups", blocks: [
             SD.kv("账号组", [["名称", B(SD.inp(d.Name), "Name")], ["启用", B(SD.tog(d.Enabled), "Enabled")]]),
             SD.kv("平台凭据", [["米游社", [token(d.MiyousheToken, "MiyousheToken"), has(d.MiyousheToken) ? OK : WAIT]], ["森空岛", [token(d.SklandToken, "SklandToken"), has(d.SklandToken) ? OK : d.SklandToken ? ERR : WAIT]],
-                ["库街区", [token(d.KuroToken, "KuroToken"), has(d.KuroToken) ? OK : WAIT]], ["塔吉多", [token(d.TaygedoToken, "TaygedoToken"), has(d.TaygedoToken) ? OK : WAIT]]]),
-            SD.note("凭据可从网页版扫码登录获得，也可直接粘贴；「异常」表示凭据已损坏，需要重新登录。", true)
+                ["库街区", [token(d.KuroToken, "KuroToken"), has(d.KuroToken) ? OK : WAIT]], ["塔吉多", [token(d.TaygedoToken, "TaygedoToken"), has(d.TaygedoToken) ? OK : WAIT]]])
         ], ops: { "删除账号组": { confirm: "将删除账号组「" + d.Name + "」及其各平台凭据。", path: "/api/tools/sign/account/delete", body: { accountId: a.uid }, reload: true, done: "已删除账号组" } },
            actions: ["保存", "删除账号组"] }
     })

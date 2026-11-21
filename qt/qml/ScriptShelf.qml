@@ -115,14 +115,18 @@ Item {
         anchors.right: shelf.right
         anchors.rightMargin: shelf.width - shelf.backButton.x + 14
         y: shelf.backButton.y; width: 198; height: shelf.backButton.height
-        placeholderText: "SEARCH"; leftPadding: 40; Accessible.name: "搜索脚本或账号"; selectByMouse: true
-        font.family: Theme.font; font.pixelSize: 15; color: Theme.ink
-        placeholderTextColor: Theme.muted
-        background: Rectangle { color: Theme.paper; border.color: Theme.ink; border.width: 3 }
+        // 与「RETURN TO INDEX」同一样式：透明底、1.5 线框、粗体字距；输入内容时收窄字距
+        placeholderText: "SEARCH"; leftPadding: 38; Accessible.name: "搜索脚本或账号"; selectByMouse: true
+        opacity: shelf.view.reveal
+        font.family: Theme.font; font.pixelSize: 13; font.weight: Font.Bold; font.letterSpacing: text ? 1 : 3.6
+        color: Theme.ink
+        placeholderTextColor: Theme.ink
+        verticalAlignment: TextInput.AlignVCenter
+        background: Rectangle { color: "transparent"; border.color: search.activeFocus ? Theme.accent : Theme.ink; border.width: 1.5 }
         Item {
-            x: 13; anchors.verticalCenter: parent.verticalCenter; width: 18; height: 18
-            Rectangle { width: 13; height: 13; radius: 7; color: "transparent"; border.color: Theme.ink; border.width: 2 }
-            Rectangle { x: 11; y: 11; width: 8; height: 2; rotation: 45; transformOrigin: Item.Left; color: Theme.ink }
+            x: 14; anchors.verticalCenter: parent.verticalCenter; width: 16; height: 16
+            Rectangle { width: 11; height: 11; radius: 6; color: "transparent"; border.color: Theme.ink; border.width: 1.5 }
+            Rectangle { x: 9.5; y: 9.5; width: 6; height: 1.5; rotation: 45; transformOrigin: Item.Left; color: Theme.ink }
         }
         Keys.onEscapePressed: { clear(); shelf.view.forceActiveFocus() }
         onAccepted: shelf.view.forceActiveFocus()
@@ -196,8 +200,8 @@ Item {
         }
     }
     Text {
-        visible: shelf.sortableMode && !shelf.filtered.length
-        x: 256; y: 720; text: shelf.query ? "没有匹配的脚本" : shelf.stack.length ? "拖回此处" : "暂无脚本"
+        visible: shelf.sortableMode && !shelf.filtered.length && !shelf.stack.length
+        x: 256; y: 720; text: shelf.query ? "没有匹配的脚本" : "暂无脚本"
         color: Theme.muted; font.family: Theme.font
     }
     CassetteFace {

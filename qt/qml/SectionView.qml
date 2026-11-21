@@ -212,7 +212,7 @@ FocusScope {
                 if (key === "settings") { setLive(key, Live.settings(m.g.data, ver, m.q && m.q.code === 200 ? m.q : null)); return }
                 const vd = m.d && m.d.code === 200 ? { ready: (m.d.results || []).every(x => x.passed), message: m.d.message, holding: m.d.holding } : null
                 if (m.n && m.n.code === 200) env = Object.assign({}, env, { nav: m.n.data })
-                setLive(key, Live.local(m.g.data, api.port, vd, env.nav))
+                setLive(key, Live.local(m.g.data, api.port, vd, env.nav, api.ports()))
                 pollDesk()
             })
         } else if (key === "gamesign") {
@@ -363,6 +363,11 @@ FocusScope {
             const path = fileLocations.exportLogs()
             if (path) { toast.show("已打包日志：" + path); fileLocations.openFolder(path) }
             else toast.show("打包日志失败")
+            return
+        }
+        if (op.savePorts) {
+            const err = api.savePorts(Number(Live.pick(item, "frontendPort")), Number(Live.pick(item, "backendPort")))
+            toast.show(err ? "保存失败：" + err : "端口已保存，下次启动时生效")
             return
         }
         if (op.historyLog) { logViewer.open(op.historyLog, op.title || ""); return }
@@ -797,9 +802,9 @@ FocusScope {
         }
     }
 
-    // ── 数据来源标记：实时数据 / 演示数据 ─────────────────────────────────
+    // ── 读取失败提示（正常时不显示数据来源说明）─────────────────────────────
     Row {
-        visible: !view.isHome
+        visible: !view.isHome && view.liveState === "error"
         x: 1150
         y: 26
         z: 5
@@ -811,10 +816,7 @@ FocusScope {
             color: view.isLive ? Theme.success : view.liveState === "error" ? Theme.error : view.liveState === "loading" ? Theme.warning : Theme.muted
         }
         Text {
-            text: view.isLive ? "实时数据 · 来自后端 · 共 " + view.items.length + " 项"
-                : view.liveState === "loading" ? "正在读取后端…"
-                : view.liveState === "error" ? "后端读取失败：" + view.liveMessage + " · 显示演示数据"
-                : "演示数据 · 该部门尚未接入后端"
+            text: "后端读取失败：" + view.liveMessage
             color: Theme.muted
             font.family: Theme.font
             font.pixelSize: 12
@@ -988,7 +990,6 @@ FocusScope {
         y: 1044
         spacing: 40
         opacity: view.reveal
-        Text { visible: !view.isHome; anchors.verticalCenter: parent.verticalCenter; text: "滚轮 / ↑↓ 切换条目 · 1–9 切换分页 · ESC 返回"; color: Theme.muted; font.family: Theme.font; font.pixelSize: 11; font.letterSpacing: 2 }
         Row {
             Text { text: "POWERED BY "; color: Theme.ink; font.family: Theme.font; font.pixelSize: 14; font.letterSpacing: 0.6 }
             Text { text: "AUTO-MAS"; color: Theme.ink; font.family: Theme.font; font.pixelSize: 14; font.weight: Font.Bold; font.letterSpacing: 0.6 }
