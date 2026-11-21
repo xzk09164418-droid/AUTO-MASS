@@ -3,6 +3,7 @@
 from pathlib import Path
 
 from PySide6.QtCore import QDir, QObject, QUrl, Slot
+from PySide6.QtGui import QDesktopServices
 
 
 class FileLocations(QObject):
@@ -26,3 +27,16 @@ class FileLocations(QObject):
             }
         except (OSError, ValueError, RuntimeError):
             return {}
+
+    @Slot(str, result=bool)
+    def openFile(self, value: str) -> bool:
+        """用系统默认程序打开文件（历史日志、失败回放等）。"""
+        path = Path(value or "")
+        return path.is_file() and QDesktopServices.openUrl(QUrl.fromLocalFile(str(path.absolute())))
+
+    @Slot(str, result=bool)
+    def openFolder(self, value: str) -> bool:
+        """打开文件所在的文件夹；传入的是文件夹时直接打开它。"""
+        path = Path(value or "")
+        folder = path if path.is_dir() else path.parent
+        return folder.is_dir() and QDesktopServices.openUrl(QUrl.fromLocalFile(str(folder.absolute())))

@@ -210,4 +210,9 @@ Window {
         anchors.fill: parent
         backend: root.backendEnabled && root.booted ? root.backend : null
     }
+
+    // 电源操作倒计时：只在后端准备关机 / 睡眠等时出现，可取消
+    PowerCountdown {
+        api: root.backendEnabled && root.booted && root.backend && root.backend.status === "ready" ? root.backend : null
+    }
 }

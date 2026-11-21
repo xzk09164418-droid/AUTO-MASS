@@ -14,6 +14,8 @@ FocusScope {
     property var held: ({})
     property var keys: []
     property bool invalid: false
+    // 老板键（模拟器）：沿用网页版格式，修饰键按 Ctrl、Shift、Alt、Meta 排序，不限制必须带修饰键
+    property bool bossMode: false
     readonly property bool active: visible
     visible: false
     anchors.fill: parent
@@ -89,6 +91,13 @@ FocusScope {
         const mods = modifiers.filter(m => keys.indexOf(m) >= 0)
         const primary = keys.filter(k => modifiers.indexOf(k) < 0)
         if (!keys.length) return
+        if (bossMode) {
+            const order = ["Ctrl", "Shift", "Alt", "Win"]
+            const bm = order.filter(m => keys.indexOf(m) >= 0).map(m => m === "Win" ? "Meta" : m)
+            if (primary.length !== 1) { error = "请按下修饰键加一个普通键"; keys = []; preview = ""; return }
+            finish(bm.concat(primary).join("+"))
+            return
+        }
         if (invalid || primary.length !== 1 || mods.length > 2 || (!mods.length && !/^F\d+$/.test(primary[0]))) {
             error = "请录制修饰键加一个普通键，或单独功能键；不支持多个普通键"
             keys = []; invalid = false; preview = ""

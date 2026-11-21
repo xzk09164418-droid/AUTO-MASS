@@ -588,7 +588,8 @@ Item {
         id: tb
         property var b
         // 长表按页显示（与主页任务对象相同的刻度翻页条），不滚动：鼠标在档案卡上时滚轮翻页
-        readonly property var all: b.all || b.rows
+        // rowsFn：行随 panel.env 即时刷新（如模拟器实例状态）
+        readonly property var all: b.rowsFn ? b.rowsFn(panel.env || {}) : (b.all || b.rows)
         readonly property int pageRows: b.pageRows || 9
         readonly property int pages: Math.max(1, Math.ceil(all.length / pageRows))
         readonly property int off: pager.pageIndex * pageRows
@@ -768,6 +769,8 @@ Item {
             height: 18
             Text {
                 text: panel.dept && panel.item ? ("X-0" + panel.dept.n + "    " + panel.dept.n + "-" + String(panel.itemIndex + 1).padStart(2, "0") + "    " + panel.item.name) : ""
+                width: Math.max(0, parent.width - metaApi.implicitWidth - 24)
+                elide: Text.ElideRight
                 color: Theme.muted
                 font.family: Theme.font
                 font.pixelSize: 12
@@ -776,6 +779,7 @@ Item {
                 Text { text: panel.dept ? "X-0" + panel.dept.n : ""; color: Theme.accent; font: parent.font }
             }
             Text {
+                id: metaApi
                 anchors.right: parent.right
                 text: (panel.unsaved > 0 ? "● 未保存 " + panel.unsaved + " 处    " : "") + (panel.shown ? panel.shown.api || "" : "")
                 color: Theme.muted
@@ -871,7 +875,8 @@ Item {
                         spacing: 8
                         opacity: 0
                         // 说明文字默认不显示（各页不再附解释），只保留标记为 keep 的状态提示
-                        visible: !(blk.modelData.t === "note" && !blk.modelData.keep)
+                        // show：按其它控件的取值显示整块（如只显示所选脚本的账号范围）
+                        visible: { panel.edits; return !(blk.modelData.t === "note" && !blk.modelData.keep) && (!blk.modelData.show || blk.modelData.show(panel.env)) }
                         transform: Translate { id: blkShift; y: 14 }
                         Component.onCompleted: enter.start()
                         SequentialAnimation {

@@ -346,20 +346,42 @@ function emulatorRecord(uid, info) {
     let shortcuts = []
     try { shortcuts = JSON.parse(info.BossKey || "[]") } catch (e) {}
     const boss = B(Object.assign(SD.inp(shortcuts[0] || ""),{bossKey:true}),"Info.BossKey")
+    const bossRec = SD.mini(["录制"]); bossRec.ops = [{ captureHotkey: boss, boss: true }]
     const rows = [
         ["模拟器名称", B(SD.inp(info.Name), "Info.Name")],
         ["模拟器类型", B(SD.seg(["通用","MuMu","雷电","2.0"],idx(types,info.Type)), "Info.Type",types)],
         ["模拟器路径", B(SD.path(info.Path), "Info.Path")],
         ["最大等待时间", B(Object.assign(SD.num(info.MaxWaitTime ?? 300,"秒"),{min:10,max:9999}), "Info.MaxWaitTime")],
-        ["老板键", boss, "", ["general","ldplayer"]],
+        ["老板键", [boss, bossRec], "Info.BossKey · 点「录制」后按下组合键", ["general","ldplayer"]],
         ["老板键", "MuMu 模拟器无需配置老板键", "", ["mumu"]],
-        ["强力关闭", B(SD.tog(info.ForceKillOnClose), "Info.ForceKillOnClose")],
-        ["启动前强力清理", B(SD.tog(info.ForceKillBeforeLaunch), "Info.ForceKillBeforeLaunch")],
+        ["强力关闭", B(SD.tog(info.ForceKillOnClose), "Info.ForceKillOnClose"), "", ["mumu"]],
+        ["启动前强力清理", B(SD.tog(info.ForceKillBeforeLaunch), "Info.ForceKillBeforeLaunch"), "", ["mumu"]],
         ["稳定模式", B(SD.tog(info.StableMode), "Info.StableMode"), "", ["emulator2"]],
         ["配置守卫", B(SD.tog(info.ConfigGuard), "Info.ConfigGuard"), "", ["emulator2"]]
     ]
+    const config = {name:"配置", api:save.path, save:save, blocks:[SD.kv("模拟器配置",rows)], actions:["搜索","添加","删除","保存"]}
+    // 实例：状态每 3 秒刷新（与网页版相同）；在线时可显示，离线 / 异常时可启动，在线或启动中可关闭
+    const STATUS = {0:["在线","ok"],1:["离线","idle"],2:["启动中","run"],3:["关闭中","idle"],4:["错误","err"],5:["未找到","err"],10:["未知","idle"]}
+    function deviceRows(env) {
+        const devs = env.devices && env.devices[uid] || {}
+        return Object.keys(devs).map(function (i) {
+            const d = devs[i], st = d.status
+            const canStart = [1,4,5,10].indexOf(st) >= 0, canStop = st === 0 || st === 2
+            const m = SD.mini(["显示", canStart ? "启动" : canStop ? "关闭" : "等待"])
+            function op(kind, done) { return { path: "/api/emulator/operate", body: { emulatorId: uid, operate: kind, index: String(i) }, done: done, poll: true } }
+            m.ops = [Object.assign(op("show", "已显示"), { off: st !== 0 }),
+                     canStart ? op("open", "已发送启动指令") : canStop ? op("close", "已发送关闭指令") : { off: true }]
+            const tg = STATUS[st] || ["未知","idle"]
+            return [String(i), SD.tag(tg[0], tg[1]), d.title || "—", d.adb_address || "—", m]
+        })
+    }
+    const devTable = SD.table("实例", ["编号", "状态", "名称", "ADB 地址", "操作"], [], [0.7, 0.9, 1.6, 1.6, 1.4])
+    devTable.rowsFn = deviceRows
+    const devices = {name:"实例", api:"POST /api/emulator/status", blocks:[devTable,
+        SD.note(info.Type === "emulator2" ? "2.0 模拟器的实例与高级设置请在网页版的 2.0 面板中管理。" : "读取不到实例时请检查模拟器路径是否正确。", true)],
+        ops:{"刷新":{path:"/api/emulator/status", body:{emulatorId:uid}, poll:true, done:"已刷新"}}, actions:["刷新"]}
     return {uid:uid, name:info.Name || "未命名模拟器", en:"EMULATOR · "+info.Type.toUpperCase(),
-            live:true, api:save.path, save:save, blocks:[SD.kv("模拟器配置",rows)], actions:["搜索","添加","删除","保存"]}
+            live:true, deviceType: info.Type, tabs: info.Type === "emulator2" ? [config] : [config, devices]}
 }
 
 // ── 10 设置 / 06 本地控制（GlobalConfig） ─────────────────────────────
@@ -525,13 +547,27 @@ function sign(tools, accounts) {
     } catch (e) {}
     var status = ""
     try { status = JSON.parse(G.Status || "{}").text || "" } catch (e) {}
+    var signOn = B(SD.tog(G.Enabled), "GameSign.Enabled")
+    // 每个账号组一张卡：名称、启用与各平台凭据（可直接粘贴凭据，扫码登录仍需在网页版完成）
+    var groupCards = ids.map(function (a, n) {
+        var d = accounts[a.uid].GameSignAccount, s = { path: "/api/tools/sign/account/update", base: { accountId: a.uid } }
+        function token(v, key) { return B(Object.assign(SD.inp(v || "", true), { secret: true }), key) }
+        return { name: d.Name || ("账号组 " + (n + 1)), en: "ACCOUNT GROUP · " + String(n + 1).padStart(2, "0"), live: true, api: s.path, save: s, blocks: [
+            SD.kv("账号组", [["名称", B(SD.inp(d.Name), "Name")], ["启用", B(SD.tog(d.Enabled), "Enabled")]]),
+            SD.kv("平台凭据", [["米游社", [token(d.MiyousheToken, "MiyousheToken"), has(d.MiyousheToken) ? OK : WAIT]], ["森空岛", [token(d.SklandToken, "SklandToken"), has(d.SklandToken) ? OK : d.SklandToken ? ERR : WAIT]],
+                ["库街区", [token(d.KuroToken, "KuroToken"), has(d.KuroToken) ? OK : WAIT]], ["塔吉多", [token(d.TaygedoToken, "TaygedoToken"), has(d.TaygedoToken) ? OK : WAIT]]]),
+            SD.note("凭据可从网页版扫码登录获得，也可直接粘贴；「异常」表示凭据已损坏，需要重新登录。", true)
+        ], ops: { "删除账号组": { confirm: "将删除账号组「" + d.Name + "」及其各平台凭据。", path: "/api/tools/sign/account/delete", body: { accountId: a.uid }, reload: true, done: "已删除账号组" } },
+           actions: ["保存", "删除账号组"] }
+    })
     return [
-        { name: "签到设置", en: "SIGN", live: true, api: "POST /api/tools/update", save: save, blocks: [SD.kv("签到", [["启用签到", B(SD.tog(G.Enabled), "GameSign.Enabled"), "GameSign.Enabled"], ["启动时签到", B(SD.tog(G.RunOnStartup), "GameSign.RunOnStartup"), "GameSign.RunOnStartup"], ["每日自动签到", B(SD.tog(G.AutoStart), "GameSign.AutoStart"), "GameSign.AutoStart"], ["结果通知", B(SD.tog(G.NotifyEnabled), "GameSign.NotifyEnabled"), "GameSign.NotifyEnabled"], ["活动查询", B(SD.tog(G.ActivityEnabled), "GameSign.ActivityEnabled"), "GameSign.ActivityEnabled"], ["上次签到", (G.LastSignDate || "—") + (status ? " · " + status : "")]])],
-          ops: { "立即签到": { confirm: "将立即为所有启用的账号组执行签到。", path: "/api/tools/sign", body: {}, done: "签到已开始", reload: true } }, actions: ["保存", "立即签到"] },
+        { name: "签到设置", en: "SIGN", live: true, api: "POST /api/tools/update", save: save, blocks: [SD.kv("签到", [["启用签到", signOn, "GameSign.Enabled"], ["启动时签到", B(SD.tog(G.RunOnStartup), "GameSign.RunOnStartup"), "GameSign.RunOnStartup"], ["每日自动签到", B(SD.tog(G.AutoStart), "GameSign.AutoStart"), "GameSign.AutoStart"], ["结果通知", B(SD.tog(G.NotifyEnabled), "GameSign.NotifyEnabled"), "GameSign.NotifyEnabled"], ["活动查询", B(SD.tog(G.ActivityEnabled), "GameSign.ActivityEnabled"), "GameSign.ActivityEnabled"], ["上次签到", (G.LastSignDate || "—") + (status ? " · " + status : "")]])],
+          // 未启用签到时不能立即签到（与网页版一致）；有未保存的改动时先保存再签到
+          ops: { "立即签到": { confirm: "将立即为所有启用的账号组执行签到。", path: "/api/tools/sign", body: {}, show: true, done: "签到已开始", reload: true, saveFirst: true, when: function () { return !!valueOf(signOn) } } }, actions: ["保存", "立即签到"] },
         { name: "账号组", en: "ACCOUNTS", live: true, api: "POST /api/tools/sign/account/update", blocks: [SD.table("账号组", ["名称", "启用", "米游社", "森空岛", "库街区", "塔吉多", "操作"], rows, [1.7, 1, 0.9, 0.9, 0.9, 0.9, 0.8]), SD.note("各平台凭据需在网页版中扫码登录写入账号组；「异常」表示凭据已损坏，需要重新登录。", true)],
           ops: { "添加账号组": { path: "/api/tools/sign/account/add", body: {}, reload: true, done: "已添加账号组" } }, actions: ["保存", "添加账号组"] },
         { name: "签到结果", en: "RESULT", live: true, api: "GET /api/tools/get", blocks: results.length ? [SD.table("上次结果", ["平台", "账号组", "结果", "内容"], results)] : [SD.note("暂无签到结果。", true)], actions: [] }
-    ]
+    ].concat(groupCards)
 }
 
 // ── 08 历史记录 ───────────────────────────────────────────────────────
@@ -546,12 +582,13 @@ function history(resp, filter) {
                 total++
                 if (h.status === "DONE") okN++
                 else if (h.status === "ERROR") errN++
-                rows.push([h.date.slice(11, 16) || h.date, u, h.status === "DONE" ? OK : h.status === "ERROR" ? ERR : WAIT, h.result || ""])
+                var view = SD.mini(["日志"]); view.ops = [{ historyLog: h.jsonFile, title: date + " " + (h.date.slice(11, 16) || "") + " · " + u }]
+                rows.push([h.date.slice(11, 16) || h.date, u, h.status === "DONE" ? OK : h.status === "ERROR" ? ERR : h.status === "SKIP" ? SD.tag("跳过", "idle") : WAIT, h.result || "", view])
             })
         })
         return { name: date, en: "HISTORY", live: true, api: "POST /api/history/search", blocks: [
             SD.stats("当日概览", [["记录", String(rows.length)], ["成功", String(rows.filter(function (r) { return r[2] === OK }).length)], ["异常", String(rows.filter(function (r) { return r[2] === ERR }).length)]]),
-            SD.table("记录", ["时间", "账号", "结果", "说明"], rows)], actions: [] }
+            SD.table("记录", ["时间", "账号", "结果", "说明", "操作"], rows, [0.8, 1.8, 0.8, 1.8, 0.8])], actions: [] }
     })
     var q = { name: "查询", en: "SEARCH", live: true, api: "POST /api/history/search", blocks: [
         SD.kv("筛选", [["开始日期", { c: "date", v: filter.start, k: "start" }, "start_date"], ["结束日期", { c: "date", v: filter.end, k: "end" }, "end_date"], ["合并方式", { c: "seg", opts: ["按日", "按周", "按月"], v: filter.mode, k: "mode", enum: ["DAILY", "WEEKLY", "MONTHLY"] }, "mode"]]),
@@ -607,11 +644,62 @@ function logLines(text, max) {
         return m && /\d{1,2}:\d{2}/.test(m[1]) ? [m[1].slice(-8), m[2], kind] : ["", x, kind]
     })
 }
-function dispatchCenter(snapshot, queueNames) {
+// 发起任务（与网页版调度中心的任务控制相同）：选任务与模式；队列任务以自动代理运行时可从某个脚本开始；
+// 脚本任务可只运行部分账号（全选即不限制）；完成后的电源动作选择即生效
+function launchCard(launch) {
+    var tasks = launch.tasks || []
+    var api = "POST /api/dispatch/start"
+    if (!tasks.length) return { name: "发起任务", en: "LAUNCH", live: true, api: api, blocks: [SD.note("还没有可运行的任务。", true)], actions: [] }
+    var task = SD.sel(tasks.map(function (o) { return o.label }), 0)
+    function picked() { return tasks[task.v] || {} }
+    function isQueue() { return !!launch.queueScripts[picked().value] }
+    var mode = { c: "seg", opts: ["自动代理", "循环运行"], v: 0, enum: ["AutoProxy", "CycleRun"] }
+    var rows = [["任务", task], ["运行模式", mode]]
+    // 从某脚本开始：每条队列一个下拉，只显示所选队列的那个
+    var resumes = {}
+    Object.keys(launch.queueScripts).forEach(function (qid) {
+        var opts = launch.queueScripts[qid]
+        var sel = SD.sel(["从头开始"].concat(opts.map(function (o) { return o.label })), 0)
+        resumes[qid] = { spec: sel, opts: opts }
+        rows.push(["从脚本开始", sel, "队列任务以自动代理运行时可选", function () { return picked().value === qid && valueOf(mode) === "AutoProxy" }])
+    })
+    var power = { c: "sel", opts: SD.POWER, v: idx(POWER_EN, launch.power), onPick: function (i) { return { path: "/api/dispatch/set/power", body: { signal: POWER_EN[i] }, done: "完成后：" + SD.POWER[i] } } }
+    rows.push(["完成后", power, "选择即生效"])
+    var blocks = [SD.kv("发起任务", rows)]
+    // 账号范围：每个脚本一张表，只显示所选脚本的
+    var scopes = {}
+    Object.keys(launch.users).forEach(function (sid) {
+        var list = launch.users[sid]
+        if (!list.length) return
+        var toggles = list.map(function () { return SD.tog(true) })
+        scopes[sid] = { list: list, toggles: toggles }
+        var t = SD.table("账号范围", ["账号", "本次运行"], list.map(function (u, i) { return [u.label, toggles[i]] }), [3, 1])
+        t.pageRows = 6
+        t.show = function () { return picked().value === sid }
+        blocks.push(t)
+    })
+    function body() {
+        var p = picked(), b = { taskId: p.value, mode: valueOf(mode) }
+        var r = resumes[p.value]
+        if (r && b.mode === "AutoProxy" && r.spec.v > 0) b.resumeFromScriptId = r.opts[r.spec.v - 1].value
+        var sc = scopes[p.value]
+        if (sc) {
+            var ids = sc.list.filter(function (u, i) { return !!sc.toggles[i].v }).map(function (u) { return u.value })
+            if (ids.length < sc.list.length) b.userIds = ids
+        }
+        return b
+    }
+    function anyUser() { var sc = scopes[picked().value]; return !sc || sc.toggles.some(function (t) { return !!t.v }) }
+    return { name: "发起任务", en: "LAUNCH", live: true, api: api, blocks: blocks,
+        ops: { "开始": { confirm: "将按所选任务与模式开始运行。", path: "/api/dispatch/start", body: body, reload: true, done: "已开始运行", when: anyUser } },
+        actions: ["开始"] }
+}
+function dispatchCenter(snapshot, queueNames, launch) {
     queueNames = queueNames || {}
     var tasks = snapshot && snapshot.tasks ? snapshot.tasks : []
     var api = "GET /api/dispatch/runtime-snapshot"
-    if (!tasks.length) return [{ name: "调度空闲", en: "IDLE", live: true, api: api, blocks: [SD.kv("任务", [["状态", [WAIT, "没有运行中的任务"]], ["定时关联脚本", String((snapshot.scheduledScripts || []).length) + " 个"]])], ops: { "刷新": { reload: true } }, actions: ["刷新"] }]
+    var head = launch ? [launchCard(launch)] : []
+    if (!tasks.length) return head.concat([{ name: "调度空闲", en: "IDLE", live: true, api: api, blocks: [SD.kv("任务", [["状态", [WAIT, "没有运行中的任务"]], ["定时关联脚本", String((snapshot.scheduledScripts || []).length) + " 个"]])], ops: { "刷新": { reload: true } }, actions: ["刷新"] }])
     function title(t, i) { return t.queueId && queueNames[t.queueId] ? queueNames[t.queueId] : (t.mode === "ScriptConfig" ? "脚本设置" : t.mode === "Update" ? "更新" : "任务 " + String(i + 1).padStart(2, "0")) }
     // 总览：所有同时运行的任务并排列出，一眼看到各自进行到哪
     var overview = { name: "总览", en: "OVERVIEW · " + tasks.length + " RUNNING", live: true, api: api, blocks: [
@@ -622,7 +710,7 @@ function dispatchCenter(snapshot, queueNames) {
             return [title(t, i) + (t.isCycle ? " · 循环" : ""), p.current ? p.current.name : "—", p.done + " / " + p.total, t.stopping ? [WAIT, "正在停止"] : p.current ? RUN : WAIT]
         }), [2, 2, 0.9, 1.1])
     ], ops: { "刷新": { reload: true }, "全部停止": { confirm: "将停止全部 " + tasks.length + " 个运行中的任务。", path: "/api/dispatch/stop", body: { taskId: "ALL" }, reload: true } }, actions: ["刷新", "全部停止"] }
-    return [overview].concat(tasks.map(function (t, i) {
+    return head.concat([overview]).concat(tasks.map(function (t, i) {
         var p = taskProgress(t)
         var scripts = (t.task_info || []).map(function (s) {
             var users = s.userList || [], ud = users.filter(function (u) { return u.status === "完成" }).length

@@ -72,7 +72,18 @@ FocusScope {
     // 会随运行状态变化的数据（远程桌面连接、热键控制队列等）：控件的可用条件与状态文字按它即时刷新
     property var env: ({})
     function pollDesk() {
-        if (!api) return
+        if (!api || !d) return
+        if (d.key === "emulators") {
+            // 当前模拟器的实例状态（2.0 模拟器另有面板，不在这里轮询）
+            const it = item
+            if (!it || !it.uid || !it.live || it.deviceType === "emulator2") return
+            call("/api/emulator/status", { emulatorId: it.uid }, r => {
+                const all = Object.assign({}, env.devices || {})
+                all[it.uid] = r.code === 200 && r.data ? (r.data[it.uid] || {}) : {}
+                env = Object.assign({}, env, { devices: all, deviceError: r.code === 200 ? "" : (r.message || "") })
+            })
+            return
+        }
         api.get("/api/child-session/status", text => {
             let r = null; try { r = JSON.parse(text) } catch (e) {}
             if (r && r.code === 200) env = Object.assign({}, env, { desk: r.data })
@@ -84,10 +95,13 @@ FocusScope {
     }
     Timer {
         interval: 3000; repeat: true
-        running: view.opened && !!view.api && !!view.d && view.d.key === "localControls"
+        running: view.opened && !!view.api && !!view.d && (view.d.key === "localControls" || view.d.key === "emulators")
+        triggeredOnStart: true
         onTriggered: view.pollDesk()
     }
     HotkeyRecorder { id: recorder; host: view }
+    LogViewer { id: logViewer; objectName: "logViewer"; host: view }
+    function toastText(text) { toast.show(text) }
     property var historyFilter: ({ start: "", end: "", mode: 0 })
     // 运行快照：托管脚本 / 循环队列运行时锁定对应配置，结束后解锁（与网页版一致）
     property var runtimeTasks: []
@@ -208,17 +222,38 @@ FocusScope {
             const f = historyFilter
             call("/api/history/search", { mode: ["DAILY", "WEEKLY", "MONTHLY"][f.mode], start_date: f.start, end_date: f.end }, r => r.code === 200 ? setLive(key, Live.history(r, f)) : fail(r))
         } else if (key === "scheduler") {
-            call("/api/queue/get", {}, queues => {
+            // 发起任务需要：任务列表、脚本名、各队列的队列项（从某脚本开始）、各脚本账号（账号范围）、当前电源动作
+            callAll([["q", "/api/queue/get", {}], ["t", "/api/info/combox/task", {}], ["cs", "/api/info/combox/script", {}],
+                     ["s", "/api/scripts/get", { includeUsers: true }], ["p", "/api/dispatch/get/power", {}]], m => {
                 if (!api) return
-                api.get("/api/dispatch/runtime-snapshot", text => {
-                    let snap = { tasks: [], scheduledScripts: [] }
-                    try { snap = JSON.parse(text) } catch (e) {}
-                    if (demoSnapshot) snap = demoSnapshot
-                    lastSnapshot = snap
-                    const names = {}
-                    if (queues.code === 200) queues.index.forEach(q => { const d = queues.data[q.uid]; if (d && d.Info) names[q.uid] = d.Info.Name })
-                    if (demoSnapshot && demoSnapshot.queueNames) Object.assign(names, demoSnapshot.queueNames)
-                    setLive(key, Live.dispatchCenter(snap, names))
+                const queues = m.q
+                const steps = queues.code === 200 ? queues.index.map(q => ["i" + q.uid, "/api/queue/item/get", { queueId: q.uid }]) : []
+                callAll(steps, items => {
+                    api.get("/api/dispatch/runtime-snapshot", text => {
+                        let snap = { tasks: [], scheduledScripts: [] }
+                        try { snap = JSON.parse(text) } catch (e) {}
+                        if (demoSnapshot) snap = demoSnapshot
+                        lastSnapshot = snap
+                        const names = {}
+                        if (queues.code === 200) queues.index.forEach(q => { const d = queues.data[q.uid]; if (d && d.Info) names[q.uid] = d.Info.Name })
+                        if (demoSnapshot && demoSnapshot.queueNames) Object.assign(names, demoSnapshot.queueNames)
+                        const scriptNames = {}
+                        if (m.cs.code === 200) m.cs.data.forEach(o => scriptNames[o.value] = o.label.replace(/^通用 - /, ""))
+                        const queueScripts = {}
+                        if (queues.code === 200) queues.index.forEach(q => {
+                            const r = items["i" + q.uid], seen = []
+                            if (r && r.code === 200) r.index.forEach(x => { const sid = r.data[x.uid].Info.ScriptId; if (sid && sid !== "-" && scriptNames[sid] && seen.indexOf(sid) < 0) seen.push(sid) })
+                            queueScripts[q.uid] = seen.map(sid => ({ value: sid, label: scriptNames[sid] }))
+                        })
+                        const users = {}
+                        if (m.s.code === 200) m.s.index.forEach(x => {
+                            const ur = m.s.users && m.s.users[x.uid]
+                            users[x.uid] = ur ? ur.index.map(u => ({ value: u.uid, label: (ur.data[u.uid] && ur.data[u.uid].Info && ur.data[u.uid].Info.Name) || "账号" })) : []
+                        })
+                        const launch = { tasks: m.t.code === 200 ? m.t.data.filter(o => o.value) : [], queueScripts: queueScripts, users: users,
+                                         power: m.p.code === 200 ? m.p.signal : "NoAction" }
+                        setLive(key, Live.dispatchCenter(snap, names, launch))
+                    })
                 })
             })
         }
@@ -313,15 +348,18 @@ FocusScope {
             })
             return
         }
+        if (op.historyLog) { logViewer.open(op.historyLog, op.title || ""); return }
         if (op.captureHotkey) {
             const field = op.captureHotkey
+            recorder.bossMode = !!op.boss
             recorder.begin(value => { field.v = value; field.dirty = true; panel.edits++; panel.rebuild(); toast.show("热键已录入，请保存配置后生效") })
             return
         }
-        if (op.saveFirst) { save(() => exec(op)); return }
         if (!op.path) { if (op.reload) fetchLive(d.key); return }
-        if (op.confirm) { modal.ask("确认操作", op.confirm + "此操作会写入后端。", "POST " + op.path, "确认", true, () => exec(op)); return }
-        exec(op)
+        // saveFirst：先保存未保存的改动再执行；有确认语时先确认
+        const go = () => op.saveFirst ? save(() => exec(op)) : exec(op)
+        if (op.confirm) { modal.ask("确认操作", op.confirm + "此操作会写入后端。", "POST " + op.path, "确认", true, go); return }
+        go()
     }
     function liveAction(name) {
         const page = SD.pages(item)[Math.min(panel.tab, SD.pages(item).length - 1)]

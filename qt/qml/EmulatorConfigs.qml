@@ -119,6 +119,7 @@ Item {
         else if (action==="添加") add(null)
         else if (action==="删除") remove(entry)
         else if (action==="保存") save(entry)
+        else if (entry && entry.live) host.liveAction(action)
     }
 
     C.Popup {
