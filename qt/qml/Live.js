@@ -344,6 +344,9 @@ function nowText() {
 }
 
 // ── 03 模拟器管理 ─────────────────────────────────────────────────────
+function emulatorCaption(type) {
+    return "EMULATOR · " + (type === "emulator2" ? "AUTO DETECT" : type.toUpperCase())
+}
 function emulatorRecord(uid, info) {
     const types = ["general", "mumu", "ldplayer", "emulator2"]
     const save = {path:"/api/emulator/update", base:{emulatorId:uid}}
@@ -353,7 +356,7 @@ function emulatorRecord(uid, info) {
     const bossRec = SD.mini(["录制"]); bossRec.ops = [{ captureHotkey: boss, boss: true }]
     const rows = [
         ["模拟器名称", B(SD.inp(info.Name), "Info.Name")],
-        ["模拟器类型", B(SD.seg(["通用","MuMu","雷电","2.0"],idx(types,info.Type)), "Info.Type",types)],
+        ["模拟器类型", B(SD.seg(["通用","MuMu","雷电","自动识别（推荐）"],idx(types,info.Type)), "Info.Type",types)],
         ["模拟器路径", B(SD.path(info.Path), "Info.Path")],
         ["最大等待时间", B(Object.assign(SD.num(info.MaxWaitTime ?? 300,"秒"),{min:10,max:9999}), "Info.MaxWaitTime")],
         ["老板键", [boss, bossRec], "Info.BossKey · 点「录制」后按下组合键", ["general","ldplayer"]],
@@ -381,10 +384,11 @@ function emulatorRecord(uid, info) {
     }
     const devTable = SD.table("实例", ["编号", "状态", "名称", "ADB 地址", "操作"], [], [0.7, 0.9, 1.6, 1.6, 1.4])
     devTable.rowsFn = deviceRows
-    const devices = {name:"实例", api:"POST /api/emulator/status", blocks:[devTable],
-        ops:{"刷新":{path:"/api/emulator/status", body:{emulatorId:uid}, poll:true, done:"已刷新"}}, actions:["刷新"]}
-    return {uid:uid, name:info.Name || "未命名模拟器", en:"EMULATOR · "+info.Type.toUpperCase(),
-            live:true, devicePage: devices, deviceType: info.Type, tabs: info.Type === "emulator2" ? [config] : [config, devices]}
+    devTable.deviceInstances = true
+    devTable.pageRows = 3
+    if (info.Type !== "emulator2") config.blocks.push(devTable)
+    return {uid:uid, name:info.Name || "未命名模拟器", en:emulatorCaption(info.Type),
+            live:true, deviceTable:devTable, deviceType:info.Type, tabs:[config]}
 }
 
 // ── 10 设置 / 06 本地控制（GlobalConfig） ─────────────────────────────
@@ -462,6 +466,22 @@ function local(g, port, vd, nav, ports) {
     var leaseTimeout = Object.assign(SD.num(3600, "秒"), { min: 1, max: 86400 })
     var leaseWait = SD.tog(false)
     var leaseWaitTimeout = W(Object.assign(SD.num(300, "秒"), { min: 1, max: 86400 }), leaseWait)
+    const leases = SD.table("当前借用", ["调用方", "租约 ID", "状态", "操作"], [], [1.4,2.2,1,0.8])
+    leases.pageRows = 3
+    leases.rowsFn = function (env) {
+        if (!env.desk) return [["读取中…", "", "", ""]]
+        const list = env.desk.activeLeases || []
+        if (!list.length) return [["暂无借用", "", "", ""]]
+        return list.map(function (lease) {
+            const action = SD.mini(["归还"])
+            const caller = lease.caller || "未知调用方"
+            action.ops = [{path:"/api/child-session/release", body:{leaseId:lease.leaseId},
+                off:!lease.leaseId, confirm:"归还「" + caller + "」的租约 " + lease.leaseId + "？",
+                done:"已归还该租约", poll:true}]
+            const status = {pending:"等待中", granted:"借用中", released:"已归还"}
+            return [caller, lease.leaseId || "—", status[lease.status] || lease.status || "—", action]
+        })
+    }
     var res = ["2560x1440", "1920x1080", "1600x900"]
     if (res.indexOf(C.Resolution) < 0) res.unshift(C.Resolution)
     return [
@@ -507,7 +527,7 @@ function local(g, port, vd, nav, ports) {
         // 外部程序借用：申请借用远程桌面（可断开本机画面、设超时与等待），或归还现有租约
         { name: "外部借用", en: "LEASE", live: true, api: "POST /api/child-session/acquire", blocks: [
             SD.kv("申请借用", [["调用方名称", leaseCaller], ["断开本机画面", leaseDisconnect], ["借用时长", leaseTimeout], ["排队等待", leaseWait], ["等待时长", leaseWaitTimeout]]),
-            SD.kv("当前借用", [["租约", dyn(function (e) { var l = e.desk && e.desk.activeLeases || []; return l.length ? l.map(function (x) { return (x.caller || "未知") + (x.status ? " · " + x.status : "") }).join("；") : "无" })]])
+            leases
         ], ops: {
             "申请借用": { path: "/api/child-session/acquire", body: function () { return { caller: String(leaseCaller.v).trim(), disconnectRdpView: !!leaseDisconnect.v, timeoutSeconds: Number(leaseTimeout.v), waitForGrant: !!leaseWait.v, waitTimeout: Number(leaseWaitTimeout.v) } },
                        when: function () { return String(leaseCaller.v).trim() !== "" }, done: "已申请借用", poll: true },

@@ -108,10 +108,14 @@ Item {
         const name = Live.fieldValue(entry,"Info.Name") || "未命名模拟器"
         const type = Live.fieldValue(entry,"Info.Type")
         function refreshTitle() {
-            store(records.map(e => e.uid === entry.uid ? Object.assign({}, e, {
-                name: name, en: "EMULATOR · " + type.toUpperCase(), deviceType: type,
-                tabs: type === "emulator2" ? [e.tabs[0]] : [e.tabs[0], e.devicePage]
-            }) : e))
+            store(records.map(e => {
+                if (e.uid !== entry.uid) return e
+                const config = e.tabs[0]
+                const blocks = [config.blocks[0]]
+                if (type !== "emulator2") blocks.push(e.deviceTable)
+                return Object.assign({}, e, {name:name, en:Live.emulatorCaption(type),
+                    deviceType:type, tabs:[Object.assign({}, config, {blocks:blocks})]})
+            }))
         }
         if (online) host.save(refreshTitle)
         else {Live.clearDirty(entry);refreshTitle();message("已保存预览配置")}

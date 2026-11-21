@@ -236,12 +236,18 @@ Item {
     }
     component BlockHead: RowLayout {
         property string title: ""
+        property bool refreshDevices: false
         width: parent ? parent.width : 0
         height: 24
         spacing: 12
         Rectangle { implicitWidth: 14; implicitHeight: 2; color: Theme.accent }
         Text { text: parent.title; color: Theme.muted; font.family: Theme.font; font.pixelSize: 12; font.weight: Font.Bold; font.letterSpacing: 2.6 }
         Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Theme.hair }
+        RhineButton {
+            visible: parent.refreshDevices
+            small: true; text: "刷新"; Layout.preferredHeight: 24
+            onClicked: panel.host.pollDesk()
+        }
     }
     component Btn: Rectangle {
         id: btn
@@ -972,7 +978,10 @@ Item {
                                 NumberAnimation { target: blkShift; property: "y"; to: 0; duration: 420; easing.type: Easing.OutCubic }
                             }
                         }
-                        BlockHead { visible: !!blk.modelData.title; title: blk.modelData.title || "" }
+                        BlockHead {
+                            visible: !!blk.modelData.title; title: blk.modelData.title || ""
+                            refreshDevices: !!blk.modelData.deviceInstances && !!panel.item?.live
+                        }
                         Loader {
                             width: parent.width
                             sourceComponent: blk.modelData.t === "kv" ? kvC : blk.modelData.t === "table" ? tableC
