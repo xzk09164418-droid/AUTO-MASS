@@ -32,9 +32,31 @@ function createBrowserHost(root, backendPort, lifecycle = {}) {
       fs.rmdirSync(directory)
     }
   }
-  const loadConfig = () =>
-    fs.existsSync(configPath) ? JSON.parse(fs.readFileSync(configPath, 'utf8')) : null
-  const saveConfig = (patch, defaults = {}) => services.patchConfigFile(configPath, patch, defaults)
+  const selectionPath = path.join(root, 'config', 'quick-start-selection.json')
+  const loadConfig = () => {
+    const config = fs.existsSync(configPath) ? JSON.parse(fs.readFileSync(configPath, 'utf8')) : null
+    if (!fs.existsSync(selectionPath)) return config
+    try {
+      const ids = JSON.parse(fs.readFileSync(selectionPath, 'utf8'))
+      return Array.isArray(ids) && ids.every(id => typeof id === 'string')
+        ? { ...config, homeQuickStartSelectedTaskIds: ids }
+        : config
+    } catch {
+      return config
+    }
+  }
+  const saveConfig = (patch, defaults = {}) => {
+    const { homeQuickStartSelectedTaskIds: ids, ...other } = patch
+    if (Object.keys(other).length || !fs.existsSync(configPath)) {
+      services.patchConfigFile(configPath, other, defaults)
+    }
+    if (Array.isArray(ids)) {
+      const temp = selectionPath + '.' + process.pid + '.tmp'
+      fs.writeFileSync(temp, JSON.stringify(ids))
+      fs.renameSync(temp, selectionPath)
+    }
+    return loadConfig()
+  }
   const openLocalPath = (target, reveal = false) =>
     new Promise((resolve, reject) => {
       const resolved = path.resolve(target)

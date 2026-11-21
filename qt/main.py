@@ -18,13 +18,20 @@ from pathlib import Path
 from PySide6.QtCore import QTimer, QUrl
 from PySide6.QtGui import QGuiApplication, QIcon, QSurfaceFormat
 from PySide6.QtQml import QQmlApplicationEngine
+from PySide6.QtWidgets import QApplication
 
 QT_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(QT_DIR))
+sys.path.insert(0, str(QT_DIR.parent))
 
-from automas_qt.file_locations import FileLocations
+from automas_qt.activity import ActivityFeed  # noqa: E402
 from automas_qt.backend import BackendSupervisor  # noqa: E402
-from automas_qt.enhanced import EnhancedComponent, preload_libraries_async, saved_motion  # noqa: E402
+from automas_qt.desktop_tools import DesktopTools  # noqa: E402
+from automas_qt.enhanced import (  # noqa: E402
+    EnhancedComponent,
+    preload_libraries_async,
+    saved_motion,
+)
 from automas_qt.exeicon import ExeIconProvider  # noqa: E402
 
 
@@ -65,7 +72,7 @@ def main() -> int:
     # 4× 多重采样：旋转的玻璃卡、透视卡带、斜线等边缘不再出现锯齿
     fmt.setSamples(4)
     QSurfaceFormat.setDefaultFormat(fmt)
-    app = QGuiApplication(sys.argv)
+    app = QApplication(sys.argv)
     app.setApplicationName("AUTO-MASS")
     app.setOrganizationName("AUTO-MAS")
     icon = QT_DIR.parent / "res" / "icons" / "AUTO-MAS.ico"
@@ -80,8 +87,10 @@ def main() -> int:
     engine.warnings.connect(
         lambda warnings: [print(w.toString(), file=sys.stderr, flush=True) for w in warnings]
     )
-    locations = FileLocations(engine)
+    locations = DesktopTools(engine)
     engine.rootContext().setContextProperty("fileLocations", locations)
+    feeds = ActivityFeed(engine)
+    engine.rootContext().setContextProperty("activityFeed", feeds)
     engine.setInitialProperties(
         {
             "backend": backend,
@@ -121,7 +130,7 @@ def main() -> int:
 
         QTimer.singleShot(abs(args.after), capture)
 
-    return app.exec()
+    return QGuiApplication.exec()
 
 
 if __name__ == "__main__":
