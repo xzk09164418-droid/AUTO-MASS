@@ -76,12 +76,10 @@ Item {
             department: tile.d.key
             ink: tile.textColor
             accent: Theme.accent
-            width: parent.width * (tile.isBlock || tile.isCard ? 1.12 : 0.8)
+            width: parent.width * tile.d.art.w
             height: width * 0.625
-            anchors.right: parent.right
-            anchors.rightMargin: -parent.width * 0.12
-            anchors.bottom: parent.bottom
-            anchors.bottomMargin: -height * 0.14
+            x: parent.width * tile.d.art.x - width / 2
+            y: parent.height * tile.d.art.y - height / 2
             opacity: tile.isBlock ? 0.17 : 0.13
         }
     }
