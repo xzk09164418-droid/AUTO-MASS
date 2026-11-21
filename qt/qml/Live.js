@@ -46,6 +46,7 @@ function collect(item) {
     var groups = {}, order = []
     eachSpec(item, function (spec, page) {
         if (!spec.dirty || !spec.key) return
+        if (spec.skipEmpty && spec.v === "") return        // 留空表示不修改（如已设置的密码）
         var target = spec.save || page.save
         if (!target) return
         var id = JSON.stringify(target)
@@ -89,19 +90,16 @@ function general(uid, c, ur, i) {
                 ["备注", B(SD.inp(info.Notes),"Info.Notes")],
                 ["配置来源", B(SD.sel(["独立","共享","原生"],idx(["independent","shared","native"],info.Base)),"Info.Base",["independent","shared","native"])]
             ]),
+            // 开关与路径 / 地址同排，一页放得下，不需要滚动
             SD.kv("额外脚本",[
-                ["启用前置脚本",B(SD.tog(info.IfScriptBeforeTask),"Info.IfScriptBeforeTask")],
-                ["前置脚本",B(SD.path(info.ScriptBeforeTask),"Info.ScriptBeforeTask")],
-                ["启用后置脚本",B(SD.tog(info.IfScriptAfterTask),"Info.IfScriptAfterTask")],
-                ["后置脚本",B(SD.path(info.ScriptAfterTask),"Info.ScriptAfterTask")]
+                ["前置脚本",[B(SD.tog(info.IfScriptBeforeTask),"Info.IfScriptBeforeTask"),B(SD.path(info.ScriptBeforeTask),"Info.ScriptBeforeTask")]],
+                ["后置脚本",[B(SD.tog(info.IfScriptAfterTask),"Info.IfScriptAfterTask"),B(SD.path(info.ScriptAfterTask),"Info.ScriptAfterTask")]]
             ]),
             SD.kv("通知设置",[
                 ["启用通知",B(SD.tog(notify.Enabled),"Notify.Enabled")],
                 ["发送统计",B(SD.tog(notify.IfSendStatistic),"Notify.IfSendStatistic")],
-                ["邮件通知",B(SD.tog(notify.IfSendMail),"Notify.IfSendMail")],
-                ["接收邮箱",B(SD.inp(notify.ToAddress),"Notify.ToAddress")],
-                ["Server 酱推送",B(SD.tog(notify.IfServerChan),"Notify.IfServerChan")],
-                ["SendKey",B(Object.assign(SD.inp(notify.ServerChanKey),{secret:true}),"Notify.ServerChanKey")]
+                ["邮件通知",[B(SD.tog(notify.IfSendMail),"Notify.IfSendMail"),B(SD.inp(notify.ToAddress),"Notify.ToAddress")],"收信邮箱"],
+                ["Server 酱",[B(SD.tog(notify.IfServerChan),"Notify.IfServerChan"),B(Object.assign(SD.inp(notify.ServerChanKey),{secret:true}),"Notify.ServerChanKey")],"推送密钥"]
             ])
         ],actions:["保存","Webhook","添加账号","删除账号"],ops:{"删除账号":{path:"/api/scripts/user/delete",body:target.base,confirm:"删除该账号？",reload:true}}}
     })
@@ -123,19 +121,27 @@ function general(uid, c, ur, i) {
             ]),
             SD.note("支持编辑 UTF-8 配置，保存前会自动备份。在源程序内修改设置后，请先保存，再结束设置会话。",true)
         ], actions: ["保存", "添加账号", "立即运行", "删除脚本"] },
-        { name: "配置", api: save.path, save: save, blocks: [
-            SD.kv("脚本配置", [
+        // 原「配置」一页有 17 行，按「启动 / 日志 / 规则」拆成三页，各页不需要滚动
+        { name: "启动", api: save.path, save: save, blocks: [
+            SD.kv("启动程序", [
                 ["启动程序", B(SD.path(S.ScriptPath),"Script.ScriptPath")], ["启动参数",B(SD.inp(S.Arguments,true),"Script.Arguments")],
-                ["回写配置", B(SD.seg(["从不","成功时","失败时","总是"],idx(["Never","Success","Failure","Always"],S.UpdateConfigMode)), "Script.UpdateConfigMode",["Never","Success","Failure","Always"])],
+                ["回写配置", B(SD.seg(["从不","成功时","失败时","总是"],idx(["Never","Success","Failure","Always"],S.UpdateConfigMode)), "Script.UpdateConfigMode",["Never","Success","Failure","Always"])]
+            ]),
+            SD.kv("进程追踪", [
                 ["追踪子进程",B(SD.tog(S.IfTrackProcess),"Script.IfTrackProcess")], ["进程名",B(SD.inp(S.TrackProcessName),"Script.TrackProcessName")],
                 ["进程程序路径",B(SD.path(S.TrackProcessExe),"Script.TrackProcessExe")], ["命令行匹配",B(SD.inp(S.TrackProcessCmdline),"Script.TrackProcessCmdline")]
-            ]),
-            SD.kv("LOG FILE", [["日志路径", B(SD.path(S.LogPath), "Script.LogPath"), "Script.LogPath"], ["路径日期格式", B(SD.inp(S.LogPathFormat, true), "Script.LogPathFormat"), "Script.LogPathFormat"], ["时间戳位置", [B(SD.num(S.LogTimeStart), "Script.LogTimeStart"), SD.unit("至"), B(SD.num(S.LogTimeEnd), "Script.LogTimeEnd"), SD.unit("列")], "Script.LogTimeStart / LogTimeEnd"], ["时间格式", B(SD.inp(S.LogTimeFormat, true), "Script.LogTimeFormat"), "Script.LogTimeFormat"]]),
-            SD.kv("MATCH", [["成功判定", [B(SD.inp(S.SuccessLog), "Script.SuccessLog"), B(SD.seg(["关键字", "正则"], idx(["Split", "Regex"], S.SuccessLogMode)), "Script.SuccessLogMode", ["Split", "Regex"])], "Script.SuccessLog / SuccessLogMode"], ["失败判定", [B(SD.inp(S.ErrorLog), "Script.ErrorLog"), B(SD.seg(["关键字", "正则"], idx(["Split", "Regex"], S.ErrorLogMode)), "Script.ErrorLogMode", ["Split", "Regex"])], "Script.ErrorLog / ErrorLogMode"], ["日志预处理", B(SD.tog(S.LogHookEnabled), "Script.LogHookEnabled"), "Script.LogHookEnabled"], ["推送日志", B(SD.tog(S.PushLogEnabled), "Script.PushLogEnabled"), "Script.PushLogEnabled"]]),
-            SD.kv("规则", [["预处理规则",B(SD.inp(S.LogHookRules,true),"Script.LogHookRules")],["推送规则",B(SD.inp(S.PushLogPatterns,true),"Script.PushLogPatterns")]])
+            ])
+        ], actions: ["保存"] },
+        { name: "日志", api: save.path, save: save, blocks: [
+            SD.kv("日志文件", [["日志路径", B(SD.path(S.LogPath), "Script.LogPath"), "Script.LogPath"], ["路径日期格式", B(SD.inp(S.LogPathFormat, true), "Script.LogPathFormat"), "Script.LogPathFormat"], ["时间戳位置", [B(SD.num(S.LogTimeStart), "Script.LogTimeStart"), SD.unit("至"), B(SD.num(S.LogTimeEnd), "Script.LogTimeEnd"), SD.unit("列")], "Script.LogTimeStart / LogTimeEnd"], ["时间格式", B(SD.inp(S.LogTimeFormat, true), "Script.LogTimeFormat"), "Script.LogTimeFormat"]]),
+            SD.kv("结果判定", [["成功判定", [B(SD.inp(S.SuccessLog), "Script.SuccessLog"), B(SD.seg(["关键字", "正则"], idx(["Split", "Regex"], S.SuccessLogMode)), "Script.SuccessLogMode", ["Split", "Regex"])], "Script.SuccessLog / SuccessLogMode"], ["失败判定", [B(SD.inp(S.ErrorLog), "Script.ErrorLog"), B(SD.seg(["关键字", "正则"], idx(["Split", "Regex"], S.ErrorLogMode)), "Script.ErrorLogMode", ["Split", "Regex"])], "Script.ErrorLog / ErrorLogMode"]])
+        ], actions: ["保存"] },
+        { name: "规则", api: save.path, save: save, blocks: [
+            SD.kv("日志预处理", [["启用预处理", B(SD.tog(S.LogHookEnabled), "Script.LogHookEnabled"), "Script.LogHookEnabled"], ["预处理规则",B(SD.inp(S.LogHookRules,true),"Script.LogHookRules")]]),
+            SD.kv("日志推送", [["启用推送", B(SD.tog(S.PushLogEnabled), "Script.PushLogEnabled"), "Script.PushLogEnabled"], ["推送规则",B(SD.inp(S.PushLogPatterns,true),"Script.PushLogPatterns")]])
         ], actions: ["保存"] },
         { name: "限制", api: save.path, save: save, blocks: [
-            SD.kv("RUN LIMIT", [["单账号总时限", B(SD.num(R.HardTimeLimit, "分钟"), "Run.HardTimeLimit"), "Run.HardTimeLimit"], ["单次运行时限", B(SD.num(R.RunTimeLimit, "分钟"), "Run.RunTimeLimit"), "Run.RunTimeLimit"], ["单次重试次数", B(SD.num(R.RunTimesLimit, "次"), "Run.RunTimesLimit"), "Run.RunTimesLimit"], ["每日代理上限", B(SD.num(R.ProxyTimesLimit, "次 · 0 为不限"), "Run.ProxyTimesLimit"), "Run.ProxyTimesLimit"]]),
+            SD.kv("运行限制", [["单账号总时限", B(SD.num(R.HardTimeLimit, "分钟"), "Run.HardTimeLimit"), "Run.HardTimeLimit"], ["单次运行时限", B(SD.num(R.RunTimeLimit, "分钟"), "Run.RunTimeLimit"), "Run.RunTimeLimit"], ["单次重试次数", B(SD.num(R.RunTimesLimit, "次"), "Run.RunTimesLimit"), "Run.RunTimesLimit"], ["每日代理上限", B(SD.num(R.ProxyTimesLimit, "次 · 0 为不限"), "Run.ProxyTimesLimit"), "Run.ProxyTimesLimit"]]),
             SD.kv("清理与恢复", [
                 ["清理范围",B(SD.seg(["跨会话强力","仅本轮","当前会话"],idx(["Force","Tracked","Session"],S.TaskKillMode)),"Script.TaskKillMode",["Force","Tracked","Session"])],
                 ["清理清单", B({c:"entries", v:S.TaskKill || [], kind:"cleanup"},"Script.TaskKill")],
@@ -143,8 +149,8 @@ function general(uid, c, ur, i) {
             ])
         ], actions: ["保存"] },
         { name: "游戏", api: save.path, save: save, blocks: [
-            SD.kv("GAME", [["随脚本启动游戏", B(SD.tog(G.Enabled), "Game.Enabled"), "Game.Enabled"], ["启动方式", B(SD.seg(["模拟器", "客户端", "URL 协议"], gameType), "Game.Type", ["Emulator", "Client", "URL"]), "Game.Type"], ["游戏路径", B(SD.path(G.Path), "Game.Path"), "Game.Path"], ["协议地址", B(SD.inp(G.URL, true), "Game.URL"), "Game.URL"], ["进程名", B(SD.inp(G.ProcessName, true), "Game.ProcessName"), "Game.ProcessName"], ["启动参数", B(SD.inp(G.Arguments, true), "Game.Arguments"), "Game.Arguments"], ["启动后等待", B(SD.num(G.WaitTime, "秒"), "Game.WaitTime"), "Game.WaitTime"], ["结束后强制关闭", B(SD.tog(G.IfForceClose), "Game.IfForceClose"), "Game.IfForceClose"]]),
-            SD.kv("EMULATOR", [["模拟器", G.EmulatorId === "-" ? "未选择" : G.EmulatorId, "Game.EmulatorId"], ["实例", G.EmulatorIndex === "-" ? "未选择" : G.EmulatorIndex, "Game.EmulatorIndex"]])
+            SD.kv("游戏启动", [["随脚本启动游戏", B(SD.tog(G.Enabled), "Game.Enabled"), "Game.Enabled"], ["启动方式", B(SD.seg(["模拟器", "客户端", "URL 协议"], gameType), "Game.Type", ["Emulator", "Client", "URL"]), "Game.Type"], ["游戏路径", B(SD.path(G.Path), "Game.Path"), "Game.Path"], ["协议地址", B(SD.inp(G.URL, true), "Game.URL"), "Game.URL"], ["进程名", B(SD.inp(G.ProcessName, true), "Game.ProcessName"), "Game.ProcessName"], ["启动参数", B(SD.inp(G.Arguments, true), "Game.Arguments"), "Game.Arguments"], ["启动后等待", B(SD.num(G.WaitTime, "秒"), "Game.WaitTime"), "Game.WaitTime"], ["结束后强制关闭", B(SD.tog(G.IfForceClose), "Game.IfForceClose"), "Game.IfForceClose"]]),
+            SD.kv("模拟器", [["模拟器", G.EmulatorId === "-" ? "未选择" : G.EmulatorId, "Game.EmulatorId"], ["实例", G.EmulatorIndex === "-" ? "未选择" : G.EmulatorIndex, "Game.EmulatorIndex"]])
         ], actions: ["保存"] }
     ].concat(accounts) }
 }
@@ -162,21 +168,36 @@ function queues(qresp, times, qitems, scriptOpts, scriptPaths) {
     scriptPaths = scriptPaths || {}
     var names = scriptOpts.map(function (o) { return o.label.replace(/^通用 - /, "") }), values = scriptOpts.map(function (o) { return o.value })
     var power = ["NoAction", "KillSelf", "RestartSelf", "Sleep", "Hibernate", "Logoff", "Shutdown", "ShutdownForce", "Reboot"]
+    // 还没有队列时留一张空卡，用来新建第一条队列
+    if (!qresp.index.length) return [{ name: "暂无队列", en: "QUEUE · 00", live: true, uid: "", icon: "", accounts: [], configRow: false, api: "POST /api/queue/add",
+        blocks: [SD.note("还没有调度队列。新建后可在这里设置定时、循环与队列项。", true)],
+        ops: { "新建队列": { path: "/api/queue/add", body: {}, reload: true, done: "已新建队列" } }, actions: ["新建队列"] }]
     return qresp.index.map(function (q, i) {
         var qid = q.uid, I = qresp.data[qid].Info
         var save = { path: "/api/queue/update", base: { queueId: qid } }
         var ts = times[qid] || { index: [], data: {} }, it = qitems[qid] || { index: [], data: {} }
+        // 行尾「删除」：确认后删除该定时 / 队列项并重新读取
+        function remover(path, body, what) {
+            var m = SD.mini(["删除"]); m.ops = [{ confirm: "将删除这条" + what + "。", path: path, body: body, reload: true, done: "已删除" + what }]; return m
+        }
         var trows = ts.index.map(function (t) {
             var d = ts.data[t.uid].Info, s = { path: "/api/queue/time/update", base: { queueId: qid, timeSetId: t.uid } }
-            return [B(SD.tog(d.Enabled), "Info.Enabled", null, s), B(SD.chips(mask(d.Days)), "Info.Days", null, s), B(SD.time(d.Time), "Info.Time", null, s)]
+            return [B(SD.tog(d.Enabled), "Info.Enabled", null, s), B(SD.chips(mask(d.Days)), "Info.Days", null, s), B(SD.time(d.Time), "Info.Time", null, s),
+                    remover("/api/queue/time/delete", { queueId: qid, timeSetId: t.uid }, "定时")]
         })
-        var irows = it.index.map(function (t) {
+        // 队列项分两页：「队列项」管脚本、执行周期与删除；「循环」管循环调度的方式与间隔
+        var irows = [], crows = []
+        it.index.forEach(function (t) {
             var d = it.data[t.uid], s = { path: "/api/queue/item/update", base: { queueId: qid, queueItemId: t.uid } }
             var sc = d.Schedule, interval = sc.Mode === "interval"
             var next = sc.NextRunAt && sc.NextRunAt.indexOf("2000-01-01") !== 0 ? sc.NextRunAt.slice(5, 16) : "—"
-            return [B(SD.sel(names, idx(values, d.Info.ScriptId)), "Info.ScriptId", values, s), B(SD.tog(sc.Enabled), "Schedule.Enabled", null, s),
-                    B(SD.seg(["定时", "间隔"], interval ? 1 : 0), "Schedule.Mode", ["fixed_time", "interval"], s),
-                    interval ? B(SD.num(sc.IntervalMinutes, "分钟"), "Schedule.IntervalMinutes", null, s) : B(SD.time(sc.Time), "Schedule.Time", null, s), next]
+            var sid = d.Info.ScriptId, sname = sid && values.indexOf(sid) >= 0 ? names[values.indexOf(sid)] : "未选择脚本"
+            irows.push([B(SD.sel(names, idx(values, sid)), "Info.ScriptId", values, s), B(SD.chips(mask(sc.Days)), "Schedule.Days", null, s), next,
+                        remover("/api/queue/item/delete", { queueId: qid, queueItemId: t.uid }, "队列项")])
+            crows.push([sname, B(SD.tog(sc.Enabled), "Schedule.Enabled", null, s),
+                        B(SD.seg(["定时", "间隔"], interval ? 1 : 0), "Schedule.Mode", ["fixed_time", "interval"], s),
+                        interval ? B(SD.num(sc.IntervalMinutes, "分钟"), "Schedule.IntervalMinutes", null, s) : B(SD.time(sc.Time), "Schedule.Time", null, s),
+                        B(SD.seg(["开始", "结束"], idx(["start", "finish"], sc.IntervalAnchor)), "Schedule.IntervalAnchor", ["start", "finish"], s)])
         })
         // 3D 阵列：列内各行 = 队列配置 + 各队列项（以所选脚本的启动程序图标作唱片）
         var rowNames = it.index.map(function (t) { var sid = it.data[t.uid].Info.ScriptId; return sid && values.indexOf(sid) >= 0 ? names[values.indexOf(sid)] : "未选择脚本" })
@@ -187,22 +208,27 @@ function queues(qresp, times, qitems, scriptOpts, scriptPaths) {
             ops: {
                 "立即运行": { confirm: "将立即运行队列「" + I.Name + "」。", path: "/api/dispatch/start", body: { taskId: qid, mode: I.CycleEnabled ? "CycleRun" : "AutoProxy" }, done: "已开始运行" },
                 "删除队列": { confirm: "将删除队列「" + I.Name + "」及其定时和队列项。", path: "/api/queue/delete", body: { queueId: qid }, reload: true },
+                "新建队列": { path: "/api/queue/add", body: {}, reload: true, done: "已新建队列" },
                 "添加定时": { path: "/api/queue/time/add", body: { queueId: qid }, reload: true, done: "已添加定时" },
                 "添加脚本": { path: "/api/queue/item/add", body: { queueId: qid }, reload: true, done: "已添加队列项" }
             },
             tabs: [
             { name: "调度", api: save.path, save: save, blocks: [
-                SD.kv("SCHEDULE", [["队列名称", B(SD.inp(I.Name), "Info.Name"), "Info.Name"], ["定时启动", B(SD.tog(I.TimeEnabled, "time"), "Info.TimeEnabled"), "Info.TimeEnabled"], ["循环队列", B(SD.tog(I.CycleEnabled, "cycle"), "Info.CycleEnabled"), "Info.CycleEnabled"], ["启动时运行", B(SD.seg(["从不", "每次", "每日首次"], idx(["Never", "Always", "DailyFirst"], I.StartUpMode)), "Info.StartUpMode", ["Never", "Always", "DailyFirst"]), "Info.StartUpMode"], ["完成后", B(SD.sel(SD.POWER, idx(power, I.AfterAccomplish)), "Info.AfterAccomplish", power), "Info.AfterAccomplish"], ["延时执行", B(SD.num(I.AfterAccomplishDelay, "分钟"), "Info.AfterAccomplishDelay"), "Info.AfterAccomplishDelay"]]),
-                SD.kv("HOOKS", [["运行前脚本", B(SD.tog(I.IfScriptBeforeTask), "Info.IfScriptBeforeTask"), "Info.IfScriptBeforeTask"], ["前脚本路径", B(SD.path(I.ScriptBeforeTask), "Info.ScriptBeforeTask"), "Info.ScriptBeforeTask"], ["运行后脚本", B(SD.tog(I.IfScriptAfterTask), "Info.IfScriptAfterTask"), "Info.IfScriptAfterTask"], ["后脚本路径", B(SD.path(I.ScriptAfterTask), "Info.ScriptAfterTask"), "Info.ScriptAfterTask"]])
-            ], actions: ["保存", "立即运行", "删除队列"] },
+                SD.kv("调度", [["队列名称", B(SD.inp(I.Name), "Info.Name"), "Info.Name"], ["定时启动", B(SD.tog(I.TimeEnabled, "time"), "Info.TimeEnabled"), "Info.TimeEnabled"], ["循环队列", B(SD.tog(I.CycleEnabled, "cycle"), "Info.CycleEnabled"), "Info.CycleEnabled"], ["启动时运行", B(SD.seg(["从不", "每次", "每日首次"], idx(["Never", "Always", "DailyFirst"], I.StartUpMode)), "Info.StartUpMode", ["Never", "Always", "DailyFirst"]), "Info.StartUpMode"], ["完成后", B(SD.sel(SD.POWER, idx(power, I.AfterAccomplish)), "Info.AfterAccomplish", power), "Info.AfterAccomplish"], ["延时执行", B(SD.num(I.AfterAccomplishDelay, "分钟"), "Info.AfterAccomplishDelay"), "Info.AfterAccomplishDelay"]]),
+                SD.kv("前后脚本", [["运行前脚本", [B(SD.tog(I.IfScriptBeforeTask), "Info.IfScriptBeforeTask"), B(SD.path(I.ScriptBeforeTask), "Info.ScriptBeforeTask")], "Info.IfScriptBeforeTask / ScriptBeforeTask"], ["运行后脚本", [B(SD.tog(I.IfScriptAfterTask), "Info.IfScriptAfterTask"), B(SD.path(I.ScriptAfterTask), "Info.ScriptAfterTask")], "Info.IfScriptAfterTask / ScriptAfterTask"]])
+            ], actions: ["保存", "立即运行", "新建队列", "删除队列"] },
             { name: "定时", api: "POST /api/queue/time/update", blocks: [
-                SD.table("TIME SET", ["启用", "周期", "时间"], trows.slice(0, 9), [1, 2.6, 1]),
+                SD.table("定时", ["启用", "周期", "时间", "操作"], trows, [1, 2.6, 1, 0.8]),
                 SD.note(I.CycleEnabled ? "循环队列与定时启动互斥：开启循环后，按「队列项」中各脚本自己的周期持续运行。" : "同一队列可设置多个定时；周期为空时该定时不会触发。")
             ], actions: ["保存", "添加定时"] },
             { name: "队列项", api: "POST /api/queue/item/update", blocks: [
-                (function () { var t = SD.table("ITEMS", ["脚本", "参与循环", "方式", "时间 / 间隔", "下次运行"], irows.slice(0, 12), [2.4, 1.1, 1.4, 1.3, 1]); t.all = irows; t.offset = 0; return t })(),
-                SD.note(irows.length > 10 ? "共 " + irows.length + " 项，这里列出前 10 项。「参与循环」「方式」「间隔」只在循环队列中生效。" : "「参与循环」「方式」「间隔」只在循环队列中生效；间隔可从上次开始或上次结束计时。")
-            ], actions: ["保存", "添加脚本"] }
+                (function () { var t = SD.table("队列项", ["脚本", "执行周期", "下次运行", "操作"], irows, [2, 2.6, 1.1, 0.8]); t.queueRows = true; return t })(),
+                SD.note("执行周期、方式、间隔只在循环队列中生效。")
+            ], actions: ["保存", "添加脚本"] },
+            { name: "循环", api: "POST /api/queue/item/update", blocks: [
+                SD.table("循环调度", ["脚本", "参与循环", "方式", "时间 / 间隔", "间隔起点"], crows, [2, 1, 1.3, 1.4, 1.3]),
+                SD.note("间隔从上次开始或上次结束起算；这些设置只在循环队列中生效。")
+            ], actions: ["保存"] }
         ] }
     })
 }
@@ -235,15 +261,31 @@ function settings(g, version) {
     var save = { path: "/api/setting/update", base: {} }, api = "POST /api/setting/update"
     var F = g.Function, N = g.Notify, U = g.Update, R = g.Replay
     var keep = [7, 15, 30, 60, 90, 180, 365, 0]
+    var push = ["不推送", "任何时刻", "仅失败时"]
+    function secret(v, key) { return B(Object.assign(SD.inp(v), { secret: true }), key) }
+    var testNotify = { "测试通知": { saveFirst: true, path: "/api/setting/test_notify", body: {}, done: "已发送测试通知" } }
     return [
-        { name: "启动与界面", en: "START · UI", live: true, api: api, save: save, blocks: [SD.kv("START", [["开机自启", B(SD.tog(g.Start.IfSelfStart), "Start.IfSelfStart"), "Start.IfSelfStart"], ["启动后最小化", B(SD.tog(g.Start.IfMinimizeDirectly), "Start.IfMinimizeDirectly"), "Start.IfMinimizeDirectly"], ["显示托盘图标", B(SD.tog(g.UI.IfShowTray), "UI.IfShowTray"), "UI.IfShowTray"], ["关闭到托盘", B(SD.tog(g.UI.IfToTray), "UI.IfToTray"), "UI.IfToTray"], ["隐藏关闭按钮", B(SD.tog(g.UI.IfHideCloseButton), "UI.IfHideCloseButton"), "UI.IfHideCloseButton"], ["主题", SD.segk(["跟随系统", "浅色", "深色"], 0, "theme"), "客户端设置"], ["动态效果", SD.segk(["减少", "标准", "增强"], 1, "motion"), "客户端设置"]])], actions: ["保存"] },
-        { name: "功能", en: "FUNCTION", live: true, api: api, save: save, blocks: [SD.kv("BEHAVIOR", [["历史记录保留", B(SD.sel(["7 天", "15 天", "30 天", "60 天", "90 天", "180 天", "365 天", "永久"], idx(keep, F.HistoryRetentionTime)), "Function.HistoryRetentionTime", keep), "Function.HistoryRetentionTime"], ["运行时允许睡眠", B(SD.tog(F.IfAllowSleep), "Function.IfAllowSleep"), "Function.IfAllowSleep"], ["静默模式", B(SD.tog(F.IfSilence), "Function.IfSilence"), "Function.IfSilence"], ["屏蔽模拟器广告", B(SD.tog(F.IfBlockAd), "Function.IfBlockAd"), "Function.IfBlockAd"], ["匿名遥测", B(SD.tog(F.IfEnableTelemetry), "Function.IfEnableTelemetry"), "Function.IfEnableTelemetry"], ["语音提示", B(SD.tog(g.Voice.Enabled), "Voice.Enabled"), "Voice.Enabled"], ["语音风格", B(SD.seg(["简洁", "热闹"], idx(["simple", "noisy"], g.Voice.Type)), "Voice.Type", ["simple", "noisy"]), "Voice.Type"]])], actions: ["保存"] },
-        { name: "通知", en: "NOTIFY", live: true, api: api, save: save, blocks: [SD.kv("CHANNELS", [["任务结果推送", B(SD.seg(["不推送", "任何时刻", "仅失败时"], idx(["不推送", "任何时刻", "仅失败时"], N.SendTaskResultTime)), "Notify.SendTaskResultTime", ["不推送", "任何时刻", "仅失败时"]), "Notify.SendTaskResultTime"], ["发送统计", B(SD.tog(N.IfSendStatistic), "Notify.IfSendStatistic"), "Notify.IfSendStatistic"], ["系统通知", B(SD.tog(N.IfPushPlyer), "Notify.IfPushPlyer"), "Notify.IfPushPlyer"], ["邮件", B(SD.tog(N.IfSendMail), "Notify.IfSendMail"), "Notify.IfSendMail"], ["Server 酱", B(SD.tog(N.IfServerChan), "Notify.IfServerChan"), "Notify.IfServerChan"], ["Koishi", B(SD.tog(N.IfKoishiSupport), "Notify.IfKoishiSupport"), "Notify.IfKoishiSupport"], ["OpenClaw QQ", B(SD.tog(N.IfOpenClawQQ), "Notify.IfOpenClawQQ"), "Notify.IfOpenClawQQ"]])],
-          ops: { "测试通知": { path: "/api/setting/test_notify", body: {}, done: "已发送测试通知" } }, actions: ["保存", "测试通知"] },
-        { name: "更新", en: "UPDATE", live: true, api: api, save: save, blocks: [SD.kv("UPDATE", [["当前版本", version || "—"], ["自动更新", B(SD.tog(U.IfAutoUpdate), "Update.IfAutoUpdate"), "Update.IfAutoUpdate"], ["更新源", B(SD.sel(["GitHub", "Mirror 酱", "AutoSite", "CNB"], idx(["GitHub", "MirrorChyan", "AutoSite", "CNB"], U.Source)), "Update.Source", ["GitHub", "MirrorChyan", "AutoSite", "CNB"]), "Update.Source"], ["更新渠道", B(SD.seg(["稳定版", "测试版"], idx(["stable", "beta"], U.Channel)), "Update.Channel", ["stable", "beta"]), "Update.Channel"], ["GitHub 加速", B(SD.seg(["自动", "关闭"], idx(["Auto", "Off"], U.GitHubMirror)), "Update.GitHubMirror", ["Auto", "Off"]), "Update.GitHubMirror"], ["代理地址", B(SD.inp(U.ProxyAddress, true), "Update.ProxyAddress"), "Update.ProxyAddress"]])], actions: ["保存"] },
-        { name: "录像回放", en: "REPLAY · OBS", live: true, api: api, save: save, blocks: [SD.kv("OBS", [["任务录像", B(SD.tog(R.Enabled), "Replay.Enabled"), "Replay.Enabled"], ["OBS 端口", B(SD.num(R.Port), "Replay.Port"), "Replay.Port"], ["最多保留", B(SD.num(R.MaxReplayCount, "段"), "Replay.MaxReplayCount"), "Replay.MaxReplayCount"], ["密码", R.PasswordConfigured ? "已设置" : "未设置"]]), SD.note("通过 OBS WebSocket 录制每个账号的任务过程，可在历史记录中回看。")],
-          ops: { "检查连接": { path: "/api/setting/obs/check", body: {}, done: "OBS 连接正常" } }, actions: ["保存", "检查连接"] },
-        { name: "高级与关于", en: "ADVANCED", live: true, api: "POST /api/setting/backup", blocks: [SD.kv("ABOUT", [["版本", version || "—"], ["字体", "MiSans（小米）· 许可见 NOTICE"], ["视觉参考", "LBEILC / RhineLabUI（MIT）"]])], actions: [] }
+        { name: "启动与界面", en: "START · UI", live: true, api: api, save: save, blocks: [SD.kv("启动与界面", [["开机自启", B(SD.tog(g.Start.IfSelfStart), "Start.IfSelfStart"), "Start.IfSelfStart"], ["启动后最小化", B(SD.tog(g.Start.IfMinimizeDirectly), "Start.IfMinimizeDirectly"), "Start.IfMinimizeDirectly"], ["显示托盘图标", B(SD.tog(g.UI.IfShowTray), "UI.IfShowTray"), "UI.IfShowTray"], ["关闭到托盘", B(SD.tog(g.UI.IfToTray), "UI.IfToTray"), "UI.IfToTray"], ["隐藏关闭按钮", B(SD.tog(g.UI.IfHideCloseButton), "UI.IfHideCloseButton"), "UI.IfHideCloseButton"], ["主题", SD.segk(["跟随系统", "浅色", "深色"], 0, "theme"), "客户端设置"], ["动态效果", SD.segk(["减少", "标准", "增强"], 1, "motion"), "客户端设置"]])], actions: ["保存"] },
+        { name: "功能", en: "FUNCTION", live: true, api: api, save: save, blocks: [
+            SD.kv("运行", [["历史记录保留", B(SD.sel(["7 天", "15 天", "30 天", "60 天", "90 天", "180 天", "365 天", "永久"], idx(keep, F.HistoryRetentionTime)), "Function.HistoryRetentionTime", keep), "Function.HistoryRetentionTime"], ["运行时允许睡眠", B(SD.tog(F.IfAllowSleep), "Function.IfAllowSleep"), "Function.IfAllowSleep"], ["静默模式", B(SD.tog(F.IfSilence), "Function.IfSilence"), "Function.IfSilence"], ["屏蔽模拟器广告", B(SD.tog(F.IfBlockAd), "Function.IfBlockAd"), "Function.IfBlockAd"], ["哔哩哔哩协议弹窗", B(SD.tog(F.IfAgreeBilibili), "Function.IfAgreeBilibili"), "Function.IfAgreeBilibili"], ["匿名遥测", B(SD.tog(F.IfEnableTelemetry), "Function.IfEnableTelemetry"), "Function.IfEnableTelemetry"]]),
+            SD.kv("语音", [["语音提示", B(SD.tog(g.Voice.Enabled), "Voice.Enabled"), "Voice.Enabled"], ["语音风格", B(SD.seg(["简洁", "聒噪"], idx(["simple", "noisy"], g.Voice.Type)), "Voice.Type", ["simple", "noisy"]), "Voice.Type"]])
+        ], actions: ["保存"] },
+        // 通知按「内容 / 邮件 / 其它渠道」拆成三张卡，各渠道的地址与密钥都可直接填写
+        { name: "通知内容", en: "NOTIFY", live: true, api: api, save: save, blocks: [SD.kv("通知内容", [["任务结果推送", B(SD.seg(push, idx(push, N.SendTaskResultTime)), "Notify.SendTaskResultTime", push), "Notify.SendTaskResultTime"], ["推送统计信息", B(SD.tog(N.IfSendStatistic), "Notify.IfSendStatistic"), "Notify.IfSendStatistic"], ["推送公招高资喜报", B(SD.tog(N.IfSendSixStar), "Notify.IfSendSixStar"), "Notify.IfSendSixStar"], ["系统通知", B(SD.tog(N.IfPushPlyer), "Notify.IfPushPlyer"), "Notify.IfPushPlyer"]])],
+          ops: testNotify, actions: ["保存", "测试通知"] },
+        { name: "邮件通知", en: "NOTIFY · MAIL", live: true, api: api, save: save, blocks: [SD.kv("邮件通知", [["启用邮件通知", B(SD.tog(N.IfSendMail), "Notify.IfSendMail"), "Notify.IfSendMail"], ["发信服务器", B(SD.inp(N.SMTPServerAddress, true), "Notify.SMTPServerAddress"), "Notify.SMTPServerAddress"], ["发信邮箱", B(SD.inp(N.FromAddress, true), "Notify.FromAddress"), "Notify.FromAddress"], ["发信授权码", secret(N.AuthorizationCode, "Notify.AuthorizationCode"), "Notify.AuthorizationCode"], ["收信邮箱", B(SD.inp(N.ToAddress, true), "Notify.ToAddress"), "Notify.ToAddress"]])],
+          ops: testNotify, actions: ["保存", "测试通知"] },
+        { name: "推送渠道", en: "NOTIFY · CHANNELS", live: true, api: api, save: save, blocks: [
+            SD.kv("推送渠道", [["Server 酱", [B(SD.tog(N.IfServerChan), "Notify.IfServerChan"), secret(N.ServerChanKey, "Notify.ServerChanKey")], "Notify.IfServerChan / ServerChanKey"], ["移动 5G 短信", [B(SD.tog(N.IfCMCCNewMsg), "Notify.IfCMCCNewMsg"), secret(N.CMCCNewMsgApiKey, "Notify.CMCCNewMsgApiKey")], "Notify.IfCMCCNewMsg / CMCCNewMsgApiKey"], ["Koishi", B(SD.tog(N.IfKoishiSupport), "Notify.IfKoishiSupport"), "Notify.IfKoishiSupport"], ["Koishi 地址", B(SD.inp(N.KoishiServerAddress, true), "Notify.KoishiServerAddress"), "Notify.KoishiServerAddress"], ["Koishi 令牌", secret(N.KoishiToken, "Notify.KoishiToken"), "Notify.KoishiToken"], ["QQ 官方机器人", B(SD.tog(N.IfOpenClawQQ), "Notify.IfOpenClawQQ"), "Notify.IfOpenClawQQ"]]),
+            SD.note("QQ 官方机器人需先在网页版设置中扫码绑定。", true)
+          ], ops: testNotify, actions: ["保存", "测试通知"] },
+        { name: "更新", en: "UPDATE", live: true, api: api, save: save, blocks: [SD.kv("更新", [["当前版本", version || "—"], ["自动更新", B(SD.tog(U.IfAutoUpdate), "Update.IfAutoUpdate"), "Update.IfAutoUpdate"], ["暂停更新至", B(SD.inp(U.PauseUntil, true), "Update.PauseUntil"), "Update.PauseUntil · 年-月-日，留空为不暂停"], ["更新源", B(SD.sel(["GitHub", "Mirror 酱", "自建下载站", "CNB 镜像源"], idx(["GitHub", "MirrorChyan", "AutoSite", "CNB"], U.Source)), "Update.Source", ["GitHub", "MirrorChyan", "AutoSite", "CNB"]), "Update.Source"], ["Mirror 酱 CDK", secret(U.MirrorChyanCDK, "Update.MirrorChyanCDK"), "Update.MirrorChyanCDK"], ["更新渠道", B(SD.seg(["稳定版", "公测版"], idx(["stable", "beta"], U.Channel)), "Update.Channel", ["stable", "beta"]), "Update.Channel"], ["GitHub 加速", B(SD.seg(["自动", "关闭"], idx(["Auto", "Off"], U.GitHubMirror)), "Update.GitHubMirror", ["Auto", "Off"]), "Update.GitHubMirror"], ["代理地址", B(SD.inp(U.ProxyAddress, true), "Update.ProxyAddress"), "Update.ProxyAddress"]])], actions: ["保存"] },
+        { name: "失败回放", en: "REPLAY · OBS", live: true, api: api, save: save, blocks: [
+            SD.kv("失败回放", [["启用失败回放", B(SD.tog(R.Enabled), "Replay.Enabled"), "Replay.Enabled"], ["OBS 端口", B(SD.num(R.Port), "Replay.Port"), "Replay.Port"], ["最多保留", B(SD.num(R.MaxReplayCount, "段"), "Replay.MaxReplayCount"), "Replay.MaxReplayCount"],
+                ["OBS 密码", B(Object.assign(SD.inp(""), { secret: true, skipEmpty: true }), "Replay.Password"), "Replay.Password · " + (R.PasswordConfigured ? "已设置，留空不修改" : "未设置")]]),
+            SD.note("任务最终失败时，从已运行的 OBS 回放缓冲中保存一份视频，可在历史记录中回看。", true)
+        ], ops: { "检查连接": { saveFirst: true, path: "/api/setting/obs/check", body: {}, show: true, done: "OBS 连接正常" }, "试存回放": { path: "/api/setting/obs/save", body: {}, show: true, done: "回放已保存" } }, actions: ["保存", "检查连接", "试存回放"] },
+        { name: "高级与关于", en: "ADVANCED", live: true, api: "POST /api/setting/backup", blocks: [SD.kv("关于", [["版本", version || "—"], ["字体", "MiSans（小米）· 许可见 NOTICE"], ["视觉参考", "LBEILC / RhineLabUI（MIT）"]])], actions: [] }
     ]
 }
 function local(g, port) {
@@ -253,17 +295,19 @@ function local(g, port) {
     if (res.indexOf(C.Resolution) < 0) res.unshift(C.Resolution)
     return [
         { name: "远程桌面分身", en: "CHILD SESSION · RDP", live: true, api: api, save: save, blocks: [
-            SD.kv("CHILD SESSION", [["启用分身执行", B(SD.tog(C.Enabled), "ChildSession.Enabled"), "ChildSession.Enabled"], ["宿主端口", B(SD.num(C.HostPort), "ChildSession.HostPort"), "ChildSession.HostPort"], ["分辨率", B(SD.sel(res, res.indexOf(C.Resolution)), "ChildSession.Resolution", res), "ChildSession.Resolution"], ["启动时隐藏预览", B(SD.tog(C.StartHidden), "ChildSession.StartHidden"), "ChildSession.StartHidden"], ["观看模式", B(SD.tog(C.WatchMode), "ChildSession.WatchMode"), "ChildSession.WatchMode"]]),
+            SD.kv("远程桌面分身", [["启用分身执行", B(SD.tog(C.Enabled), "ChildSession.Enabled"), "ChildSession.Enabled"], ["宿主端口", B(SD.num(C.HostPort), "ChildSession.HostPort"), "ChildSession.HostPort"], ["分辨率", B(SD.sel(res, res.indexOf(C.Resolution)), "ChildSession.Resolution", res), "ChildSession.Resolution"], ["启动时隐藏预览", B(SD.tog(C.StartHidden), "ChildSession.StartHidden"), "ChildSession.StartHidden"], ["观看模式", B(SD.tog(C.WatchMode), "ChildSession.WatchMode"), "ChildSession.WatchMode"]]),
             SD.note("观看模式会屏蔽本机键鼠进入分身，避免误触打断任务。")
         ], actions: ["保存"] },
         { name: "虚拟显示器", en: "VIRTUAL DISPLAY", live: true, api: api, save: save, blocks: [
-            SD.kv("DISPLAY", [["无人值守时挂载", B(SD.tog(D.IfEnableVirtualDisplay), "Display.IfEnableVirtualDisplay"), "Display.IfEnableVirtualDisplay"], ["刷新率", B(SD.seg(["1920×1080 @60", "1920×1080 @30"], idx(["1920x1080@60", "1920x1080@30"], D.VirtualDisplayMode)), "Display.VirtualDisplayMode", ["1920x1080@60", "1920x1080@30"]), "Display.VirtualDisplayMode"]]),
+            SD.kv("虚拟显示器", [["无人值守时挂载", B(SD.tog(D.IfEnableVirtualDisplay), "Display.IfEnableVirtualDisplay"), "Display.IfEnableVirtualDisplay"], ["刷新率", B(SD.seg(["1920×1080 @60", "1920×1080 @30"], idx(["1920x1080@60", "1920x1080@30"], D.VirtualDisplayMode)), "Display.VirtualDisplayMode", ["1920x1080@60", "1920x1080@30"]), "Display.VirtualDisplayMode"]]),
             SD.note("所有真实显示输出断开后，挂一块 1920×1080 的虚拟屏，避免游戏窗口被压小。驱动需自行安装。")
-        ], ops: { "检测": { path: "/api/setting/virtual-display/check", body: {}, show: true } }, actions: ["保存", "检测"] },
+        ], ops: { "检测": { path: "/api/setting/virtual-display/check", body: {}, show: true },
+                  "立即拆除": { confirm: "将拆除当前挂载的虚拟显示器；正在运行电脑端游戏任务时，游戏窗口会被挪走，本轮任务可能出错。", path: "/api/setting/virtual-display/detach", body: {}, show: true, done: "已拆除虚拟显示器" } },
+          actions: ["保存", "检测", "立即拆除"] },
         { name: "全局热键", en: "HOTKEY", live: true, api: api, save: save, blocks: [
-            SD.kv("BINDINGS", [["启用全局热键", B(SD.tog(H.Enabled), "Hotkey.Enabled"), "Hotkey.Enabled"], ["启动 / 停止", B(SD.inp(H.ToggleStartStop, true), "Hotkey.ToggleStartStop"), "Hotkey.ToggleStartStop"], ["上一个托管", B(SD.inp(H.PreviousTask, true), "Hotkey.PreviousTask"), "Hotkey.PreviousTask"], ["下一个托管", B(SD.inp(H.NextTask, true), "Hotkey.NextTask"), "Hotkey.NextTask"]])
+            SD.kv("全局热键", [["启用全局热键", B(SD.tog(H.Enabled), "Hotkey.Enabled"), "Hotkey.Enabled"], ["启动 / 停止", B(SD.inp(H.ToggleStartStop, true), "Hotkey.ToggleStartStop"), "Hotkey.ToggleStartStop"], ["上一个托管", B(SD.inp(H.PreviousTask, true), "Hotkey.PreviousTask"), "Hotkey.PreviousTask"], ["下一个托管", B(SD.inp(H.NextTask, true), "Hotkey.NextTask"), "Hotkey.NextTask"]])
         ], ops: { "保存并重新加载": { saveFirst: true, path: "/api/dispatch/hotkey/reload", body: {}, done: "热键已重新加载" } }, actions: ["保存并重新加载"] },
-        { name: "连接端口", en: "HOST", live: true, api: "GET /api/core/health", blocks: [SD.kv("PORTS", [["后端端口", String(port)], ["后端状态", [OK, "已连接"]]])], actions: [] }
+        { name: "连接端口", en: "HOST", live: true, api: "GET /api/core/health", blocks: [SD.kv("连接", [["后端端口", String(port)], ["后端状态", [OK, "已连接"]]])], actions: [] }
     ]
 }
 
@@ -274,7 +318,8 @@ function sign(tools, accounts) {
     function has(t) { return t && t.indexOf("损坏") < 0 }
     var rows = ids.map(function (a) {
         var d = accounts[a.uid].GameSignAccount, s = { path: "/api/tools/sign/account/update", base: { accountId: a.uid } }
-        return [d.Name, B(SD.tog(d.Enabled), "Enabled", null, s), has(d.MiyousheToken) ? OK : WAIT, has(d.SklandToken) ? OK : d.SklandToken ? ERR : WAIT, has(d.KuroToken) ? OK : WAIT, has(d.TaygedoToken) ? OK : WAIT]
+        var del = SD.mini(["删除"]); del.ops = [{ confirm: "将删除账号组「" + d.Name + "」及其各平台凭据。", path: "/api/tools/sign/account/delete", body: { accountId: a.uid }, reload: true, done: "已删除账号组" }]
+        return [B(SD.inp(d.Name), "Name", null, s), B(SD.tog(d.Enabled), "Enabled", null, s), has(d.MiyousheToken) ? OK : WAIT, has(d.SklandToken) ? OK : d.SklandToken ? ERR : WAIT, has(d.KuroToken) ? OK : WAIT, has(d.TaygedoToken) ? OK : WAIT, del]
     })
     var results = []
     try {
@@ -290,10 +335,11 @@ function sign(tools, accounts) {
     var status = ""
     try { status = JSON.parse(G.Status || "{}").text || "" } catch (e) {}
     return [
-        { name: "签到设置", en: "SIGN", live: true, api: "POST /api/tools/update", save: save, blocks: [SD.kv("SIGN", [["启用签到", B(SD.tog(G.Enabled), "GameSign.Enabled"), "GameSign.Enabled"], ["启动时签到", B(SD.tog(G.RunOnStartup), "GameSign.RunOnStartup"), "GameSign.RunOnStartup"], ["每日自动签到", B(SD.tog(G.AutoStart), "GameSign.AutoStart"), "GameSign.AutoStart"], ["结果通知", B(SD.tog(G.NotifyEnabled), "GameSign.NotifyEnabled"), "GameSign.NotifyEnabled"], ["活动查询", B(SD.tog(G.ActivityEnabled), "GameSign.ActivityEnabled"), "GameSign.ActivityEnabled"], ["上次签到", (G.LastSignDate || "—") + (status ? " · " + status : "")]])],
+        { name: "签到设置", en: "SIGN", live: true, api: "POST /api/tools/update", save: save, blocks: [SD.kv("签到", [["启用签到", B(SD.tog(G.Enabled), "GameSign.Enabled"), "GameSign.Enabled"], ["启动时签到", B(SD.tog(G.RunOnStartup), "GameSign.RunOnStartup"), "GameSign.RunOnStartup"], ["每日自动签到", B(SD.tog(G.AutoStart), "GameSign.AutoStart"), "GameSign.AutoStart"], ["结果通知", B(SD.tog(G.NotifyEnabled), "GameSign.NotifyEnabled"), "GameSign.NotifyEnabled"], ["活动查询", B(SD.tog(G.ActivityEnabled), "GameSign.ActivityEnabled"), "GameSign.ActivityEnabled"], ["上次签到", (G.LastSignDate || "—") + (status ? " · " + status : "")]])],
           ops: { "立即签到": { confirm: "将立即为所有启用的账号组执行签到。", path: "/api/tools/sign", body: {}, done: "签到已开始", reload: true } }, actions: ["保存", "立即签到"] },
-        { name: "账号组", en: "ACCOUNTS", live: true, api: "POST /api/tools/sign/account/update", blocks: [SD.table("GROUPS", ["账号组", "启用", "米游社", "森空岛", "库街区", "塔吉多"], rows.slice(0, 9)), SD.note("各平台凭据通过扫码登录写入账号组；「异常」表示凭据已损坏，需要重新登录。")], actions: ["保存"] },
-        { name: "签到结果", en: "RESULT", live: true, api: "GET /api/tools/get", blocks: results.length ? [SD.table("LAST RUN", ["平台", "账号组", "结果", "内容"], results.slice(0, 10))] : [SD.note("暂无签到结果。")], actions: [] }
+        { name: "账号组", en: "ACCOUNTS", live: true, api: "POST /api/tools/sign/account/update", blocks: [SD.table("账号组", ["名称", "启用", "米游社", "森空岛", "库街区", "塔吉多", "操作"], rows, [1.7, 1, 0.9, 0.9, 0.9, 0.9, 0.8]), SD.note("各平台凭据需在网页版中扫码登录写入账号组；「异常」表示凭据已损坏，需要重新登录。", true)],
+          ops: { "添加账号组": { path: "/api/tools/sign/account/add", body: {}, reload: true, done: "已添加账号组" } }, actions: ["保存", "添加账号组"] },
+        { name: "签到结果", en: "RESULT", live: true, api: "GET /api/tools/get", blocks: results.length ? [SD.table("上次结果", ["平台", "账号组", "结果", "内容"], results)] : [SD.note("暂无签到结果。", true)], actions: [] }
     ]
 }
 
@@ -302,7 +348,7 @@ function history(resp, filter) {
     var data = resp && resp.data ? resp.data : {}
     var dates = Object.keys(data).sort().reverse()
     var total = 0, okN = 0, errN = 0
-    var items = dates.slice(0, 20).map(function (date) {
+    var items = dates.map(function (date) {
         var users = data[date], rows = []
         Object.keys(users).forEach(function (u) {
             (users[u].index || []).forEach(function (h) {
@@ -313,12 +359,12 @@ function history(resp, filter) {
             })
         })
         return { name: date, en: "HISTORY", live: true, api: "POST /api/history/search", blocks: [
-            SD.stats("SUMMARY", [["记录", String(rows.length)], ["成功", String(rows.filter(function (r) { return r[2] === OK }).length)], ["异常", String(rows.filter(function (r) { return r[2] === ERR }).length)]]),
-            SD.table("RECORDS", ["时间", "账号", "结果", "说明"], rows.slice(0, 9))], actions: [] }
+            SD.stats("当日概览", [["记录", String(rows.length)], ["成功", String(rows.filter(function (r) { return r[2] === OK }).length)], ["异常", String(rows.filter(function (r) { return r[2] === ERR }).length)]]),
+            SD.table("记录", ["时间", "账号", "结果", "说明"], rows)], actions: [] }
     })
     var q = { name: "查询", en: "SEARCH", live: true, api: "POST /api/history/search", blocks: [
-        SD.kv("FILTER", [["开始日期", { c: "date", v: filter.start, k: "start" }, "start_date"], ["结束日期", { c: "date", v: filter.end, k: "end" }, "end_date"], ["合并方式", { c: "seg", opts: ["按日", "按周", "按月"], v: filter.mode, k: "mode", enum: ["DAILY", "WEEKLY", "MONTHLY"] }, "mode"]]),
-        SD.stats("RANGE", [["记录", String(total)], ["成功", String(okN)], ["异常", String(errN)]]),
+        SD.kv("筛选", [["开始日期", { c: "date", v: filter.start, k: "start" }, "start_date"], ["结束日期", { c: "date", v: filter.end, k: "end" }, "end_date"], ["合并方式", { c: "seg", opts: ["按日", "按周", "按月"], v: filter.mode, k: "mode", enum: ["DAILY", "WEEKLY", "MONTHLY"] }, "mode"]]),
+        SD.stats("范围统计", [["记录", String(total)], ["成功", String(okN)], ["异常", String(errN)]]),
         SD.note(dates.length ? "" : "这个时间范围内没有历史记录。", !dates.length)
     ], ops: { "查询": { query: true } }, actions: ["查询"] }
     return [q].concat(items)
@@ -340,7 +386,7 @@ function proxyOverview(proxy) {
         name, entry.LastProxyDate, String(entry.ProxyTimes), String(entry.ErrorTimes)
     ])
     const table = SD.table("ACCOUNTS", ["账号", "最后运行时间", "运行次数", "错误次数"], rows, [1.4, 1.9, 0.85, 0.85])
-    table.all = rows
+    table.pageRows = 11
     return { name: "代理状态", en: "PROXY STATUS", live: true, api: "POST /api/info/get/overview",
              blocks: rows.length ? [table] : [SD.note("今天暂无代理记录。", true)],
              ops: { "刷新": { overview: true } }, actions: ["刷新"] }
@@ -353,6 +399,7 @@ function homePlaceholder(index, message, retry) {
 }
 // ── 05 调度中心：每个运行中的任务（通常是一条队列）一张卡，第一张是总览 ──────────
 var STATUS_TAG = { "完成": OK, "运行": RUN, "等待": WAIT, "异常": ERR, "跳过": SD.tag("跳过", "idle"), "已暂停": SD.tag("已暂停", "idle"), "外部占用，等待释放": SD.tag("外部占用", "idle"), "任务被用户手动中止": SD.tag("已中止", "err") }
+var MODE_ZH = { AutoProxy: "自动代理", ScriptConfig: "设置脚本", CycleRun: "循环运行", Update: "更新" }
 function statusTag(s) { return STATUS_TAG[s] || SD.tag(s || "—", "idle") }
 function taskProgress(t) {
     var list = t.task_info || [], done = 0
@@ -373,13 +420,13 @@ function dispatchCenter(snapshot, queueNames) {
     queueNames = queueNames || {}
     var tasks = snapshot && snapshot.tasks ? snapshot.tasks : []
     var api = "GET /api/dispatch/runtime-snapshot"
-    if (!tasks.length) return [{ name: "调度空闲", en: "IDLE", live: true, api: api, blocks: [SD.kv("TASK", [["状态", [WAIT, "没有运行中的任务"]], ["定时关联脚本", String((snapshot.scheduledScripts || []).length) + " 个"]])], ops: { "刷新": { reload: true } }, actions: ["刷新"] }]
+    if (!tasks.length) return [{ name: "调度空闲", en: "IDLE", live: true, api: api, blocks: [SD.kv("任务", [["状态", [WAIT, "没有运行中的任务"]], ["定时关联脚本", String((snapshot.scheduledScripts || []).length) + " 个"]])], ops: { "刷新": { reload: true } }, actions: ["刷新"] }]
     function title(t, i) { return t.queueId && queueNames[t.queueId] ? queueNames[t.queueId] : (t.mode === "ScriptConfig" ? "脚本设置" : t.mode === "Update" ? "更新" : "任务 " + String(i + 1).padStart(2, "0")) }
     // 总览：所有同时运行的任务并排列出，一眼看到各自进行到哪
     var overview = { name: "总览", en: "OVERVIEW · " + tasks.length + " RUNNING", live: true, api: api, blocks: [
-        SD.stats("RUNNING", [["运行中", String(tasks.filter(function (t) { return !t.stopping }).length)], ["正在停止", String(tasks.filter(function (t) { return t.stopping }).length)],
+        SD.stats("运行概况", [["运行中", String(tasks.filter(function (t) { return !t.stopping }).length)], ["正在停止", String(tasks.filter(function (t) { return t.stopping }).length)],
             ["循环队列", String(tasks.filter(function (t) { return t.isCycle }).length)], ["定时关联脚本", String((snapshot.scheduledScripts || []).length)]]),
-        SD.table("TASKS", ["队列 / 任务", "当前脚本", "进度", "状态"], tasks.map(function (t, i) {
+        SD.table("任务", ["队列 / 任务", "当前脚本", "进度", "状态"], tasks.map(function (t, i) {
             var p = taskProgress(t)
             return [title(t, i) + (t.isCycle ? " · 循环" : ""), p.current ? p.current.name : "—", p.done + " / " + p.total, t.stopping ? [WAIT, "正在停止"] : p.current ? RUN : WAIT]
         }), [2, 2, 0.9, 1.1])
@@ -393,14 +440,14 @@ function dispatchCenter(snapshot, queueNames) {
         })
         var tabs = [
             { name: "执行", api: api, blocks: [
-                SD.kv("TASK", [["队列", title(t, i)], ["模式", t.mode + (t.isCycle ? " · 循环" : "")], ["状态", t.stopping ? [WAIT, "正在停止"] : [RUN, "运行中"]],
+                SD.kv("任务", [["队列", title(t, i)], ["模式", (MODE_ZH[t.mode] || t.mode) + (t.isCycle ? " · 循环" : "")], ["状态", t.stopping ? [WAIT, "正在停止"] : [RUN, "运行中"]],
                     ["当前脚本", p.current ? p.current.name : "—"], ["进度", p.done + " / " + p.total + " 个脚本"]]),
-                SD.table("SCRIPTS", ["脚本", "状态", "账号", "当前账号"], scripts.slice(0, 9), [2.4, 1, 0.8, 1.4])
+                (function () { var tb = SD.table("脚本", ["脚本", "状态", "账号", "当前账号"], scripts, [2.4, 1, 0.8, 1.4]); tb.pageRows = 6; return tb })()
             ], actions: ["停止任务", "上一个托管", "下一个托管"] },
-            { name: "日志", api: api, blocks: [SD.log("LOG · " + (p.current ? p.current.name : title(t, i)), logLines(t.log, 22), true)], actions: ["停止任务"] }
+            { name: "日志", api: api, blocks: [SD.log("日志 · " + (p.current ? p.current.name : title(t, i)), logLines(t.log, 22), true)], actions: ["停止任务"] }
         ]
         if (t.isCycle && (t.cycleNextList || []).length)
-            tabs.push({ name: "循环", api: api, blocks: [SD.table("NEXT", ["脚本", "下次运行", "状态"], t.cycleNextList.slice(0, 10).map(function (c) {
+            tabs.push({ name: "循环", api: api, blocks: [SD.table("下次运行", ["脚本", "下次运行", "状态"], t.cycleNextList.map(function (c) {
                 return [c.scriptName, c.nextRunAt.slice(5, 16), c.isRunning ? RUN : c.isDue ? SD.tag("到点", "run") : WAIT]
             }), [2.4, 1.4, 1])], actions: ["停止任务"] })
         return { name: title(t, i), en: t.mode.toUpperCase() + (t.isCycle ? " · CYCLE" : "") + " · " + String(i + 1).padStart(2, "0"), live: true,

@@ -438,8 +438,8 @@ FocusScope {
                     return
                 }
             }
-            // 鼠标在档案卡上、且当前页有可滚动的表格（队列项）：滚轮滚表格，不切换条目
-            if (panel.hovered && panel.scrollTable && panel.scrollTable.scroll(event.angleDelta.y < 0 ? 1 : -1)) return
+            // 鼠标在档案卡上、且当前页有分页的表格：滚轮翻页，不切换条目
+            if (panel.hovered && panel.scrollTable && panel.scrollTable.turnWheel(event.pixelDelta.y, event.angleDelta.y)) { event.accepted = true; return }
             if (view.arrayItem) { if (!view.arrayItem.detailOpen) view.arrayItem.nav("row", event.angleDelta.y < 0 ? 1 : -1); return }
             const delta = event.pixelDelta.y || event.angleDelta.y
             // 在改变选中档案前丢弃溢出的输入，让录像盒与右侧档案始终指向同一项。
@@ -633,7 +633,7 @@ FocusScope {
             const it = view.items[lane] || {}
             const pages = SD.pages(it)
             const queue = view.d && view.d.key === "queue"
-            // 调度队列没有「队列配置」那一盒：每一盒都是队列项，表格滚到它附近的 12 项
+            // 调度队列没有「队列配置」那一盒：每一盒都是队列项，表格翻到它所在的页
             if (queue) view.focusQueueRow(it, row)
             const k = pages.findIndex(p => p.name === (queue ? "队列项" : "账号" + row))
             panel.tab = (queue || row > 0) && k >= 0 ? k : 0
@@ -642,15 +642,12 @@ FocusScope {
         function onMoved(lane, row) { if (lane !== view.target) view.select(lane) }
         function onFlownOut() { if (!view.opened) view.finishClose() }
     }
-    // 队列项表格：以选中的那一项为中心取 12 项（不足时贴边）
+    // 队列项表格：翻到选中的那一项所在的页并标出它
     function focusQueueRow(it, row) {
         for (const tab of it.tabs || []) for (const b of tab.blocks || []) {
-            if (!b.all) continue
-            const n = b.all.length, size = 12
-            const off = Math.max(0, Math.min(n - size, row - Math.floor(size / 2)))
-            b.offset = off
+            if (b.t !== "table" || !b.queueRows) continue
+            b.page = Math.floor(row / (b.pageRows || 9))
             b.focus = row
-            b.rows = b.all.slice(off, off + size)
         }
     }
     function setupArray() {

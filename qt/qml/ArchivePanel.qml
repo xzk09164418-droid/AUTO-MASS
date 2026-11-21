@@ -566,20 +566,17 @@ Item {
     component TableBlock: Column {
         id: tb
         property var b
-        // 可滚动的长表（队列项）：一次显示 12 行，鼠标在档案卡上时滚轮滚动
-        readonly property int pageRows: 12
-        readonly property bool scrollable: !!b.all && b.all.length > pageRows
-        property int off: b.offset || 0
-        readonly property var rows: b.all ? b.all.slice(off, off + pageRows) : b.rows
-        function scroll(d) {
-            if (!scrollable) return false
-            const next = Math.max(0, Math.min(b.all.length - pageRows, off + d))
-            if (next === off) return true
-            off = next
-            b.offset = off
-            return true
+        // 长表按页显示（与主页任务对象相同的刻度翻页条），不滚动：鼠标在档案卡上时滚轮翻页
+        readonly property var all: b.all || b.rows
+        readonly property int pageRows: b.pageRows || 9
+        readonly property int pages: Math.max(1, Math.ceil(all.length / pageRows))
+        readonly property int off: pager.pageIndex * pageRows
+        readonly property var rows: all.slice(off, off + pageRows)
+        function turnWheel(pixelDelta, angleDelta) { return pages > 1 && pager.turnWheel(pixelDelta, angleDelta) }
+        Component.onCompleted: {
+            pager.pageIndex = Math.min(b.page || 0, pages - 1)
+            if (pages > 1) panel.scrollTable = tb
         }
-        Component.onCompleted: if (scrollable) panel.scrollTable = tb
         Component.onDestruction: if (panel.scrollTable === tb) panel.scrollTable = null
         readonly property var weights: b.weights && b.weights.length === b.cols.length ? b.weights : b.cols.map(() => 1)
         readonly property real wsum: weights.reduce((a, x) => a + x, 0)
@@ -596,32 +593,28 @@ Item {
                 }
             }
             Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: Theme.hair }
-            // 下划线 180ms 移到当前页签
-            Rectangle {
-                readonly property Item on: tabRep.count > panel.tab ? tabRep.itemAt(panel.tab) : null
-                anchors.bottom: parent.bottom
-                x: on ? on.x : 0
-                width: on ? on.width - 14 : 0
-                height: 2
-                color: Theme.ink
-                Behavior on x { enabled: Theme.richMotion; NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
-                Behavior on width { enabled: Theme.richMotion; NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
-            }
         }
         Item {
+            id: rowsArea
             width: tb.width
-            height: tb.rows.length * 44
-            // 滚动条：一根橙色矩形，不加边框与衬底
-            Rectangle {
-                visible: tb.scrollable
-                x: tb.width + 6
-                width: 3
-                height: parent.height * tb.pageRows / Math.max(1, tb.b.all ? tb.b.all.length : 1)
-                y: parent.height * tb.off / Math.max(1, tb.b.all ? tb.b.all.length : 1)
-                color: Theme.accent
-                Behavior on y { enabled: Theme.richMotion; NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }
-            }
+            height: Math.min(tb.all.length, tb.pageRows) * 44
+            clip: true
         Column {
+            id: rowsCol
+            opacity: 1
+            transform: Translate { id: rowsShift }
+            Connections {
+                target: pager
+                function onPageIndexChanged() {
+                    tb.b.page = pager.pageIndex
+                    if (Theme.richMotion) pageSwap.restart()
+                }
+            }
+            ParallelAnimation {
+                id: pageSwap
+                NumberAnimation { target: rowsCol; property: "opacity"; from: 0.2; to: 1; duration: 220 }
+                NumberAnimation { target: rowsShift; property: "x"; from: 24; to: 0; duration: 300; easing.type: Easing.OutCubic }
+            }
         Repeater {
             model: tb.rows.length
             Item {
@@ -653,6 +646,7 @@ Item {
         }
         }
         }
+        PageScale { id: pager; width: tb.width / 3; pages: tb.pages }
     }
     component StatsBlock: Row {
         id: sb
@@ -816,6 +810,17 @@ Item {
                             MouseArea { id: tabMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: panel.tab = tabBtn.index }
                         }
                     }
+                }
+                // 下划线 180ms 移到当前页签（随页签条一起横向滚动）
+                Rectangle {
+                    readonly property Item on: tabRep.count > panel.tab ? tabRep.itemAt(panel.tab) : null
+                    y: tabScroll.height - height - 2 - (tabScroll.contentWidth > tabScroll.width ? 6 : 0)
+                    x: on ? on.x + 14 : 0
+                    width: on ? on.width - 28 : 0
+                    height: 3
+                    color: Theme.accent
+                    Behavior on x { enabled: Theme.richMotion; NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+                    Behavior on width { enabled: Theme.richMotion; NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
                 }
             }
             Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 2; color: Theme.ink }
