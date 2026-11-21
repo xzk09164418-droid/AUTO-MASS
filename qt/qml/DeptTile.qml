@@ -67,6 +67,17 @@ Item {
         border.color: Theme.accent
     }
 
+    DepartmentArt {
+        department: tile.d.key
+        layout: tile.d.art
+        bleed: Math.min(tile.width, tile.height) * 0.18
+        anchors.fill: parent
+        anchors.margins: -bleed
+        ink: tile.isBlock && !Theme.dark ? "#a9afb0" : tile.textColor
+        accent: Theme.accent
+        opacity: tile.isBlock ? 0.24 : 0.15
+    }
+
     // PV 部门标旁的橙色角块
     Rectangle {
         visible: !!tile.d.accent
@@ -136,19 +147,6 @@ Item {
             font.weight: Font.DemiBold
             font.letterSpacing: 4
         }
-    }
-
-    // 右上角的档案章标志（取代原先嵌在字形里的圆环标志）
-    Emblem {
-        visible: tile.isCard || tile.isBlock
-        anchors.right: parent.right
-        anchors.top: parent.top
-        anchors.margins: tile.d.center ? 16 : 10
-        width: tile.d.center ? 30 : 20
-        height: width
-        ink: tile.textColor
-        core: Theme.accent
-        opacity: tile.isCard || tile.isBlock ? 0.9 : 0.75
     }
 
     MouseArea {

@@ -33,6 +33,9 @@ namespace BetterGenshinImpact.View.Controls.ChildSession
         private DrawingSize? _pendingReconnectDesktopSize;
         private bool _smartSizingEnabled = true;
         private bool _inputBlocked;
+        private DrawingSize _remoteDesktopSize;
+
+        internal DrawingSize RemoteDesktopSize { get { return _remoteDesktopSize; } }
 
         internal event EventHandler<ChildSessionConnectionFailedEventArgs> ConnectionFailed;
 
@@ -48,7 +51,30 @@ namespace BetterGenshinImpact.View.Controls.ChildSession
         internal RdpActiveXHost()
             : base(RdpClientClsid)
         {
-            Dock = DockStyle.Fill;
+        }
+
+        internal void FitToWorkspace()
+        {
+            if (Parent == null) return;
+
+            var area = Parent.ClientSize;
+            var size = area;
+            if (_smartSizingEnabled && _remoteDesktopSize.Width > 0 && _remoteDesktopSize.Height > 0)
+            {
+                double scale = Math.Min((double)area.Width / _remoteDesktopSize.Width,
+                    (double)area.Height / _remoteDesktopSize.Height);
+                size = new DrawingSize((int)Math.Round(_remoteDesktopSize.Width * scale),
+                    (int)Math.Round(_remoteDesktopSize.Height * scale));
+            }
+            SetBounds((area.Width - size.Width) / 2, (area.Height - size.Height) / 2, size.Width, size.Height);
+        }
+
+        private void UpdateRemoteDesktopSize(int width, int height)
+        {
+            if (width <= 0 || height <= 0) return;
+
+            _remoteDesktopSize = new DrawingSize(width, height);
+            FitToWorkspace();
         }
 
         internal int ConnectedState
@@ -91,13 +117,14 @@ namespace BetterGenshinImpact.View.Controls.ChildSession
             var client = GetRequiredOcx();
             var width = ClampDimension(desktopSize.Width, 200, 8192);
             var height = ClampDimension(desktopSize.Height, 200, 8192);
+            UpdateRemoteDesktopSize(width, height);
 
             SetComProperty(client, "Server", "localhost");
             SetComProperty(client, "DesktopWidth", width);
             SetComProperty(client, "DesktopHeight", height);
             SetComProperty(client, "ColorDepth", 32);
-            SetComProperty(client, "ConnectingText", "正在创建 BetterGI 桌面分身...");
-            SetComProperty(client, "DisconnectedText", "BetterGI 桌面分身已断开");
+            SetComProperty(client, "ConnectingText", "正在创建 automass桌面分身...");
+            SetComProperty(client, "DisconnectedText", "automass桌面分身已断开");
 
             var securedSettings = GetComProperty(client, "SecuredSettings2");
             if (securedSettings == null)
@@ -196,6 +223,7 @@ namespace BetterGenshinImpact.View.Controls.ChildSession
         internal void SetSmartSizing(bool enabled)
         {
             _smartSizingEnabled = enabled;
+            FitToWorkspace();
             if (!IsHandleCreated)
             {
                 return;
@@ -927,7 +955,10 @@ namespace BetterGenshinImpact.View.Controls.ChildSession
 
             public void OnWarning(int warningCode) { }
 
-            public void OnRemoteDesktopSizeChange(int width, int height) { }
+            public void OnRemoteDesktopSizeChange(int width, int height)
+            {
+                _owner.UpdateRemoteDesktopSize(width, height);
+            }
 
             public void OnIdleTimeoutNotification() { }
 

@@ -24,14 +24,12 @@ uv pip install --python .venv/Scripts/python.exe -r qt/requirements.txt
 
 - **减少**：直接替换文字，无解密、呼吸、抽出等动效。
 - **标准**（默认）：滚动文字、同步解密、页签下划线、确认弹窗、卡带呼吸与档案抽出。左下录像带串首尾相接循环（末张之后接第一张）：普通切换快速贴靠；越过首尾的那一步若是最后一步，用非线性减速 + 小回弹；滚轮每格排队走完，积压超过 2 步时加速追上；滑动期间暂停悬停抬起。
-- **增强**：托管管理与调度队列换成多列档案阵列（`ArchiveArray3D.qml`，以 `design/qt-demo/array.html` 为基线，按 LBEILC/RhineLabUI 移植，模型见 `assets3d/`，MIT）；
-  点开方块后方块直接消失，阵列按原项目进出场的节奏（ArchiveScene.reveal）从画面右上方沿录像带长边滑入、向左下落位；返回时模糊淡出；
-  换选中时原来抬起的那盒（带标签与完整外观）按自己的弹簧落回，再选回时接着它的高度；文字层的淡入、分隔线展开等时序取自原项目 style.css。读取档案时录像带抬起、玻璃变清晰，内部是印着启动程序图标的唱片（参考 Rhine Music Database 的封面录像带）。
-  画面按演示基线：环境光照（RoomEnvironment + 半球光烘成的 `assets3d/room-env.hdr`，由 `tools/make_room_env.py` 生成）、主光与补光、软阴影、透射磨砂外壳与竖向渐变、雾与景深。
-  阵列的波浪、呼吸、涟漪、悬停与飞入在顶点着色器（`qml/shaders/arraypart.vert`）里计算，CPU 每帧只更新弹簧、镜头和少量 uniform。
-  后台预加载限流：只在索引页、用户停止操作 2.5 秒后才开始，分「解析阵列 → 索引之下预渲染 → 解析选中的那盒」三步，每步都要再等空闲 1 秒，
-  有操作就顺延；3D 相关 DLL 在启动时由后台线程预先映射，渲染管线缓存存到 `config/QtPipelineCache.bin`。其它部门的录像带串与标准挡位相同。
-  实例范围与演示相同（左右各 3 列、前后各 18 行），以阵列当前滑到的位置为中心：切换行列时边缘随平移移出后才卸下。
+- **增强**使用原生 Qt Quick 3D 录像带。普通部门按标准版录像带的顺序排成一列，按 ↑/↓ 或 W/S 前后切换，Enter 读取，Esc 退出读取。
+  托管管理按程序分列，←/→ 或 A/D 换程序。每列的录像带对应当前程序的实际分页（含逐个账号），↑/↓ 或 W/S 换页。读取时，点击右侧页签也会选中相应录像带。
+  调度队列沿用多列阵列，横向换队列，纵向选队列项，读取后在表格中定位。两种多列阵列显示前后各 18 行、左右各 3 列。
+  模型、灯光与镜头来自 `design/qt-demo/array.html` 的视觉基线。网格与预过滤环境光随客户端提供，模型或光照源更新后运行 `python qt/tools/bake_cassette.py` 重新生成。
+  各部门复用同一个异步预热的场景。切换时外壳始终保留在实例表内，标签、玻璃与唱片跟随各自的录像带升起和落回。
+  Windows x64 的 D3D11 首次启动使用与 Qt 版本匹配的预编译材质和字节码。材质或着色器更新后，在安装了增强组件的 Windows x64 环境运行 `python qt/tools/bake_array_shaders.py`，并更新 `qt/main.py` 中的缓存修订号。
   Qt Quick 3D 在 `PySide6-Addons` 里（下载约 161 MB，安装后约 420 MB），**默认不安装**：在设置里选「增强」时二次确认后下载（版本与 PySide6 一致）。
   切回其它挡位时不立即删除，只写入 `config/QtEnhancedRemove.flag`；退出程序、下次启动加载完毕并空闲后在后台删除；删除前切回增强则取消。
 - 选择的挡位保存在 `config/QtClient.json`，下次启动沿用（`--motion` 可临时指定）。
@@ -52,9 +50,11 @@ uv pip install --python .venv/Scripts/python.exe -r qt/requirements.txt
 | `qml/Live.js` | 后端数据 → 档案卡条目；控件带配置键与保存目标，保存时只提交改过的字段 |
 | `qml/CassetteChain.qml` | 录像带串：透视投影的半透明卡带，首尾相接循环 |
 | `qml/RollText.qml` / `RollDigits.qml` | 滚动文字与逐位滚动 |
-| `qml/ArchiveArray3D.qml` / `shaders/` / `IconDisc.qml` | 增强挡位的多列档案阵列（托管管理、调度队列）；阵列部件着色器；程序图标唱片 |
+| `qml/ArchiveArray3D.qml` / `shaders/` / `IconDisc.qml` | 增强挡位的录像带阵列、实例材质和程序图标唱片 |
 | `qml/BackendPanel.qml` | 后端启动中 / 失败面板 |
 | `qml/Ledger.qml` | 底部刻度栏 |
+| `WEB-PARITY.md` | 与网页版逐页的交互对照（含各控件的可用条件） |
+| `qml/PageScale.qml` | 刻度翻页条：主页任务对象与各部门的长表格超出一页时用它翻页，不滚动 |
 
 ## 一级界面
 

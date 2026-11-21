@@ -32,6 +32,8 @@ Item {
     property string backendStage: ""
     readonly property int holdFrame: 362
     property real idle: 0
+    // 计时起点：完整播放时含开场动画的时长；跳过开场直接停在授权段时从 0 计
+    property real clockBase: holdFrame / fps
     property bool done: false
 
     // 长时间加载：停帧超过 1 秒后显出启动日志、耗时与提示；圆环转入呼吸
@@ -399,7 +401,7 @@ Item {
                     transform: Translate { x: -30 * (1 - boot.waitShow) }
                     BootText { text: "ELAPSED"; font.pixelSize: 13; font.letterSpacing: 4; opacity: 0.6 }
                     BootText {
-                        text: boot.clockText(boot.holdFrame / boot.fps + boot.idle)
+                        text: boot.clockText(boot.clockBase + boot.idle)
                         font.pixelSize: 64
                         font.weight: Font.Light
                         font.bold: false

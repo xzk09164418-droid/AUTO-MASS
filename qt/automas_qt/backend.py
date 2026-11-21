@@ -17,6 +17,7 @@ from pathlib import Path
 
 from PySide6.QtCore import (
     Property,
+    QCoreApplication,
     QObject,
     QProcess,
     QProcessEnvironment,
@@ -33,6 +34,8 @@ HEALTH_PATH = "/api/core/health"
 POLL_INTERVAL_MS = 500
 START_TIMEOUT_MS = 120_000
 MAX_LOG_LINES = 200
+# 后端日志带终端配色（ANSI 转义序列），显示前去掉
+ANSI_PATTERN = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]")
 LOG_LEVEL_PATTERN = re.compile(r"\|\s*(DEBUG|INFO|SUCCESS|WARNING|ERROR|CRITICAL)\s*\|")
 
 # 启动阶段与进度（0–1）。后端日志里的固定标记推进进度，健康检查的 backgroundStatus 收尾。
@@ -62,6 +65,24 @@ def backend_port(root: Path = ROOT_DIR) -> int:
         (root / "res" / "host-instance-defaults.json").read_text(encoding="utf-8")
     )
     return int(defaults["backendPort"])
+
+
+def _read_instance_file() -> dict:
+    path = ROOT_DIR / "config" / "HostInstance.json"
+    try:
+        return json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def downloads_dir() -> Path:
+    """用户的「下载」文件夹；取不到时退回用户目录。"""
+    from PySide6.QtCore import QStandardPaths
+
+    folder = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.DownloadLocation)
+    path = Path(folder) if folder else Path.home()
+    path.mkdir(parents=True, exist_ok=True)
+    return path
 
 
 def python_executable(root: Path = ROOT_DIR) -> str:
@@ -182,7 +203,7 @@ class BackendSupervisor(QObject):
             self._set_progress(value, self.tr("初始化：{0}").format(done.group(1).strip()))
 
     def _append_log(self, line: str) -> None:
-        line = line.rstrip()
+        line = ANSI_PATTERN.sub("", line).rstrip()
         if not line:
             return
         self._track_stage(line)
@@ -229,6 +250,64 @@ class BackendSupervisor(QObject):
                 text = json.dumps({"code": 0, "status": "error", "message": reply.errorString()}, ensure_ascii=False)
             if callback.isCallable():
                 callback.call([QJSValue(text)])
+
+        reply.finished.connect(done)
+
+    @Slot(result="QVariantMap")
+    def ports(self) -> dict:
+        """当前实例端口：页面端口（网页版）与后端端口，来自 config/HostInstance.json。"""
+
+        stored = _read_instance_file()
+        defaults = json.loads((ROOT_DIR / "res" / "host-instance-defaults.json").read_text(encoding="utf-8"))
+        return {
+            "frontendPort": stored.get("frontendPort", defaults["frontendPort"]),
+            "backendPort": stored.get("backendPort", defaults["backendPort"]),
+        }
+
+    @Slot(int, int, result=str)
+    def savePorts(self, frontend_port: int, backend_port: int) -> str:
+        """写入 config/HostInstance.json（与网页宿主同一校验），下次启动时生效；返回错误信息，成功为空串。"""
+
+        for port in (frontend_port, backend_port):
+            if not 1024 <= port <= 65535:
+                return "端口必须为 1024～65535 的整数"
+        if frontend_port == backend_port:
+            return "页面端口与后端端口不能相同"
+        stored = _read_instance_file()
+        stored.update({"instanceId": stored.get("instanceId") or self._expected_id,
+                       "frontendPort": frontend_port, "backendPort": backend_port})
+        target = ROOT_DIR / "config" / "HostInstance.json"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        temporary = target.with_suffix(f".{QCoreApplication.applicationPid()}.tmp")
+        temporary.write_text(json.dumps(stored, ensure_ascii=False, indent=2), encoding="utf-8")
+        temporary.replace(target)
+        return ""
+
+    @Slot("QJSValue")
+    def exportBackup(self, callback: QJSValue) -> None:
+        """导出数据备份（GET /api/setting/backup 的压缩包）到「下载」文件夹；callback(结果 JSON)。"""
+
+        request = QNetworkRequest(QUrl(f"http://127.0.0.1:{self._port}/api/setting/backup"))
+        request.setRawHeader(b"x-auto-mas-instance", self._expected_id.encode("ascii"))
+        request.setTransferTimeout(600000)
+        reply = self._network.get(request)
+
+        def done() -> None:
+            reply.deleteLater()
+            status = reply.attribute(QNetworkRequest.Attribute.HttpStatusCodeAttribute)
+            body = bytes(reply.readAll().data())
+            if reply.error() != QNetworkReply.NetworkError.NoError or status != 200 or body[:2] != b"PK":
+                try:
+                    message = json.loads(body.decode("utf-8")).get("message", "")
+                except (ValueError, UnicodeDecodeError):
+                    message = reply.errorString()
+                result = {"ok": False, "message": message or "导出失败"}
+            else:
+                target = downloads_dir() / f"AUTO-MAS-backup-{time.strftime('%Y-%m-%d-%H%M%S')}.zip"
+                target.write_bytes(body)
+                result = {"ok": True, "path": str(target)}
+            if callback.isCallable():
+                callback.call([QJSValue(json.dumps(result, ensure_ascii=False))])
 
         reply.finished.connect(done)
 

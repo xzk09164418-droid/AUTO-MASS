@@ -15,15 +15,32 @@ import os
 import sys
 from pathlib import Path
 
-from PySide6.QtCore import QTimer, QUrl
+from PySide6.QtCore import (
+    QIODevice,
+    QLockFile,
+    QSaveFile,
+    QStandardPaths,
+    QSysInfo,
+    QTimer,
+    QUrl,
+    qVersion,
+)
 from PySide6.QtGui import QGuiApplication, QIcon, QSurfaceFormat
 from PySide6.QtQml import QQmlApplicationEngine
+from PySide6.QtWidgets import QApplication
 
 QT_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(QT_DIR))
+sys.path.insert(0, str(QT_DIR.parent))
 
+from automas_qt.activity import ActivityFeed  # noqa: E402
 from automas_qt.backend import BackendSupervisor  # noqa: E402
-from automas_qt.enhanced import EnhancedComponent, preload_libraries_async, saved_motion  # noqa: E402
+from automas_qt.desktop_tools import DesktopTools  # noqa: E402
+from automas_qt.enhanced import (  # noqa: E402
+    EnhancedComponent,
+    preload_libraries_async,
+    saved_motion,
+)
 from automas_qt.exeicon import ExeIconProvider  # noqa: E402
 
 
@@ -47,26 +64,70 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def seed_material_cache(directory: Path, revision: str) -> None:
+    """为当前 Qt 版本初始化可再生成的材质缓存，采用与 Qt 写入器相同的锁。"""
+    root = QStandardPaths.writableLocation(QStandardPaths.CacheLocation)
+    if not root:
+        return
+    target = Path(root) / f"q3dshadercache-{QSysInfo.buildAbi()}" / "q3dshadercache.qsbc"
+    marker = target.with_name(f"{revision}.ready")
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if marker.exists() and target.is_file():
+            return
+        lock = QLockFile(str(target) + ".lck")
+        if not lock.tryLock(0):
+            return
+        data = (directory / "array.qsbc").read_bytes()
+        output = QSaveFile(str(target))
+        if (
+            output.open(QIODevice.WriteOnly)
+            and output.write(data) == len(data)
+            and output.commit()
+        ):
+            marker.touch()
+    except OSError:
+        # 只读环境仍可使用 Qt 自带的运行时编译。
+        return
+
+
+def configure_graphics_cache() -> None:
+    """首次运行使用随包着色器，后续启动复用本机积累的渲染管线。"""
+    cache = QT_DIR.parent / "config" / "QtPipelineCache.bin"
+    seed = None
+    if (
+        sys.platform == "win32"
+        and QSysInfo.buildAbi() == "x86_64-little_endian-llp64"
+        and os.environ.get("QSG_RHI_BACKEND", "d3d11").lower() == "d3d11"
+    ):
+        directory = QT_DIR / "assets3d" / "shaders" / f"d3d11-{qVersion()}-x64"
+        if (directory / "array.pipeline").is_file():
+            seed = directory / "array.pipeline"
+            revision = f"QtArrayPipeline-{qVersion()}-v1"
+            cache = cache.with_name(revision + ".bin")
+            seed_material_cache(directory, revision)
+    os.environ.setdefault("QSG_RHI_PIPELINE_CACHE_SAVE", str(cache))
+    source = cache if cache.is_file() else seed
+    if source:
+        os.environ.setdefault("QSG_RHI_PIPELINE_CACHE_LOAD", str(source))
+
+
 def main() -> int:
     args = parse_args()
     motion = args.motion or saved_motion()
     # 增强挡位：后台线程先把 3D 相关 DLL 映射进来，之后预加载 3D 阵列时主线程不再为读盘卡顿
     if motion == "enhanced":
         preload_libraries_async()
-    # 渲染管线缓存：编译好的着色器管线存盘，下次启动直接复用（3D 阵列首帧不再现编译）
-    cache = QT_DIR.parent / "config" / "QtPipelineCache.bin"
-    os.environ.setdefault("QSG_RHI_PIPELINE_CACHE_SAVE", str(cache))
-    if cache.exists():
-        os.environ.setdefault("QSG_RHI_PIPELINE_CACHE_LOAD", str(cache))
     # 显式要求垂直同步：交换链按显示器刷新节拍呈现，避免圆环等大幅运动时撕裂
     fmt = QSurfaceFormat.defaultFormat()
     fmt.setSwapInterval(1)
     # 4× 多重采样：旋转的玻璃卡、透视卡带、斜线等边缘不再出现锯齿
     fmt.setSamples(4)
     QSurfaceFormat.setDefaultFormat(fmt)
-    app = QGuiApplication(sys.argv)
+    app = QApplication(sys.argv)
     app.setApplicationName("AUTO-MASS")
     app.setOrganizationName("AUTO-MAS")
+    configure_graphics_cache()
     icon = QT_DIR.parent / "res" / "icons" / "AUTO-MAS.ico"
     if icon.exists():
         app.setWindowIcon(QIcon(str(icon)))
@@ -79,6 +140,10 @@ def main() -> int:
     engine.warnings.connect(
         lambda warnings: [print(w.toString(), file=sys.stderr, flush=True) for w in warnings]
     )
+    locations = DesktopTools(engine)
+    engine.rootContext().setContextProperty("fileLocations", locations)
+    feeds = ActivityFeed(engine)
+    engine.rootContext().setContextProperty("activityFeed", feeds)
     engine.setInitialProperties(
         {
             "backend": backend,
@@ -118,7 +183,7 @@ def main() -> int:
 
         QTimer.singleShot(abs(args.after), capture)
 
-    return app.exec()
+    return QGuiApplication.exec()
 
 
 if __name__ == "__main__":

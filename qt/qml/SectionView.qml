@@ -16,28 +16,78 @@ FocusScope {
     readonly property bool busy: index >= 0
     readonly property var d: index >= 0 ? departments[index] : null
     readonly property var conf: d ? SD.sections[d.n] : null
-    // 已接入后端的部门用实时数据，其余仍是演示数据（逐步接入）
+    // 仅离线预览使用示例；联网模式在首次读取完成前显示连接状态。
     property var api: null                  // BackendSupervisor（后端就绪时）
     property var enhanced: null             // EnhancedComponent
-    // 增强挡位 + 已装 3D 组件 + 托管管理 / 调度队列：以多列档案阵列取代标准版式
-    readonly property bool arrayMode: Theme.motion === "enhanced" && Theme.enhancedAvailable && !!d && (d.key === "scripts" || d.key === "queue")
+    // 增强挡位复用同一场景，按部门组织行列。
+    readonly property bool arrayMode: Theme.motion === "enhanced" && Theme.enhancedAvailable && !!d
     property var arrayHostItem: null        // Main.qml 里常驻的 ArchiveArray3D（未加载完时为 null）
     readonly property var arrayItem: arrayMode ? arrayHostItem : null
     readonly property bool arrayDetail: !!arrayItem && arrayItem.detailOpen
-    readonly property var arrayColumns: arrayMode ? items.map(it => ({ name: it.name, en: it.en, icon: it.icon || "", accounts: it.accounts || [], rowIcons: it.rowIcons || null, configRow: it.configRow !== false })) : []
-    onApiChanged: if (opened && d) fetchLive(d.key)
+    readonly property var arrayColumns: {
+        if (!arrayMode) return []
+        if (!items.length) return emulatorPage ? [{name:d.zh, rows:[emulatorConfigs.empty.name]}] : []
+        if (d.key === "queue")
+            return items.map(it => ({name:it.name, en:it.en, accounts:it.accounts || [],
+                rowIcons:it.rowIcons || null, configRow:it.configRow !== false, icon:it.icon || ""}))
+        if (d.key === "scripts")
+            return items.map(it => ({uid:it.uid,name:it.name, icon:it.icon || "", rows:SD.pages(it).map(p => p.name)}))
+        return [{name:d.zh, rows:items.map(it => it.name), rowIcons:items.map(it => it.icon || "")}]
+    }
+    property bool arrayPanelUsed: false
+    property bool syncingArray: false
+    function syncArray() {
+        if (syncingArray || !opened || !arrayItem || arrayItem.mode !== d.key || d.key === "queue" || workspace.record) return
+        const a = arrayItem
+        if (!items.length) {
+            if (d.key === "scripts" && a.detailOpen) a.close()
+            return
+        }
+        const lane = a.singleColumn ? 0 : target
+        const row = a.singleColumn ? target : Math.max(0, Math.min(panel.tab, SD.pages(item).length - 1))
+        syncingArray = true
+        if (!a.singleColumn && panel.tab !== row) panel.tab = row
+        if (lane !== a.lane || row !== a.row) a.moveTo(a.cellLane + lane - a.lane, 12 + row)
+        syncingArray = false
+    }
+    property bool onlineHome: false
+    readonly property bool isHome: !!d && d.key === "home"
+    readonly property bool showingOnlineHome: onlineHome && isHome
+    property var homeCards: [Live.homePlaceholder(0, "等待后端连接…", false), Live.homePlaceholder(1, "等待后端连接…", false)]
+    property int quickRequest: 0
+    property int overviewRequest: 0
+    signal uiSettings(var patch)
+    onApiChanged: {
+        if (api) call("/api/setting/get",{},r=>{if (r.code===200) uiSettings(r.data.UI || {})})
+        quickRequest++
+        overviewRequest++
+        if (!api) homeCards = [Live.homePlaceholder(0, "等待后端连接…", false), Live.homePlaceholder(1, "等待后端连接…", false)]
+        if (!api && onlineHome) { const cached=Object.assign({},live); delete cached.activity; live=cached }
+        if (opened && d) fetchLive(d.key)
+    }
     property var live: ({})                 // 部门 key → 条目
     property string liveState: ""           // loading / ok / error
     property string liveMessage: ""
-    readonly property bool isLive: !!(d && live[d.key])
-    readonly property var items: d && live[d.key] ? live[d.key] : conf ? conf.items : []
+    readonly property bool isLive: showingOnlineHome ? !!api && !homeCards[target].placeholder : !!(d && live[d.key])
+    readonly property bool emulatorPage: !!d && d.key === "emulators"
+    readonly property var connectionCard: ({
+        name:d?.zh || "", en:"CONNECTION", live:true,
+        blocks:[SD.note(!api ? "等待后端连接…" : liveState === "error" ? liveMessage : "正在读取配置…", true)],
+        ops:{"重试":{reload:true}}, actions:api && liveState === "error" ? ["重试"] : []
+    })
+    readonly property var items: emulatorPage ? emulatorConfigs.records : showingOnlineHome ? homeCards
+        : d?.key === "scripts" ? scriptShelf.filtered : d && live[d.key] ? live[d.key]
+        : onlineHome && d?.key === "activity" ? activityShelf.records()
+        : onlineHome ? [connectionCard] : conf ? conf.items : []
     onItemsChanged: {
         if (!opened) return
         target = Math.min(target, Math.max(0, items.length - 1))
+        if (arrayMode) { Qt.callLater(syncArray); return }
         if (chain.introTarget === 1) { chain.items = items; chain.goTo(target, 1) }
     }
     // ── 后端接入 ──────────────────────────────────────────────────────────
     function call(path, body, cb) {
+        if (!api) { cb({code:0,message:"后端未连接"}); return }
         api.request(path, JSON.stringify(body || {}), text => {
             let r = null
             try { r = JSON.parse(text) } catch (e) { r = { code: 0, message: "响应无法解析" } }
@@ -51,12 +101,126 @@ FocusScope {
         const next = () => {
             if (i >= steps.length) { done(out); return }
             const st = steps[i++]
-            call(st[1], st[2], r => { out[st[0]] = r; next() })
+            if (!api) { out[st[0]]={code:0,message:"后端未连接"}; next(); return }
+            // body 为 null 表示 GET 接口
+            if (st[2] === null) api.get(st[1], text => { let r = { code: 0 }; try { r = JSON.parse(text) } catch (e) {} out[st[0]] = r; next() })
+            else call(st[1], st[2], r => { out[st[0]] = r; next() })
         }
         next()
     }
+    // 会随运行状态变化的数据（远程桌面连接、热键控制队列等）：控件的可用条件与状态文字按它即时刷新
+    property var env: ({})
+    property int deskStatusRequest: 0
+    function pollDesk() {
+        if (!api || !d) return
+        if (d.key === "emulators") {
+            // 当前模拟器的实例状态（2.0 模拟器另有面板，不在这里轮询）
+            const it = item
+            if (!it || !it.uid || !it.live || it.deviceType === "emulator2") return
+            call("/api/emulator/status", { emulatorId: it.uid }, r => {
+                const all = Object.assign({}, env.devices || {})
+                all[it.uid] = r.code === 200 && r.data ? (r.data[it.uid] || {}) : {}
+                env = Object.assign({}, env, { devices: all, deviceError: r.code === 200 ? "" : (r.message || "") })
+            })
+            return
+        }
+        const request = ++deskStatusRequest
+        api.get("/api/child-session/status", text => {
+            if (request !== deskStatusRequest) return
+            let r = null; try { r = JSON.parse(text) } catch (e) {}
+            if (r && r.code === 200) env = Object.assign({}, env, { desk: r.data })
+        })
+        api.get("/api/dispatch/navigation/state", text => {
+            let r = null; try { r = JSON.parse(text) } catch (e) {}
+            if (r && r.code === 200) env = Object.assign({}, env, { nav: r.data })
+        })
+    }
+    Timer {
+        interval: 3000; repeat: true
+        running: view.opened && !!view.api && !!view.d && (view.d.key === "localControls" || view.d.key === "emulators")
+        triggeredOnStart: true
+        onTriggered: view.pollDesk()
+    }
+    HotkeyRecorder { id: recorder; host: view }
+    LogViewer { id: logViewer; objectName: "logViewer"; host: view }
+    function copyText(value) { fileLocations.copyText(value); toast.show("已复制") }
+    function signatureExample(base, scriptId, callerId, holdId, operation) {
+        return ['import os, json, uuid, base64, hmac, hashlib, urllib.request',
+            'from datetime import datetime, timezone',
+            'command = dict(version=1, requestId=str(uuid.uuid4()), callerId='+JSON.stringify(callerId)+',',
+            '    action='+JSON.stringify(operation)+', scriptId='+JSON.stringify(scriptId)+', holdId='+JSON.stringify(holdId)+', ttlSeconds=1800,',
+            '    issuedAt=datetime.now(timezone.utc).isoformat())',
+            'payload = base64.urlsafe_b64encode(json.dumps(command).encode()).decode().rstrip("=")',
+            'signature = hmac.new(os.environ["AUTO_MAS_CONTROL_SECRET"].encode(), payload.encode(), hashlib.sha256).hexdigest()',
+            'body = json.dumps(dict(payload=payload, signature=signature)).encode()',
+            'url = '+JSON.stringify(base+'/api/dispatch/external-holds/')+' + command["action"]',
+            'request = urllib.request.Request(url, data=body, headers={"Content-Type":"application/json"})',
+            'with urllib.request.urlopen(request, timeout=10) as response: print(response.read().decode())'].join("\n")
+    }
+    function askWorkspace(title, detail, action) { modal.ask(title,detail,"","确认",true,action) }
+    function toastText(text) { toast.show(text) }
+    property int replayRequest: 0
+    function loadReplayArchive() {
+        const request = ++replayRequest
+        api.get("/api/history/replays", text => {
+            if (request !== replayRequest || !opened || d?.key !== "history") return
+            let response
+            try { response = JSON.parse(text) } catch (e) {}
+            const list = live.history
+            if (list) setLive("history", list.map(entry => entry.en === "REPLAY ARCHIVE" ? Live.replayArchive(response) : entry))
+        })
+    }
     property var historyFilter: ({ start: "", end: "", mode: 0 })
+    // 运行快照：托管脚本 / 循环队列运行时锁定对应配置，结束后解锁（与网页版一致）
+    property var runtimeTasks: []
+    readonly property bool runLocked: !!d && Live.itemLocked(d.key, item, runtimeTasks)
+    function pollRuntime() {
+        if (!api) return
+        api.get("/api/dispatch/runtime-snapshot", text => {
+            let snap = null
+            try { snap = JSON.parse(text) } catch (e) {}
+            if (snap && Array.isArray(snap.tasks)) runtimeTasks = demoSnapshot ? demoSnapshot.tasks : snap.tasks
+        })
+    }
+    Timer {
+        interval: 3000; repeat: true; triggeredOnStart: true
+        running: view.opened && !!view.api && !!view.d && ["scripts", "queue"].indexOf(view.d.key) >= 0
+        onTriggered: view.pollRuntime()
+    }
     property var lastSnapshot: null
+    property var schedulerNames: null
+    property int sectionGeneration: 0
+    property bool snapshotPending: false
+    function currentScheduler(generation) {
+        return generation === sectionGeneration && opened && api && d?.key === "scheduler"
+    }
+    function refreshScheduler() {
+        const generation = sectionGeneration
+        if (!currentScheduler(generation) || !schedulerNames || snapshotPending) return
+        snapshotPending = true
+        api.get("/api/dispatch/runtime-snapshot", text => {
+            if (!currentScheduler(generation)) return
+            snapshotPending = false
+            let snap
+            try { snap = demoSnapshot || JSON.parse(text) } catch (e) { return }
+            if (!Array.isArray(snap?.tasks) || JSON.stringify(snap) === JSON.stringify(lastSnapshot)) return
+            lastSnapshot = snap
+            const previous = item?.runtimeKey
+            const previousTab = panel.tab
+            const list = [live.scheduler[0]].concat(Live.dispatchCenter(snap, schedulerNames, null))
+            const position = previous ? list.findIndex(row => row.runtimeKey === previous) : target
+            setLive("scheduler", list)
+            if (previous) {
+                select(position < 0 ? 1 : position)
+                panel.tab = position < 0 ? 0 : Math.min(previousTab, list[position].tabs.length - 1)
+            }
+        })
+    }
+    Timer {
+        interval: 1500; repeat: true
+        running: view.opened && !!view.api && view.d?.key === "scheduler" && !!view.schedulerNames
+        onTriggered: view.refreshScheduler()
+    }
     property var demoSnapshot: null         // 演示 / 自检：用模拟的运行快照代替后端返回（不启动任何真实任务）
     function today(offset) {
         const d = new Date(Date.now() + (offset || 0) * 86400000)
@@ -70,13 +234,67 @@ FocusScope {
         liveMessage = ""
     }
     function fail(r) { liveState = "error"; liveMessage = r && r.message ? r.message : "读取失败" }
+    HomeRuns {
+        id: liveHomeRuns
+        api: view.api
+        watching: view.opened && !!view.d && view.d.key === "home" && view.target === 0
+        onMessage: text => toast.show(text)
+    }
+    HomeRuns { id: previewRuns; api: null; watching: false }
+    function setHomeCard(index, card) {
+        const next = homeCards.slice()
+        next[index] = card
+        homeCards = next
+    }
+    function loadOverview() {
+        if (!api) return
+        const request = ++overviewRequest
+        call("/api/info/get/overview", {}, result => {
+            if (request !== overviewRequest) return
+            const proxy = result.data && result.data.Proxy
+            setHomeCard(1, result.code === 200 && proxy && typeof proxy === "object" && !Array.isArray(proxy)
+                ? Live.proxyOverview(proxy)
+                : Live.homePlaceholder(1, result.message || "账号统计读取失败", true))
+        })
+    }
+    function loadQuickStart() {
+        if (!api) return
+        const request = ++quickRequest
+        call("/api/info/combox/task", {}, tasks => {
+            if (request !== quickRequest) return
+            if (tasks.code !== 200 || !Array.isArray(tasks.data)) {
+                setHomeCard(0, Live.homePlaceholder(0, tasks.message || "任务列表读取失败", true))
+                return
+            }
+            call("/api/dispatch/get/power", {}, power => {
+                if (request !== quickRequest) return
+                if (power.code !== 200 || !Live.POWER_EN.includes(power.signal)) {
+                    setHomeCard(0, Live.homePlaceholder(0, power.message || "电源动作读取失败", true))
+                    return
+                }
+                liveHomeRuns.options = tasks.data
+                setHomeCard(0, Live.quickStart(tasks.data, power.signal))
+                liveHomeRuns.poll()
+            })
+        })
+    }
     function fetchLive(key) {
+        const generation = ++sectionGeneration
+        schedulerNames = null
+        snapshotPending = false
         if (!api) { liveState = ""; return }
+        if (key === "activity") {
+            setLive(key,activityShelf.records())
+            if (opened) activityShelf.load(activityShelf.games[target]?.[0] || activityShelf.games[0][0],false)
+            return
+        }
+        if (key === "home") { loadQuickStart(); loadOverview(); return }
         const supported = ["home", "scripts", "emulators", "queue", "scheduler", "localControls", "gamesign", "history", "settings"]
         if (supported.indexOf(key) < 0) { liveState = ""; return }
         liveState = "loading"
         if (key === "scripts") {
-            call("/api/scripts/get", { includeUsers: true }, r => r.code === 200 ? setLive(key, Live.scripts(r)) : fail(r))
+            callAll([["s", "/api/scripts/get", { includeUsers: true }], ["e", "/api/info/combox/emulator", {}]],
+                    m => m.s.code === 200 ? setLive(key, Live.scripts(m.s, m.e.code === 200 ? m.e.data : [])) : fail(m.s))
         } else if (key === "queue") {
             callAll([["q", "/api/queue/get", {}], ["s", "/api/info/combox/script", {}], ["sc", "/api/scripts/get", {}]], m => {
                 if (m.q.code !== 200) { fail(m.q); return }
@@ -92,31 +310,86 @@ FocusScope {
                 })
             })
         } else if (key === "emulators") {
-            callAll([["e", "/api/emulator/get", {}], ["st", "/api/emulator/status", {}]], m => m.e.code === 200 ? setLive(key, Live.emulators(m.e, m.st)) : fail(m.e))
+            emulatorConfigs.load()
         } else if (key === "settings" || key === "localControls") {
-            callAll([["g", "/api/setting/get", {}], ["v", "/api/info/version", {}]], m => {
+            // 设置：QQ 机器人绑定状态决定开关能否打开；本地控制：虚拟显示驱动状态、远程桌面状态与热键控制队列
+            const extra = key === "settings" ? [["q", "/api/setting/openclaw-qq/status", {}]]
+                : [["d", "/api/setting/virtual-display/status", {}], ["n", "/api/dispatch/navigation/state", null]]
+            callAll([["g", "/api/setting/get", {}], ["v", "/api/info/version", {}]].concat(extra), m => {
                 if (m.g.code !== 200) { fail(m.g); return }
                 const ver = m.v.current_hash ? "本地 " + m.v.current_hash.slice(0, 8) : ""
-                setLive(key, key === "settings" ? Live.settings(m.g.data, ver) : Live.local(m.g.data, api.port))
+                if (key === "settings") { setLive(key, Live.settings(m.g.data, ver, m.q && m.q.code === 200 ? m.q : null)); return }
+                const vd = m.d && m.d.code === 200 ? { ready: (m.d.results || []).every(x => x.passed), message: m.d.message, holding: m.d.holding } : null
+                if (m.n && m.n.code === 200) env = Object.assign({}, env, { nav: m.n.data })
+                setLive(key, Live.local(m.g.data, api.port, vd, env.nav, api.ports()))
+                pollDesk()
             })
         } else if (key === "gamesign") {
             callAll([["t", "/api/tools/get", {}], ["a", "/api/tools/sign/account/list", {}]], m => m.t.code === 200 ? setLive(key, Live.sign(m.t.data, m.a.code === 200 ? m.a.data : {})) : fail(m.t))
         } else if (key === "history") {
             if (!historyFilter.start) historyFilter = { start: today(-6), end: today(0), mode: 0 }
             const f = historyFilter
-            call("/api/history/search", { mode: ["DAILY", "WEEKLY", "MONTHLY"][f.mode], start_date: f.start, end_date: f.end }, r => r.code === 200 ? setLive(key, Live.history(r, f)) : fail(r))
-        } else if (key === "home" || key === "scheduler") {
-            callAll([["c", "/api/info/combox/task", {}], ["p", "/api/dispatch/get/power", {}], ["q", "/api/queue/get", {}]], m => {
-                api.get("/api/dispatch/runtime-snapshot", text => {
-                    let snap = { tasks: [], scheduledScripts: [] }
-                    try { snap = JSON.parse(text) } catch (e) {}
-                    if (demoSnapshot) snap = demoSnapshot
-                    lastSnapshot = snap
-                    // 队列 ID → 名称：调度中心按队列名显示每个运行中的任务
-                    const names = {}
-                    if (m.q.code === 200) m.q.index.forEach(q => { const d = m.q.data[q.uid]; if (d && d.Info) names[q.uid] = d.Info.Name })
-                    if (demoSnapshot && demoSnapshot.queueNames) Object.assign(names, demoSnapshot.queueNames)
-                    setLive(key, key === "home" ? Live.home(m.c.code === 200 ? m.c.data : [], snap, m.p.signal || "NoAction") : Live.dispatchCenter(snap, names))
+            const query = {mode:["DAILY","WEEKLY","MONTHLY"][f.mode], start_date:f.start, end_date:f.end}
+            call("/api/history/search", query, r => {
+                if (generation !== sectionGeneration || d?.key !== key) return
+                const list = Live.history(r, f)
+                if (r.code !== 200) list[0].blocks = [list[0].blocks[0],
+                    SD.note(r.message || "历史记录读取失败，请重新查询。", true)]
+                list.splice(1, 0, Live.replayArchive({message:"正在读取失败回放…"}))
+                setLive(key, list)
+                loadReplayArchive()
+            })
+        } else if (key === "scheduler") {
+            // 发起任务需要：任务列表、脚本名、各队列的队列项（从某脚本开始）、各脚本账号（账号范围）、当前电源动作
+            callAll([["q", "/api/queue/get", {}], ["t", "/api/info/combox/task", {}], ["cs", "/api/info/combox/script", {}],
+                     ["s", "/api/scripts/get", { includeUsers: true }], ["p", "/api/dispatch/get/power", {}]], m => {
+                if (!currentScheduler(generation)) return
+                const queues = m.q
+                const steps = queues.code === 200 ? queues.index.map(q => ["i" + q.uid, "/api/queue/item/get", { queueId: q.uid }]) : []
+                callAll(steps, items => {
+                    if (!currentScheduler(generation)) return
+                    api.get("/api/dispatch/runtime-snapshot", text => {
+                        if (!currentScheduler(generation)) return
+                        let snap
+                        try { snap = demoSnapshot || JSON.parse(text) } catch (e) {}
+                        if (!Array.isArray(snap?.tasks)) { fail({message:"无法读取运行状态"}); return }
+                        lastSnapshot = snap
+                        const names = {}
+                        if (queues.code === 200) queues.index.forEach(q => { const d = queues.data[q.uid]; if (d && d.Info) names[q.uid] = d.Info.Name })
+                        if (demoSnapshot && demoSnapshot.queueNames) Object.assign(names, demoSnapshot.queueNames)
+                        const scriptNames = {}
+                        if (m.cs.code === 200) m.cs.data.forEach(o => scriptNames[o.value] = o.label.replace(/^通用 - /, ""))
+                        const queueScripts = {}, scopeErrors = {}
+                        if (queues.code === 200) queues.index.forEach(q => {
+                            const r = items["i" + q.uid], seen = []
+                            if (r?.code === 200) r.index.forEach(x => {
+                                const sid = r.data[x.uid]?.Info?.ScriptId
+                                if (sid && sid !== "-" && !seen.includes(sid)) seen.push(sid)
+                            })
+                            else scopeErrors[q.uid] = "队列项读取失败，请刷新重试"
+                            queueScripts[q.uid] = seen.map(sid => ({value:sid, label:scriptNames[sid] || sid}))
+                        })
+                        const users = {}
+                        if (m.s.code === 200) m.s.index.forEach(x => {
+                            const ur = m.s.users && m.s.users[x.uid]
+                            if (ur?.code !== 200) return
+                            users[x.uid] = ur.index.filter(u => ur.data[u.uid]?.Info).map(u => {
+                                const info = ur.data[u.uid].Info
+                                const reason = !info.Status ? "未启用" : info.RemainedDay === 0 ? "天数已耗尽" : ""
+                                return {value:u.uid, label:info.Name || u.uid, reason:reason}
+                            })
+                        })
+                        const tasks = m.t.code === 200 ? m.t.data.filter(o => o.value) : []
+                        tasks.forEach(task => {
+                            const scripts = queueScripts[task.value] || [task]
+                            if (queues.code !== 200 || scripts.some(script => !users[script.value]))
+                                scopeErrors[task.value] = "账号范围读取失败，请刷新重试"
+                        })
+                        const launch = { cycles:queues.data || {}, tasks:tasks, queueScripts:queueScripts, users:users, scopeErrors:scopeErrors,
+                                         power: m.p.code === 200 ? m.p.signal : "NoAction" }
+                        setLive(key, Live.dispatchCenter(snap, names, launch))
+                        schedulerNames = names
+                    })
                 })
             })
         }
@@ -127,6 +400,7 @@ FocusScope {
         if (saving) return
         const it = item
         if (!it || !it.live) return
+        if (runLocked && it.lockAll) { toast.show("任务运行中，配置已锁定；任务结束后可编辑"); return }
         const reqs = Live.collect(it)
         if (!reqs.length) { toast.show("没有需要保存的改动"); if (then) then(); return }
         const snapshot = []
@@ -143,27 +417,77 @@ FocusScope {
                 saving = false
                 panel.edits++
                 toast.show("已保存到后端 · " + reqs.length + " 个请求")
+                if (it.reloadOnSave) fetchLive(d.key)
                 if (then) then()
                 return
             }
             const q = reqs[i++]
             call(q.path, q.body, r => {
-                if (r.code === 200) next()
+                if (r.code === 200) {
+                    if (q.path === "/api/setting/update" && q.body.data?.UI) uiSettings(q.body.data.UI)
+                    if (q.path === "/api/scripts/update" || q.path === "/api/scripts/user/update")
+                        scriptShelf.acknowledge(q)
+                    next()
+                }
                 else { saving = false; toast.show("保存失败：" + (r.message || q.path)) }
             })
         }
         next()
     }
+    ActivityShelf { id: activityShelf; host:view }
+    ArchiveWorkspace { id: workspace; host: view; archive: panel }
+    onIndexChanged: workspace.leave()
+    onItemChanged: if (workspace.record && workspace.source !== item) workspace.leave()
+    onTargetChanged: {
+        workspace.leave()
+        if(opened && api && d?.key==="activity") activityShelf.load(activityShelf.games[target]?.[0],false)
+    }
+
     function exec(op) {
-        call(op.path, op.body, r => {
+        const done = r => {
             if (r.code === 200 || r.code === undefined) {
                 toast.show(op.show && r.message ? r.message : (op.done || "已完成"))
                 if (op.reload) fetchLive(d.key)
+                if (op.path === "/api/child-session/window" && r.data?.hostStatus) {
+                    deskStatusRequest++
+                    env = Object.assign({}, env, {desk:r.data})
+                } else if (op.poll) pollDesk()
             } else toast.show("操作失败：" + (r.message || op.path))
-        })
+        }
+        const body = typeof op.body === "function" ? op.body(env) : op.body
+        if (op.get) api.get(op.path, text => { let r = { code: 0 }; try { r = JSON.parse(text) } catch (e) {} done(r) })
+        else if (op.queueMode && op.queueMode()) {
+            call("/api/queue/get", {queueId:body.taskId}, result => {
+                const info = result.data?.[body.taskId]?.Info
+                if (result.code !== 200 || !info) { toast.show("读取队列类型失败，请重试"); return }
+                body.mode = info.CycleEnabled ? "CycleRun" : "AutoProxy"
+                if (info.CycleEnabled) delete body.resumeFromScriptId
+                call(op.path, body, done)
+            })
+        } else call(op.path, body, done)
     }
     function runOp(op) {
         if (!op) return
+        if (op.workspace) { workspace.begin(op.workspace, op); return }
+        if (op.perform) { op.perform(); return }
+        if (op.overview || op.homeRetry) {
+            if (op.overview || target === 1) loadOverview()
+            else loadQuickStart()
+            return
+        }
+        if (op.period !== undefined) {
+            const preset=op.period.v
+            let start=today(preset===1?-1:preset===2?-7:0),end=today(preset===1?-1:0)
+            if(preset>=3){
+                const now=new Date(),day=now.getDate()
+                now.setDate(1);now.setMonth(now.getMonth()-(preset===6?6:preset-2))
+                now.setDate(Math.min(day,new Date(now.getFullYear(),now.getMonth()+1,0).getDate()))
+                start=Qt.formatDate(now,"yyyy-MM-dd")
+            }
+            historyFilter={start:start,end:end,preset:preset,mode:preset>=5?2:preset>=3?1:0}
+            fetchLive("history")
+            return
+        }
         if (op.query) {
             const f = Object.assign({}, historyFilter)
             const s = Live.pick(item, "start"), e = Live.pick(item, "end"), m = Live.pick(item, "mode")
@@ -175,37 +499,70 @@ FocusScope {
             return
         }
         if (op.start) {
-            const taskId = Live.pick(item, "task"), mode = Live.pick(item, "mode"), power = Live.pick(item, "power")
-            if (!taskId) { toast.show("没有可运行的任务"); return }
-            modal.ask("开始执行", "将以「" + ({ AutoProxy: "自动代理", ScriptConfig: "设置脚本", CycleRun: "循环运行" })[mode] + "」模式立即开始所选任务，完成后执行「" + SD.POWER[Live.POWER_EN.indexOf(power)] + "」。",
-                "POST /api/dispatch/start", "开始执行", false, () => {
-                    call("/api/dispatch/set/power", { signal: power }, result => {
-                        if (result.code !== 200) {
-                            toast.show("设置电源动作失败：" + (result.message || "请求失败"))
-                            return
-                        }
-                        call("/api/dispatch/start", { taskId: taskId, mode: mode }, r => {
-                            if (r.code === 200) { toast.show("已开始执行 · 任务 " + (r.taskId || "").slice(0, 8)); fetchLive(d.key) }
-                            else toast.show("开始失败：" + (r.message || ""))
-                        })
-                    })
-                })
+            const tasks = panel.selectedTasks.slice()
+            if (!tasks.length || liveHomeRuns.submitting) return
+            const mode = tasks.length > 1 ? "AutoProxy" : Live.pick(item, "mode")
+            const power = Live.pick(item, "power")
+            const modeName = {AutoProxy:"自动代理", ScriptConfig:"设置脚本", CycleRun:"循环运行"}[mode]
+            modal.ask("开始执行", "将以「" + modeName + "」启动 " + tasks.length + " 个任务，完成后执行「" + SD.POWER[Live.POWER_EN.indexOf(power)] + "」。",
+                "POST /api/dispatch/start", "开始执行", false, () => liveHomeRuns.launch(tasks, mode, power))
             return
         }
         if (op.stopAll) {
-            const tasks = lastSnapshot && lastSnapshot.tasks ? lastSnapshot.tasks : []
+            const tasks = liveHomeRuns.activeTasks
+            if (!liveHomeRuns.snapshotReady || liveHomeRuns.snapshotError) { liveHomeRuns.poll(); toast.show("正在同步运行状态，请稍后重试"); return }
             if (!tasks.length) { toast.show("当前没有运行中的任务"); return }
             modal.ask("停止任务", "将停止 " + tasks.length + " 个运行中的任务。", "POST /api/dispatch/stop", "停止", true, () => {
-                tasks.forEach(t => call("/api/dispatch/stop", { taskId: t.taskId }, () => {}))
-                toast.show("已发送停止指令")
-                fetchLive(d.key)
+                let replies = 0, failures = []
+                tasks.forEach(t => call("/api/dispatch/stop", { taskId: t.taskId }, r => {
+                    if (r.code !== 200) failures.push(r.message || "请求失败")
+                    if (++replies === tasks.length) {
+                        toast.show(failures.length ? "停止失败：" + failures.join("；") : "已发送停止指令")
+                        liveHomeRuns.poll()
+                    }
+                }))
             })
             return
         }
-        if (op.saveFirst) { save(() => exec(op)); return }
+        if (op.exportBackup) {
+            env = Object.assign({}, env, { exporting: true })
+            toast.show("正在导出数据备份…")
+            api.exportBackup(text => {
+                env = Object.assign({}, env, { exporting: false })
+                let r = {}; try { r = JSON.parse(text) } catch (e) {}
+                if (r.ok) { toast.show("已导出：" + r.path); fileLocations.openFolder(r.path) }
+                else toast.show("导出失败：" + (r.message || ""))
+            })
+            return
+        }
+        if (op.exportLogs) {
+            const path = fileLocations.exportLogs()
+            if (path) { toast.show("已打包日志：" + path); fileLocations.openFolder(path) }
+            else toast.show("打包日志失败")
+            return
+        }
+        if (op.savePorts) {
+            const err = api.savePorts(Number(Live.pick(item, "frontendPort")), Number(Live.pick(item, "backendPort")))
+            toast.show(err ? "保存失败：" + err : "端口已保存，下次启动时生效")
+            return
+        }
+        if (op.refreshReplays) { loadReplayArchive(); return }
+        if (op.replayPath) {
+            if (!fileLocations.openFile(op.replayPath)) toast.show("无法打开回放文件，请检查文件是否存在")
+            return
+        }
+        if (op.historyLog) { logViewer.open(op.historyLog, op.title || ""); return }
+        if (op.captureHotkey) {
+            const field = op.captureHotkey
+            recorder.bossMode = !!op.boss
+            recorder.begin(value => { field.v = value; field.dirty = true; panel.edits++; panel.rebuild(); toast.show("热键已录入，请保存配置后生效") })
+            return
+        }
         if (!op.path) { if (op.reload) fetchLive(d.key); return }
-        if (op.confirm) { modal.ask("确认操作", op.confirm + "此操作会写入后端。", "POST " + op.path, "确认", true, () => exec(op)); return }
-        exec(op)
+        // saveFirst：先保存未保存的改动再执行；有确认语时先确认
+        const go = () => op.saveFirst ? save(() => exec(op)) : exec(op)
+        if (op.confirm) { modal.ask("确认操作", op.confirm + "此操作会写入后端。", "POST " + op.path, "确认", true, go); return }
+        go()
     }
     function liveAction(name) {
         const page = SD.pages(item)[Math.min(panel.tab, SD.pages(item).length - 1)]
@@ -214,8 +571,15 @@ FocusScope {
         if (ops[name]) { runOp(ops[name]); return }
         toast.show("「" + name + "」尚未接入后端")
     }
+    EmulatorConfigs {
+        id: emulatorConfigs
+        objectName: "emulatorConfigs"
+        host: view
+        onMessage: text => toast.show(text)
+        onConfirmRemoval: (label, callback) => modal.ask("删除模拟器配置","删除「"+label+"」的配置？","POST /api/emulator/delete","删除",true,callback)
+    }
     property int target: 0
-    readonly property var item: items.length ? items[Math.min(target, items.length - 1)] : null
+    readonly property var item: items.length ? items[Math.min(target, items.length - 1)] : emulatorPage ? emulatorConfigs.empty : null
 
     property var hub: null          // 一级索引：取方块实时位置、在飞行期间隐藏对应方块
     property bool returning: false  // 正在飞回：索引提前淡入，与飞回并行
@@ -235,6 +599,7 @@ FocusScope {
     function open(i, r, tileItem) {
         if (hub) { r = hub.liveTileRect(i); hub.hiddenIndex = i }
         returning = false
+        arrayPanelUsed = false
         index = i
         fetchLive(departments[i].key)
         // 记忆：回到上次停留的条目与功能分页
@@ -242,12 +607,13 @@ FocusScope {
         panel.tab = items[target] && items[target]._tab ? items[target]._tab : 0
         landed = false
         opened = true
+        if (d.key==="activity" && api) activityShelf.load(activityShelf.games[target][0],false)
         // 增强阵列：方块直接消失不再重建，阵列飞入
         if (arrayMode) { landed = true; setupArray() }
         else morph.start(r, tileItem, false)
         revealAnim.stop(); hideAnim.stop()
         revealAnim.start()
-        chainDelay.restart()
+        if (!arrayMode) chainDelay.restart()
         forceActiveFocus()
     }
     function close() {
@@ -284,10 +650,12 @@ FocusScope {
     function go(next, d) {
         dir = d
         target = next
+        if (showingOnlineHome && next === 1) loadOverview()
         memory[view.d.key] = next
         // 记忆：每个条目保留自己的功能分页
         panel.tab = items[next] && items[next]._tab ? items[next]._tab : 0
-        chain.goTo(next, d)
+        if (!arrayMode) chain.goTo(next, d)
+        else syncArray()
     }
     property int dir: 1
     property var memory: ({})               // 部门 key → 上次停留的条目
@@ -298,22 +666,33 @@ FocusScope {
 
     Keys.onPressed: event => {
         if (!opened) return
+        if (scriptShelf.typing) return
         let k = event.key
         if (modal.shown) { if (k === Qt.Key_Escape) modal.close(); event.accepted = true; return }
+        const editor = view.Window.window?.activeFocusItem
+        if (editor && typeof editor.cursorPosition === "number" && !editor.readOnly && k !== Qt.Key_Escape) return
+        if (arrayMode && !arrayItem && k !== Qt.Key_Escape) return
         // WASD 与方向键等价
         if (k === Qt.Key_W) k = Qt.Key_Up
         else if (k === Qt.Key_S) k = Qt.Key_Down
         else if (k === Qt.Key_A) k = Qt.Key_Left
         else if (k === Qt.Key_D) k = Qt.Key_Right
+        if (k === Qt.Key_Escape && workspace.record) { workspace.leave(); event.accepted = true; return }
         if (arrayItem) {
             // 阵列：方向键切列 / 翻档，回车读取，ESC 先退出读取再返回索引
             if (k === Qt.Key_Escape) { if (arrayItem.detailOpen) arrayItem.close(); else close(); event.accepted = true; return }
-            if (!arrayItem.detailOpen) {
+            if (!workspace.record && (!arrayItem.detailOpen || !arrayItem.isQueue)) {
                 if (k === Qt.Key_Down) arrayItem.nav("row", 1)
                 else if (k === Qt.Key_Up) arrayItem.nav("row", -1)
-                else if (k === Qt.Key_Right) arrayItem.nav("lane", 1)
-                else if (k === Qt.Key_Left) arrayItem.nav("lane", -1)
+                else if (k === Qt.Key_Right || k === Qt.Key_Left) {
+                    const delta = k === Qt.Key_Right ? 1 : -1
+                    if (arrayItem.singleColumn && arrayDetail)
+                        panel.tab = Math.max(0, Math.min(panel.pages.length - 1, panel.tab + delta))
+                    else arrayItem.nav("lane", delta)
+                }
                 else if (k === Qt.Key_Return || k === Qt.Key_Enter) arrayItem.open()
+                else if (arrayDetail && k >= Qt.Key_1 && k < Qt.Key_1 + Math.min(9, panel.pages.length)) panel.tab = k - Qt.Key_1
+                else return
                 event.accepted = true
                 return
             }
@@ -323,7 +702,7 @@ FocusScope {
         else if (k === Qt.Key_Up || k === Qt.Key_Left) { select(target - 1); event.accepted = true }
         else if (k >= Qt.Key_1 && k <= Qt.Key_9) {
             const t = k - Qt.Key_1
-            if (t < SD.pages(item).length) panel.tab = t
+            if (t < panel.pages.length) panel.tab = t
             event.accepted = true
         }
     }
@@ -331,10 +710,68 @@ FocusScope {
         enabled: view.opened
         acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
         onWheel: event => {
-            // 鼠标在档案卡上、且当前页有可滚动的表格（队列项）：滚轮滚表格，不切换条目
-            if (panel.hovered && panel.scrollTable && panel.scrollTable.scroll(event.angleDelta.y < 0 ? 1 : -1)) return
-            if (view.arrayItem) { if (!view.arrayItem.detailOpen) view.arrayItem.nav("row", event.angleDelta.y < 0 ? 1 : -1); return }
-            view.select(view.target + (event.angleDelta.y < 0 ? 1 : -1))
+            if (scriptShelf.visible && scriptShelf.sortableMode && scriptShelf.overDock(Qt.point(event.x,event.y))) {
+                scriptShelf.scrollDock(event.pixelDelta.y ? -event.pixelDelta.y : -event.angleDelta.y / 2)
+                event.accepted = true
+                return
+            }
+            // 卡片顶部：滚轮切换分页
+            if (panel.visible && panel.wheelTabs(view, event.x, event.y, event.pixelDelta.y, event.angleDelta.y)) { event.accepted = true; return }
+            const log = panel.logViewport
+            if (log && log.visible && log.contains(log.mapFromItem(view,event.x,event.y))) {
+                const maxY=Math.max(0,log.contentHeight-log.height)
+                log.contentY=Math.max(0,Math.min(maxY,log.contentY-(event.pixelDelta.y || event.angleDelta.y/2)))
+                log.follow=log.contentY>=maxY-1
+                event.accepted=true
+                return
+            }
+            if (panel.scrollForm) {
+                const dy=event.pixelDelta.y ? -event.pixelDelta.y : -event.angleDelta.y/2
+                for (const surface of [panel.formViewport]) {
+                    const at = surface.mapFromItem(view,event.x,event.y)
+                    if (!surface.contains(at)) continue
+                    if (surface === panel.tabViewport && surface.contentWidth>surface.width)
+                        surface.contentX=Math.max(0,Math.min(surface.contentWidth-surface.width,surface.contentX+dy))
+                    else if (surface === panel.formViewport && surface.contentHeight>surface.height)
+                        surface.contentY=Math.max(0,Math.min(surface.contentHeight-surface.height,surface.contentY+dy))
+                    else continue
+                    event.accepted=true
+                    return
+                }
+            }
+            const picker = panel.taskPickerArea
+            if (picker && picker.visible) {
+                const point = picker.mapFromItem(view, event.x, event.y)
+                // 包括同一数据块上方 24 像素的标题和 8 像素的间距。
+                if (point.x >= 0 && point.x < picker.width && point.y >= -32 && point.y < picker.height) {
+                    picker.turnWheel(event.pixelDelta.y, event.angleDelta.y)
+                    event.accepted = true
+                    return
+                }
+            }
+            const area = panel.runArea
+            if (area && area.visible) {
+                const p = area.mapFromItem(view, event.x, event.y)
+                if (p.x >= 0 && p.y >= -32 && p.x < area.width && p.y < area.height) {
+                    area.scrollBy(event.pixelDelta.y ? -event.pixelDelta.y : -event.angleDelta.y * 0.5)
+                    event.accepted = true
+                    return
+                }
+            }
+            // 鼠标在档案卡上、且当前页有分页的表格：滚轮翻页，不切换条目
+            if (panel.hovered && panel.scrollTable && panel.scrollTable.turnWheel(event.pixelDelta.y, event.angleDelta.y)) { event.accepted = true; return }
+            const delta = event.pixelDelta.y || event.angleDelta.y
+            if (view.arrayItem) {
+                if (delta && !workspace.record && (!view.arrayItem.detailOpen || !view.arrayItem.isQueue)) {
+                    view.arrayItem.nav("row", delta < 0 ? 1 : -1)
+                    event.accepted = true
+                }
+                return
+            }
+            // 在改变选中档案前丢弃溢出的输入，让录像盒与右侧档案始终指向同一项。
+            if (delta && chain.queue.length + Number(chain.stepping) < 3)
+                view.select(view.target + (delta < 0 ? 1 : -1))
+            event.accepted = true
         }
     }
     HoverHandler {
@@ -518,42 +955,60 @@ FocusScope {
         target: view.arrayItem
         // 读取：右侧档案卡切到对应条目；选的是账号 / 队列项行时直接停在对应分页
         function onOpened(lane, row) {
+            view.arrayPanelUsed = true
+            if (view.d.key !== "queue") { view.applyArraySelection(lane,row); return }
             view.select(lane)
             const it = view.items[lane] || {}
-            const pages = SD.pages(it)
-            const queue = view.d && view.d.key === "queue"
-            // 调度队列没有「队列配置」那一盒：每一盒都是队列项，表格滚到它附近的 12 项
-            if (queue) view.focusQueueRow(it, row)
-            const k = pages.findIndex(p => p.name === (queue ? "队列项" : "账号"))
-            panel.tab = (queue || row > 0) && k >= 0 ? k : 0
-            if (queue) panel.rebuild()
+            view.focusQueueRow(it,row)
+            const k = SD.pages(it).findIndex(p => p.name === "队列项")
+            panel.tab = k >= 0 ? k : 0
+            panel.rebuild()
         }
-        function onMoved(lane, row) { if (lane !== view.target) view.select(lane) }
+        function onMoved(lane, row) {
+            if (view.d.key === "queue") { if (lane !== view.target) view.select(lane); return }
+            view.applyArraySelection(lane,row)
+        }
         function onFlownOut() { if (!view.opened) view.finishClose() }
     }
-    // 队列项表格：以选中的那一项为中心取 12 项（不足时贴边）
+    function applyArraySelection(lane,row) {
+        if (syncingArray || !arrayItem || !items.length) return
+        syncingArray = true
+        select(arrayItem.singleColumn ? row : lane)
+        if (!arrayItem.singleColumn) panel.tab = row
+        syncingArray = false
+    }
+    Connections {
+        target: panel
+        function onTabChanged() { if (view.arrayDetail && view.d?.key === "scripts") view.syncArray() }
+    }
+    // 队列项表格：翻到选中的那一项所在的页并标出它
     function focusQueueRow(it, row) {
         for (const tab of it.tabs || []) for (const b of tab.blocks || []) {
-            if (!b.all) continue
-            const n = b.all.length, size = 12
-            const off = Math.max(0, Math.min(n - size, row - Math.floor(size / 2)))
-            b.offset = off
+            if (b.t !== "table" || !b.queueRows) continue
+            b.page = Math.floor(row / (b.pageRows || 9))
             b.focus = row
-            b.rows = b.all.slice(off, off + size)
         }
     }
     function setupArray() {
         if (!arrayItem || !d) return
         arrayItem.mode = d.key
         arrayItem.columns = Qt.binding(() => view.arrayColumns)
-        arrayItem.reset(target)
+        arrayItem.sectionCode = d.code
+        arrayItem.emptyText = Qt.binding(() => d?.key === "scripts" ? (scriptShelf.query ? "没有匹配的脚本" : "暂无脚本") : "暂无档案")
+        arrayItem.sortShelf = sortDock
+        arrayItem.sortRecord = Qt.binding(() => signSorting && item?.sortId ? item : null)
+        arrayItem.reset(target,panel.tab)
         arrayItem.flyIn()
     }
-    onArrayItemChanged: if (opened && arrayItem) setupArray()
+    onArrayItemChanged: {
+        if (opened && arrayItem) setupArray()
+        else if (opened && !arrayMode && d) chain.open(items,d.n,target)
+    }
 
     // ── 左下：录像带串 + 访问等级 ───────────────────────────────────────────
     CassetteChain {
         id: chain
+        shelf: scriptShelf.visible ? scriptShelf : sortDock
         objectName: "chain"
         visible: !view.arrayMode
         x: 0
@@ -577,8 +1032,9 @@ FocusScope {
         }
     }
 
-    // ── 数据来源标记：实时数据 / 演示数据 ─────────────────────────────────
+    // ── 读取失败提示（正常时不显示数据来源说明）─────────────────────────────
     Row {
+        visible: !view.isHome && view.liveState === "error"
         x: 1150
         y: 26
         z: 5
@@ -590,10 +1046,7 @@ FocusScope {
             color: view.isLive ? Theme.success : view.liveState === "error" ? Theme.error : view.liveState === "loading" ? Theme.warning : Theme.muted
         }
         Text {
-            text: view.isLive ? "实时数据 · 来自后端 · 共 " + view.items.length + " 项"
-                : view.liveState === "loading" ? "正在读取后端…"
-                : view.liveState === "error" ? "后端读取失败：" + view.liveMessage + " · 显示演示数据"
-                : "演示数据 · 该部门尚未接入后端"
+            text: "后端读取失败：" + view.liveMessage
             color: Theme.muted
             font.family: Theme.font
             font.pixelSize: 12
@@ -610,7 +1063,7 @@ FocusScope {
         z: 5
         spacing: 4
         opacity: view.reveal
-        readonly property int maxDots: 12
+        readonly property int maxDots: scriptShelf.visible ? 7 : 12
         readonly property int first: view.items.length <= maxDots ? 0
             : Math.max(0, Math.min(view.items.length - maxDots, view.target - Math.floor(maxDots / 2)))
         Text {
@@ -683,20 +1136,30 @@ FocusScope {
         }
         ArchivePanel {
             id: panel
+            visible: !!view.item
+            host: view
+            sortDock: sortDock
+            homeRuns: view.isLive ? liveHomeRuns : previewRuns
             objectName: "archivePanel"
             x: 30
             y: 20
             width: parent.width - 60
             height: parent.height - 40
             dept: view.d
-            item: view.item
+            item: workspace.record || (!view.arrayMode || view.arrayDetail || view.arrayPanelUsed ? view.item : null)
             itemIndex: view.target
             // 后端还在读取本部门数据时，档案卡停在合拢状态；读取完成（或失败）立即揭开
             saving: view.saving
+            runLocked: view.runLocked
+            env: view.env
             loading: view.liveState === "loading"
             onToast: text => toast.show(text)
             onConfirmDelete: (name, api) => modal.open(name, api)
-            onLiveAction: name => view.liveAction(name)
+            emulatorManager: view.emulatorPage && !workspace.record ? emulatorConfigs : null
+            onLiveAction: name => {
+                if (workspace.record) view.runOp(workspace.record.ops[name])
+                else view.liveAction(name)
+            }
             onLiveOp: op => view.runOp(op)
             onRequestEnhanced: {
                 if (!view.enhanced) return
@@ -760,13 +1223,47 @@ FocusScope {
         y: 1044
         spacing: 40
         opacity: view.reveal
-        Text { anchors.verticalCenter: parent.verticalCenter; text: "滚轮 / ↑↓ 切换条目 · 1–9 切换分页 · ESC 返回"; color: Theme.muted; font.family: Theme.font; font.pixelSize: 11; font.letterSpacing: 2 }
         Row {
             Text { text: "POWERED BY "; color: Theme.ink; font.family: Theme.font; font.pixelSize: 14; font.letterSpacing: 0.6 }
             Text { text: "AUTO-MAS"; color: Theme.ink; font.family: Theme.font; font.pixelSize: 14; font.weight: Font.Bold; font.letterSpacing: 0.6 }
         }
     }
 
+    // 通用暂存区：签到账号组录像带、队列定时 / 队列项行、托管账号页签的拖动排序
+    SortDock {
+        id: sortDock
+        objectName: "sortDock"
+        anchors.fill: parent
+        z: 6
+        visible: view.opened && (!view.arrayMode || !!view.arrayItem?.singleColumn)
+    }
+    // 签到账号组（录像带）的排序组：放到当前选中的账号组之前 / 之后
+    property var signSortGroup: ({
+        ids: () => (live.gamesign || []).filter(x => x.sortId).map(x => x.sortId),
+        label: id => ((live.gamesign || []).find(x => x.sortId === id) || {}).name || "",
+        target: pt => {
+            const it = view.item
+            if (!it || !it.sortId) return null
+            const side = arrayMode && arrayItem ? arrayItem.sortSide(sortDock, pt) : chain.insertSide(sortDock, pt)
+            return side ? { id: it.sortId, side: side } : null
+        },
+        commit: (ids, done) => call("/api/tools/sign/account/reorder", { order: ids }, r => {
+            done(r.code === 200)
+            if (r.code === 200) { toast.show("已调整账号组顺序"); fetchLive("gamesign") }
+            else toast.show("排序保存失败：" + (r.message || ""))
+        })
+    })
+    readonly property bool signSorting: opened && !!d && d.key === "gamesign"
+    onSignSortingChanged: signSorting ? sortDock.register("signGroups", signSortGroup) : sortDock.unregister("signGroups", signSortGroup)
+    onOpenedChanged: if (!opened) { sortDock.reset(); workspace.leave() }
+    ScriptShelf {
+        id: scriptShelf
+        objectName: "scriptShelf"
+        view: view; chain: chain; backButton: back
+        anchors.fill: parent; z: 7
+        visible: view.opened && !!view.d && view.d.key === "scripts"
+        onMessage: text => toast.show(text)
+    }
     Rectangle {
         id: back
         anchors.right: parent.right
