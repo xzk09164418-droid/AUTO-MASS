@@ -1119,7 +1119,6 @@ def substitute_once(text: str, pattern: re.Pattern[str], value: str, where: str)
     return pattern.sub(lambda m: f'{m.group(1)}"{value}"', text, count=1)
 
 
-PACKAGE_JSON_VERSION = re.compile(r'(?m)^(\s*"version"\s*:\s*)"[^"]*"')
 APP_CONFIG_VERSION = re.compile(r'(?m)^(\s*VERSION\s*=\s*)"[^"]*"')
 PYPROJECT_VERSION = re.compile(r'(?m)^(version\s*=\s*)"[^"]*"')
 UV_LOCK_VERSION = re.compile(

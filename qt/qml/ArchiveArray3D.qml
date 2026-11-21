@@ -104,7 +104,6 @@ Item {
     // 离开时反向滑回。reveal 以选择过渡同样的指数速率（2.8）逼近目标
     property real reveal: 0
     property real targetReveal: 0
-    property bool leaving: false
     readonly property bool uiShown: targetReveal === 1 && !detailOpen
     // 原项目的「换下的那盒」：换选中时，原来抬起的那盒保持完整外观与标签，按自己的弹簧（4.5）落回格位；
     // 再选回它时接着它当前的高度继续。外壳保持同一个实例，附加刻字和图标各占一个格位。
@@ -156,8 +155,7 @@ Item {
         reveal = 1
         step(0)
     }
-    function flyIn() { reveal = 0; targetReveal = 1; leaving = false; springs.lift.v = 0; springs.lift.vel = 0; running = true }
-    function flyOut() { targetReveal = 0; leaving = true; detailOpen = false; running = true }
+    function flyIn() { reveal = 0; targetReveal = 1; springs.lift.v = 0; springs.lift.vel = 0; running = true }
     // 返回索引：画面原样模糊并淡出（索引在下面同时淡入），结束后再静默归位，不播放滑出 / 收回读取
     property real exitP: 0
     function blurOut() {
@@ -172,7 +170,7 @@ Item {
         NumberAnimation { target: root; property: "exitP"; from: 0; to: 1; duration: Theme.richMotion ? 380 : 1; easing.type: Easing.OutCubic }
         ScriptAction { script: {
             root.detailOpen = false
-            root.targetReveal = 0; root.reveal = 0; root.leaving = false
+            root.targetReveal = 0; root.reveal = 0
             root.flownOut()
             root.exitP = 0
         } }
@@ -607,7 +605,6 @@ Item {
         // 进出场：reveal 指数逼近目标（同原项目 selectionTransition 的 2.8）
         reveal += (targetReveal - reveal) * (1 - Math.exp(-dt * (Theme.richMotion ? 2.8 : 35)))
         if (Math.abs(targetReveal - reveal) < 0.0005) reveal = targetReveal
-        if (leaving && reveal < 0.03) { leaving = false; flownOut() }
         const entryX = 28 * (1 - reveal)          // 世界 +x 在画面里是右上方
         // 悬停抬起（最多三格同时在变化；没有悬停时跳过，不产生临时对象）
         if (hoverCell || Object.keys(hoverLifts).length) stepHover(dt)

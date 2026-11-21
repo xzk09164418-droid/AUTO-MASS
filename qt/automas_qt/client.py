@@ -54,7 +54,6 @@ class ClientController(QObject):
         except (OSError, ValueError):
             self.start_hidden = False
         self.busy = False
-        self._closing = False
         self._restart = False
         self._close_deadline = 0.0
         self._misses = 0
@@ -195,7 +194,6 @@ class ClientController(QObject):
 
     def _fail(self, text: str) -> None:
         self._close_timer.stop()
-        self._closing = False
         self._set_busy(False)
         self.errorOccurred.emit(text)
 
@@ -256,14 +254,12 @@ class ClientController(QObject):
                     result.get("transportError")
                     == QNetworkReply.NetworkError.ConnectionRefusedError.value
                 ):
-                    self._closing = True
                     self._close_timer.start()
                 else:
                     self._fail(
                         "无法确认后端状态，请恢复连接后重试；仅退出前端仍可使用。"
                     )
                 return
-            self._closing = True
             self.backend.call("/api/core/close", {}, accepted, timeout=120000)
 
         def accepted(result):
@@ -318,7 +314,6 @@ class ClientController(QObject):
                 self._fail(str(error))
                 return
         if self._restart:
-            self._closing = False
             self._set_busy(False)
             self.backend.start()
             self.show_window()

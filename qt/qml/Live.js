@@ -83,7 +83,6 @@ function isOff(item, spec, locked, env) {
     return false
 }
 // 行是否显示：row[3] 为函数时按其返回值（随未保存的改动即时切换）
-function rowShown(row) { return typeof row[3] !== "function" || row[3]() }
 // 操作按钮是否不可用：op.lock 运行时锁定；op.off 当前不可用；op.when() 为假时不可用
 function opOff(op, locked, env) { return !!op && (!!op.off || (locked && !!op.lock) || (!!op.when && !op.when(env || {}))) }
 
