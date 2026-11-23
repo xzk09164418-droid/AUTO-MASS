@@ -54,11 +54,19 @@ FocusScope {
     readonly property bool isHome: !!d && d.key === "home"
     readonly property bool showingOnlineHome: onlineHome && isHome
     property var homeCards: [Live.homePlaceholder(0, "等待后端连接…", false), Live.homePlaceholder(1, "等待后端连接…", false)]
+    property var homeHotkeys: null
+    readonly property var controlGuide: SD.controlGuide(api?.port, homeHotkeys)
     property int quickRequest: 0
     property int overviewRequest: 0
     signal uiSettings(var patch)
     onApiChanged: {
-        if (api) call("/api/setting/get",{},r=>{if (r.code===200) uiSettings(r.data.UI || {})})
+        homeHotkeys = null
+        const source = api
+        if (source) call("/api/setting/get", {}, r => {
+            if (api !== source || r.code !== 200) return
+            homeHotkeys = r.data.Hotkey || null
+            uiSettings(r.data.UI || {})
+        })
         quickRequest++
         overviewRequest++
         if (!api) homeCards = [Live.homePlaceholder(0, "等待后端连接…", false), Live.homePlaceholder(1, "等待后端连接…", false)]
@@ -68,14 +76,14 @@ FocusScope {
     property var live: ({})                 // 部门 key → 条目
     property string liveState: ""           // loading / ok / error
     property string liveMessage: ""
-    readonly property bool isLive: showingOnlineHome ? !!api && !homeCards[target].placeholder : !!(d && live[d.key])
+    readonly property bool isLive: showingOnlineHome ? !!api && !item?.placeholder : !!(d && live[d.key])
     readonly property bool emulatorPage: !!d && d.key === "emulators"
     readonly property var connectionCard: ({
         name:d?.zh || "", en:"CONNECTION", live:true,
         blocks:[SD.note(!api ? "等待后端连接…" : liveState === "error" ? liveMessage : "正在读取配置…", true)],
         ops:{"重试":{reload:true}}, actions:api && liveState === "error" ? ["重试"] : []
     })
-    readonly property var items: emulatorPage ? emulatorConfigs.records : showingOnlineHome ? homeCards
+    readonly property var items: emulatorPage ? emulatorConfigs.records : showingOnlineHome ? homeCards.concat(controlGuide)
         : d?.key === "scripts" ? scriptShelf.filtered : d && live[d.key] ? live[d.key]
         : onlineHome && d?.key === "activity" ? activityShelf.records()
         : onlineHome ? [connectionCard] : conf ? conf.items : []
@@ -430,6 +438,8 @@ FocusScope {
             call(q.path, q.body, r => {
                 if (r.code === 200) {
                     if (q.path === "/api/setting/update" && q.body.data?.UI) uiSettings(q.body.data.UI)
+                    if (q.path === "/api/setting/update" && q.body.data?.Hotkey)
+                        homeHotkeys = Object.assign({}, homeHotkeys || {}, q.body.data.Hotkey)
                     if (q.path === "/api/scripts/update" || q.path === "/api/scripts/user/update")
                         scriptShelf.acknowledge(q)
                     next()
@@ -513,6 +523,7 @@ FocusScope {
                 "POST /api/dispatch/start", "开始执行", false, () => liveHomeRuns.launch(tasks, mode, power))
             return
         }
+        if (op.resume) { liveHomeRuns.resume(panel.selectedTasks); return }
         if (op.stopAll) {
             const tasks = liveHomeRuns.activeTasks
             if (!liveHomeRuns.snapshotReady || liveHomeRuns.snapshotError) { liveHomeRuns.poll(); toast.show("正在同步运行状态，请稍后重试"); return }

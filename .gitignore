@@ -35,6 +35,15 @@ list/
 /script/
 /environment/
 
+# 本机部署的解释器、个人辅助脚本、迁移副本和测试记录
+/python/
+/MuMuHooks/
+/QueueTools/
+/migration/
+/private-migration/
+/validation/
+/AUTO-MASS.exe
+
 # Frontend dependencies & caches
 /frontend/node_modules/
 /frontend/.yarn/cache/

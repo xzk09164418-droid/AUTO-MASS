@@ -748,7 +748,7 @@ class HotkeyCaptureIn(_SchemaModel):
 
 
 class QueueControlIn(_SchemaModel):
-    action: Literal["select", "pause", "continue"]
+    action: Literal["select", "pause", "continue", "resume", "previous", "next"]
     queueId: str = ""
     taskId: str = ""
     token: str = ""
@@ -2369,6 +2369,7 @@ class TaskRuntimeSnapshotItem(_SchemaModel):
     scriptId: Optional[str] = Field(default=None, description="脚本 ID")
     userId: Optional[str] = Field(default=None, description="用户 ID")
     stopping: bool = Field(default=False, description="任务是否正在停止")
+    queueControlState: str | None = Field(default=None, description="队列当前的手动控制状态")
     scripts: List[WSTaskScriptIdentityData] = Field(
         default_factory=list, description="任务关联的脚本静态标识"
     )

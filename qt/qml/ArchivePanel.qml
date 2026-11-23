@@ -850,10 +850,13 @@ Item {
         }
     }
     component NoteBlock: Item {
+        id: noteBlock
         property var b
+        readonly property bool guide: panel.item?.en === "CONTROL GUIDE"
         implicitHeight: noteText.implicitHeight + 8
+        Rectangle { anchors.fill: parent; visible: noteBlock.guide && Theme.dark; color: Theme.ink }
         Rectangle { width: 3; height: parent.height; color: Theme.accent }
-        Text { id: noteText; x: 14; y: 4; width: parent.width - 14; text: parent.b.text; wrapMode: Text.Wrap; lineHeight: 1.35; color: Theme.muted; font.family: Theme.font; font.pixelSize: 13 }
+        Text { id: noteText; x: 14; y: 4; width: parent.width - 14; text: parent.b.text; wrapMode: Text.Wrap; lineHeight: 1.35; color: noteBlock.guide ? "#000000" : Theme.muted; font.family: Theme.font; font.pixelSize: 13 }
     }
     component LogBlock: Rectangle {
         property var b
@@ -1168,6 +1171,7 @@ Item {
                         primary: panel.emulatorManager ? modelData === "保存" : index === 0
                         danger: /删除|停止|注销|卸下/.test(modelData)
                         enabled: { panel.edits; return !!panel.item && (!panel.emulatorManager || panel.emulatorManager.canAct(modelData,panel.item)) && !(panel.saving && modelData === "保存") && !(modelData === "开始执行" && panel.item.en === "QUICK START" && (!panel.selectedTasks.length || panel.homeRuns.submitting))
+                            && !(modelData === "继续执行" && !panel.homeRuns.pausedSelection(panel.selectedTasks).length)
                             && !(modelData === "保存" && panel.runLocked && panel.item.lockAll) && !Live.opOff(panel.mergedOps[modelData], panel.runLocked, panel.env) }
                         opacity: enabled ? 1 : 0.35
                         onClicked: panel.act(modelData)

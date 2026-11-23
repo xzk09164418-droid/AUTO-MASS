@@ -89,6 +89,42 @@ var emulatorExamples = [
 
     ]
 
+function controlGuide(port, hotkeys) {
+    const keys = hotkeys || {ToggleStartStop:"Ctrl+Alt+S", PreviousTask:"Ctrl+Alt+Left", NextTask:"Ctrl+Alt+Right"}
+    const keyLabel = value => value || "未绑定"
+    return { name: "控制说明", en: "CONTROL GUIDE", scrollBody: true, tabs: [
+        { name: "远程桌面借用", blocks: [
+            note(port ? "本机后端地址为 http://127.0.0.1:" + port + "。以下 HTTP 请求均发往此地址。"
+                      : "连接后可在「本地控制 → 连接端口」查看本机后端地址。远程桌面宿主端口用于桌面连接。", true),
+            note('向 /api/child-session/acquire 发送 POST 请求，正文例如 {"caller":"worker1"}。保存返回的 leaseId。leaseStatus 为 granted 时可连接桌面，为 pending 时需等待当前子任务结束。', true),
+            note("轮询 GET /api/child-session/status，在 data.activeLeases 中按 leaseId 找到自己的租约。状态为 granted 后再连接桌面。", true),
+            note('退出桌面后，向 /api/child-session/release 发送 POST 请求，正文填写 {"leaseId":"申请返回的编号"}。全部租约归还后，队列可继续执行。', true)
+        ] },
+        { name: "热键控制", blocks: [
+            note(hotkeys ? "全局热键已" + (keys.Enabled ? "启用" : "关闭") + "。在「本地控制 → 全局热键」可修改组合键并保存。"
+                         : "以下为默认快捷键。在「本地控制 → 全局热键」可查看或修改实际绑定。", true),
+            note(keyLabel(keys.ToggleStartStop) + "　启动、暂停或继续「任务快捷控制」中选定的队列。", true),
+            note(keyLabel(keys.PreviousTask) + "　选择上一个托管。\n" + keyLabel(keys.NextTask) + "　选择下一个托管。上下切换适用于非循环队列。", true),
+            note("切换托管后，等队列显示「已暂停」，再按启停热键继续。也可在主页勾选该队列并点击「继续执行」。", true)
+        ] },
+        { name: "任务控制", blocks: [
+            note("在「本地控制 → 任务快捷控制」选择热键控制的队列。本机程序可通过 GET /api/dispatch/navigation/state 查询队列状态。", true),
+            note("向 /api/dispatch/navigation/toggle 发送 POST 请求可切换启停。要切换到上一个或下一个任务，分别向同一路径下的 previous 或 next 发送 POST 请求。上下切换适用于非循环队列。", true),
+            note("也可在安装目录运行命令。将最后的 toggle 换成 prev 或 next 即可切换任务。\npython remote_script_controller.py --port " + (port || "<后端端口>") + " control toggle", true)
+        ] },
+        { name: "脚本占用", blocks: [
+            note("只需要使用某个托管脚本时，先在「本地控制 → 外部程序接口 → 邮箱指令」保存调用方 ID 和至少 32 个字符的独立密钥。", true),
+            note("打开同一张卡的「请求示例」，选择脚本和操作，生成本机签名请求。向 /api/dispatch/external-holds/ 下的 acquire、status、release 发送 POST 请求。同一次占用沿用同一 holdId，每次新指令使用新的 requestId。", true),
+            note("申请时指定 ttlSeconds（1 至 86400 秒）。stopping 表示正在停止并清理脚本，收到 active 后才能使用。使用完毕后释放自己的占用。最后一项占用释放或到期后，仍在运行的队列会从头重跑先前中断的脚本。", true)
+        ] },
+        { name: "邮箱控制", blocks: [
+            note("从另一台电脑控制脚本时，在 QQ 邮箱开启 IMAP/SMTP，再到「本地控制 → 外部程序接口 → 邮箱指令」保存邮箱、授权码和调用方密钥，测试连接并启用。", true),
+            note("用配置的邮箱给自己发信，标题为 [AUTO-MAS COMMAND v1]，正文为与本机请求相同的签名 JSON。请在签发后 5 分钟内送达。", true),
+            note("在同一邮箱查看标题为 [AUTO-MAS RECEIPT v1] 的回执。按请求 ID 核对结果，确认脚本状态为 active 后再使用。", true)
+        ] }
+    ] }
+}
+
 var sections = {
     "01": { caption: "主页：快速启动队列或脚本，查看各账号的代理状态。", items: [
         { name: "快速启动", en: "QUICK START", api: "POST /api/dispatch/start", blocks: [
@@ -96,11 +132,12 @@ var sections = {
             kv("START", [["运行模式", segk(["自动代理", "设置脚本", "循环运行"], 0, "mode"), "mode"], ["完成后", sel(POWER, 0, "power"), "POST /api/dispatch/set/power"], ["上次运行", "今天 06:00 · 全部完成"], ["下次定时", "今天 18:00 · 日常托管"]]),
             stats("TODAY", [["今日已代理", "6", "done"], ["待运行", "2", "left"], ["异常", "0"]]),
             { t: "run", title: "RUN STATUS" }
-        ], actions: ["开始执行", "停止"] },
+        ], actions: ["开始执行", "继续执行", "停止"] },
         { name: "代理状态", en: "PROXY STATUS", api: "GET /api/dispatch/runtime-snapshot", blocks: [
             stats("NOW", [["运行中队列", "1"], ["运行中账号", "1"], ["本轮剩余", "3"]]),
             table("ACCOUNTS", ["账号", "托管", "上次代理", "今日", "状态"], [["主号", "BGI 每日", "06:12", "1 / 2", OK], ["小号", "BGI 每日", "昨天", "0 / 2", RUN], ["鸣潮主号", "鸣潮日常", "06:40", "1 / 1", OK], ["星铁", "星铁清体力", "06:52", "1 / 2", ERR], ["默认", "自定义脚本", "周日", "0 / 1", WAIT]])
-        ], actions: ["刷新", "查看历史记录"] }
+        ], actions: ["刷新", "查看历史记录"] },
+        controlGuide()
     ] },
     "02": { caption: "通用脚本托管：程序、日志判定、游戏启动、运行限制与账号，按功能分页。", items: [
         demoGeneral({ name: "BGI 每日", en: "GENERAL · RDP", root: "D:\\BetterGI", exe: "D:\\BetterGI\\BetterGI.exe", args: "--startOneDragon", cfg: "D:\\BetterGI\\User\\config.json", track: "BetterGI.exe", log: "D:\\BetterGI\\log\\better-genshin-impact%Y%m%d.log", ok: "一条龙完成", err: "任务异常|ERROR", game: "D:\\Genshin Impact\\YuanShen.exe", gameProc: "YuanShen.exe", users: [["主号", true, "永久", 0, "今天 06:12"], ["小号", true, "30 天", 0, "昨天 06:30"], ["测试号", false, "—", 1, "—"]] }),

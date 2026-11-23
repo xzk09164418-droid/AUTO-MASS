@@ -1962,6 +1962,7 @@ class _TaskManager:
                     userId=task_info.user_id,
                     stopping=bool(handler and handler.is_closing),
                     scripts=handler.script_identities if handler else [],
+                    queueControlState=task_info.control.state if task_info.queue_id else None,
                     task_info=task_info.asdict,
                     cycleNextList=[
                         WSTaskCyclePreviewData(**item)
@@ -2455,6 +2456,28 @@ class _TaskManager:
             "message": "队列保持暂停" if action == "pause" else "已请求继续",
             "state": self.control_snapshot(),
         }
+
+    def control_running_queue(
+        self, task_id: str, action: Literal["resume", "previous", "next"]
+    ) -> dict:
+        """执行页只控制所显示的这一次队列运行。"""
+        from app.core.desktop_recovery import DesktopRecovery
+
+        handler = self.task_handler.get(uuid.UUID(task_id))
+        if handler is None or handler.is_closing or not handler.task_info.queue_id:
+            raise ValueError("这次队列运行已结束或正在停止")
+        if action == "resume":
+            control = handler.task_info.control
+            if not control.paused:
+                raise ValueError("队列当前未暂停")
+            control.resume()
+            message = "已请求继续"
+        else:
+            if not handler.request_navigate(-1 if action == "previous" else 1):
+                raise ValueError("当前队列不能切换托管")
+            message = "已移动选择，暂停就绪后点击「继续运行」"
+        DesktopRecovery.update_manual_pause(handler.task_info)
+        return {"action": "controlled", "message": message}
 
     async def start_default_task(self) -> dict[str, Any]:
         """启动默认队列（优先首个配置了脚本的队列，否则启动首个脚本）。"""

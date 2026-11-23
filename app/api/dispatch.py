@@ -214,6 +214,8 @@ async def queue_control_action(payload: QueueControlIn) -> NavigationActionOut:
     try:
         if payload.action == "select":
             result = TaskManager.select_controlled_queue(payload.queueId)
+        elif payload.action in ("resume", "previous", "next"):
+            result = TaskManager.control_running_queue(payload.taskId, payload.action)
         else:
             result = await TaskManager.control_prompt(
                 payload.taskId, payload.token, payload.action

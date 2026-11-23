@@ -134,6 +134,31 @@ Item {
     }
     Timer { interval: 1500; running: runs.watching && !!runs.api; repeat: true; onTriggered: runs.poll() }
 
+    function pausedSelection(selected) {
+        if (!api || !snapshotReady || snapshotError || submitting) return []
+        return activeTasks.filter(task => task.queueId && !task.stopping && task.queueControlState === "已暂停"
+            && selected.some(option => option.value === task.queueId))
+    }
+    function resume(selected) {
+        const tasks = pausedSelection(selected)
+        if (!tasks.length) return
+        submitting = true
+        let pending = tasks.length
+        const failures = []
+        for (const task of tasks) {
+            api.request("/api/dispatch/navigation/control", JSON.stringify({action:"resume", taskId:task.taskId}), text => {
+                let result
+                try { result = JSON.parse(text) } catch (e) { result = {message:"响应无法解析"} }
+                if (result.code !== 200) failures.push(result.message || "请求失败")
+                if (--pending) return
+                submitting = false
+                const resumed = tasks.length - failures.length
+                message("已请求继续 " + resumed + " / " + tasks.length + " 个队列" + (failures.length ? "，" + failures.join("、") : ""))
+                poll()
+            })
+        }
+    }
+
     function launch(tasks, mode, power) {
         if (submitting || !api || !tasks.length) return
         submitting = true

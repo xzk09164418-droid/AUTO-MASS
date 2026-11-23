@@ -109,6 +109,14 @@ class QueueControl:
                 with suppress(asyncio.CancelledError):
                     await pending
 
+    @property
+    def state(self) -> str:
+        if self.error:
+            return "清理失败"
+        if self.cleaning:
+            return "正在暂停"
+        return "已暂停" if self.paused else "运行／等待资源"
+
     def snapshot(self, *, task_id: str, queue_id: str | None, name: str) -> dict:
         return {
             "taskId": task_id,
@@ -121,11 +129,5 @@ class QueueControl:
             "error": self.error,
             "allBlocked": self.all_blocked,
             "prompt": self.prompt,
-            "state": "清理失败"
-            if self.error
-            else "正在暂停"
-            if self.cleaning
-            else "已暂停"
-            if self.paused
-            else "运行／等待资源",
+            "state": self.state,
         }

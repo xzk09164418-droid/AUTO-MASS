@@ -657,7 +657,7 @@ function quickStart(taskOpts, power) {
         SD.kv("START", [["运行模式", { c: "seg", opts: ["自动代理", "设置脚本", "循环运行"], v: 0, k: "mode", enum: ["AutoProxy", "ScriptConfig", "CycleRun"] }, "mode"], ["完成后", { c: "sel", opts: SD.POWER, v: idx(POWER_EN, power), k: "power", enum: POWER_EN }, "POST /api/dispatch/set/power"]]),
         SD.stats("NOW", [["运行中任务", "—", "activeTasks"], ["可运行对象", String(opts.length)], ["完成后", SD.POWER[idx(POWER_EN, power)]]]),
         { t: "run", title: "RUN STATUS" }
-    ], ops: { "开始执行": { start: true }, "停止": { stopAll: true } }, actions: ["开始执行", "停止"] }
+    ], ops: { "开始执行": { start: true }, "继续执行": { resume: true }, "停止": { stopAll: true } }, actions: ["开始执行", "继续执行", "停止"] }
 }
 
 function proxyOverview(proxy) {
@@ -789,6 +789,17 @@ function dispatchCenter(snapshot, queueNames, launch, scriptPaths) {
     ], ops: { "刷新": { reload: true }, "全部停止": { confirm: "将停止全部 " + tasks.length + " 个运行中的任务。", path: "/api/dispatch/stop", body: { taskId: "ALL" }, reload: true } }, actions: ["刷新", "全部停止"] }
     return head.concat([overview]).concat(tasks.map(function (t, i) {
         var p = taskProgress(t)
+        var state = t.queueControlState
+        var paused = state === "已暂停"
+        var status = [RUN, "运行中"]
+        if (t.stopping) status = [WAIT, "正在停止"]
+        else if (state === "清理失败") status = [ERR, state]
+        else if (paused || state === "正在暂停") status = [WAIT, state]
+        var actions = ["停止任务"]
+        if (t.queueId) {
+            actions.push("继续运行")
+            if (!t.isCycle) actions.push("上一个托管", "下一个托管")
+        }
         var scripts = (t.task_info || []).map(function (s) {
             var users = s.userList || [], ud = users.filter(function (u) { return u.status === "完成" }).length
             var cu = users.filter(function (u) { return u.status === "运行" })[0]
@@ -796,10 +807,10 @@ function dispatchCenter(snapshot, queueNames, launch, scriptPaths) {
         })
         var tabs = [
             { name: "执行", api: api, blocks: [
-                SD.kv("任务", [["队列", title(t, i)], ["模式", (MODE_ZH[t.mode] || t.mode) + (t.isCycle ? " · 循环" : "")], ["状态", t.stopping ? [WAIT, "正在停止"] : [RUN, "运行中"]],
+                SD.kv("任务", [["队列", title(t, i)], ["模式", (MODE_ZH[t.mode] || t.mode) + (t.isCycle ? " · 循环" : "")], ["状态", status],
                     ["当前脚本", p.current ? p.current.name : "—"], ["进度", p.done + " / " + p.total + " 个脚本"]]),
                 (function () { var tb = SD.table("脚本", ["脚本", "状态", "账号", "当前账号"], scripts, [2.4, 1, 0.8, 1.4]); tb.pageRows = 6; return tb })()
-            ], actions: ["停止任务", "上一个托管", "下一个托管"] },
+            ], actions: actions },
             { name: "日志", api: api, blocks: [SD.log("日志 · " + (p.current ? p.current.name : title(t, i)), logLines(t.log), true)], actions: ["停止任务"] }
         ]
         if (t.isCycle && (t.cycleNextList || []).length)
@@ -810,7 +821,9 @@ function dispatchCenter(snapshot, queueNames, launch, scriptPaths) {
         var lead = p.current || (t.task_info || [])[0]
         return { runtimeKey: t.taskId, icon: lead ? scriptPaths[lead.script_id] || "" : "", name: title(t, i), en: t.mode.toUpperCase() + (t.isCycle ? " · CYCLE" : "") + " · " + String(i + 1).padStart(2, "0"), live: true,
             ops: { "停止任务": { confirm: "将停止「" + title(t, i) + "」。", path: "/api/dispatch/stop", body: { taskId: t.taskId }, reload: true },
-                   "上一个托管": { path: "/api/dispatch/navigation/previous", body: {} }, "下一个托管": { path: "/api/dispatch/navigation/next", body: {} } },
+                   "继续运行": { path: "/api/dispatch/navigation/control", body: {taskId:t.taskId, action:"resume"}, off: !paused || t.stopping, done: "已请求继续" },
+                   "上一个托管": { path: "/api/dispatch/navigation/control", body: {taskId:t.taskId, action:"previous"}, off: !state || t.stopping, done: "暂停就绪后点击「继续运行」" },
+                   "下一个托管": { path: "/api/dispatch/navigation/control", body: {taskId:t.taskId, action:"next"}, off: !state || t.stopping, done: "暂停就绪后点击「继续运行」" } },
             tabs: tabs }
     }))
 }
