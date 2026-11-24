@@ -179,19 +179,14 @@ namespace BetterGenshinImpact.Service.ChildSession
 
         private void BuildSystemTrayIcon()
         {
+            var trayStyle = new RhineTrayRenderer();
             _trayMenu = new ContextMenuStrip
             {
-                BackColor = Color.FromArgb(28, 39, 44),
-                ForeColor = TextPrimary,
-                Font = new Font("Microsoft YaHei UI", 9F),
-                Renderer = new RhineTrayRenderer()
+                ShowImageMargin = false,
+                Renderer = trayStyle
             };
 
-            _trayToggleVisibleItem = new ToolStripMenuItem("显示 automass桌面分身窗口")
-            {
-                ForeColor = TextPrimary,
-                Font = new Font("Microsoft YaHei UI", 9F, FontStyle.Bold)
-            };
+            _trayToggleVisibleItem = new ToolStripMenuItem("显示 automass桌面分身窗口");
             _trayToggleVisibleItem.Click += delegate
             {
                 if (_isHiddenToTray)
@@ -206,7 +201,6 @@ namespace BetterGenshinImpact.Service.ChildSession
 
             _trayWatchModeItem = new ToolStripMenuItem("开启观看模式（屏蔽本机键鼠输入）")
             {
-                ForeColor = TextPrimary,
                 Checked = _watchModeEnabled
             };
             _trayWatchModeItem.Click += delegate
@@ -216,21 +210,21 @@ namespace BetterGenshinImpact.Service.ChildSession
                 UpdateToolbarButtonsVisualState();
             };
 
-            var trayLaunchItem = new ToolStripMenuItem("在桌面分身中启动程序...") { ForeColor = TextPrimary };
+            var trayLaunchItem = new ToolStripMenuItem("在桌面分身中启动程序...");
             trayLaunchItem.Click += delegate
             {
                 RestoreWindowFromTray();
                 PromptAndLaunchInChildSession();
             };
 
-            var trayReconnectItem = new ToolStripMenuItem("立即连接 / 重连桌面分身") { ForeColor = TextPrimary };
+            var trayReconnectItem = new ToolStripMenuItem("立即连接 / 重连桌面分身");
             trayReconnectItem.Click += async delegate
             {
                 _externalLeaseHolder = null;
                 await EnsureConnectedAsync();
             };
 
-            var trayYieldItem = new ToolStripMenuItem("暂时释放画面供外部程序借用") { ForeColor = TextPrimary };
+            var trayYieldItem = new ToolStripMenuItem("暂时释放画面供外部程序借用");
             trayYieldItem.Click += async delegate
             {
                 await HandleDisconnectForExternalAsync(new Dictionary<string, object>
@@ -240,13 +234,13 @@ namespace BetterGenshinImpact.Service.ChildSession
                 });
             };
 
-            var trayLogoffItem = new ToolStripMenuItem("断开并注销桌面分身会话") { ForeColor = Color.FromArgb(255, 120, 120) };
+            var trayLogoffItem = new ToolStripMenuItem("断开并注销桌面分身会话");
             trayLogoffItem.Click += async delegate
             {
                 await HandleLogoffAsync();
             };
 
-            var trayExitItem = new ToolStripMenuItem("完全退出桌面分身宿主") { ForeColor = Color.FromArgb(255, 100, 100) };
+            var trayExitItem = new ToolStripMenuItem("完全退出桌面分身宿主");
             trayExitItem.Click += delegate
             {
                 _allowClose = true;
@@ -262,16 +256,15 @@ namespace BetterGenshinImpact.Service.ChildSession
             _trayMenu.Items.Add(new ToolStripSeparator());
             _trayMenu.Items.Add(trayLogoffItem);
             _trayMenu.Items.Add(trayExitItem);
-            foreach (ToolStripItem item in _trayMenu.Items)
-                if (item is ToolStripMenuItem) item.Padding = new Padding(3, 4, 12, 4);
-
             _trayMenu.Opening += delegate
             {
                 _trayToggleVisibleItem.Text = _isHiddenToTray
-                    ? "🖥 显示 automass桌面分身窗口"
-                    : "👁 隐藏桌面分身窗口到托盘";
+                    ? "显示 automass桌面分身窗口"
+                    : "隐藏桌面分身窗口到托盘";
                 _trayWatchModeItem.Checked = _watchModeEnabled;
+                trayStyle.Apply(_trayMenu, RhineTrayRenderer.IsDark(), RhineTrayRenderer.CursorDpi());
             };
+            _trayMenu.Disposed += delegate { trayStyle.DisposeFont(); };
 
             _trayIcon = new NotifyIcon
             {
@@ -1322,6 +1315,7 @@ namespace BetterGenshinImpact.Service.ChildSession
                 _trayIcon.Visible = false;
                 _trayIcon.Dispose();
                 _trayIcon = null;
+                _trayMenu.Dispose();
             }
             try
             {

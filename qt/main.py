@@ -250,14 +250,14 @@ def main() -> int:
             return
         engines.append(engine)
         if client:
-            client.window = engine.rootObjects()[0]
+            client.set_window(engine.rootObjects()[0])
         if args.size:
             w, h = (int(v) for v in args.size.lower().split("x"))
             engine.rootObjects()[0].resize(w, h)
 
     def release_frontend() -> None:
         if client:
-            client.window = None
+            client.set_window(None)
         for engine in engines:
             for window in engine.rootObjects():
                 window.hide()

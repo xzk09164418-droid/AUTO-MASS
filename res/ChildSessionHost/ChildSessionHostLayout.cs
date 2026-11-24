@@ -54,9 +54,7 @@ namespace BetterGenshinImpact.Service.ChildSession
         {
             RememberFonts(this);
             RememberFonts(_controlCenterMenu);
-            RememberFonts(_trayMenu);
             RememberMenuFonts(_controlCenterMenu.Items);
-            RememberMenuFonts(_trayMenu.Items);
             _rightButtonFlow.Dock = DockStyle.None;
             _rightButtonFlow.AutoSize = false;
             _rightButtonFlow.WrapContents = true;

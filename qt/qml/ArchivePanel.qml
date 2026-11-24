@@ -285,6 +285,7 @@ Item {
     component Btn: Rectangle {
         id: btn
         property string text: ""
+        property alias labelScale: btnText.scale
         property bool primary: false
         property bool danger: false
         property bool small: false
@@ -554,7 +555,21 @@ Item {
             elide: Text.ElideRight; color: ctl.spec.tone ? ctl.spec.tone(panel.env || {}) : Theme.ink } }
         Component { id: cUnit; Text { text: ctl.spec.t; color: Theme.muted; font.family: Theme.font; font.pixelSize: 13 } }
         Component { id: cTog; Tog { spec: ctl.spec } }
-        Component { id: cEntries; Btn { text: "编辑清单"; onClicked: entryEditor.edit(ctl.spec, () => panel.edits++) } }
+        Component {
+            id: cEntries
+            Item {
+                implicitWidth: editButton.implicitWidth * editButton.scale
+                implicitHeight: editButton.implicitHeight * editButton.scale
+                Btn {
+                    id: editButton
+                    text: "编辑清单"
+                    scale: 0.8
+                    labelScale: 1.25
+                    transformOrigin: Item.TopLeft
+                    onClicked: entryEditor.edit(ctl.spec, () => panel.edits++)
+                }
+            }
+        }
         Component { id: cInp; Field { echoMode: ctl.spec.secret ? TextInput.Password : TextInput.Normal; text: ctl.spec.v; mono: ctl.spec.mono; onTextEdited: { ctl.spec.v = text; ctl.spec.dirty = true; panel.edits++ } } }
         Component {
             id: cNum

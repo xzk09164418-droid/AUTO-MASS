@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ctypes
 import json
+import mmap
 import subprocess
 import sys
 import time
@@ -44,6 +45,7 @@ class ClientController(QObject):
         super().__init__(parent)
         self.backend = backend
         self.window = None
+        self._tray_theme = None
         try:
             settings = json.loads(
                 (ROOT_DIR / "config/Config.json").read_text(encoding="utf-8")
@@ -116,6 +118,22 @@ class ClientController(QObject):
         self.tray.show()
         self.errorOccurred.connect(self._show_error)
         backend.eventReceived.connect(self._event)
+
+    def set_window(self, window) -> None:
+        self.window = window
+        if sys.platform != "win32":
+            return
+        if window is None:
+            self._tray_theme = None
+            return
+        # The RDP host can read the live theme even before either tray opens.
+        self._tray_theme = mmap.mmap(-1, 1, tagname=r"Local\AutoMas.QtTrayDark")
+        window.trayDarkChanged.connect(self._sync_tray_theme)
+        self._sync_tray_theme()
+
+    def _sync_tray_theme(self) -> None:
+        if self._tray_theme is not None:
+            self._tray_theme[0] = int(self.window.property("trayDark"))
 
     def _style_menu(self) -> None:
         dark = (
