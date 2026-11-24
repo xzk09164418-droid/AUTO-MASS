@@ -25,7 +25,7 @@ FocusScope {
     readonly property var arrayItem: arrayMode ? arrayHostItem : null
     readonly property bool arrayDetail: !!arrayItem && arrayItem.detailOpen
     readonly property var arrayColumns: {
-        if (!arrayMode) return []
+        if (!arrayMode || !d) return []
         if (!items.length) return emulatorPage ? [{name:d.zh, rows:[emulatorConfigs.empty.name]}] : []
         if (d.key === "queue")
             return items.map(it => ({name:it.name, en:it.en, accounts:it.accounts || [],
@@ -104,9 +104,11 @@ FocusScope {
     }
     // 依次请求多个接口：steps = [[name, path, body], ...]，全部返回后 done(map)
     function callAll(steps, done) {
+        const generation = sectionGeneration
         const out = {}
         let i = 0
         const next = () => {
+            if (generation !== sectionGeneration) return
             if (i >= steps.length) { done(out); return }
             const st = steps[i++]
             if (!api) { out[st[0]]={code:0,message:"后端未连接"}; next(); return }
@@ -182,9 +184,14 @@ FocusScope {
     // 运行快照：托管脚本 / 循环队列运行时锁定对应配置，结束后解锁（与网页版一致）
     property var runtimeTasks: []
     readonly property bool runLocked: !!d && Live.itemLocked(d.key, item, runtimeTasks)
+    property int runtimeRequestGeneration: -1
     function pollRuntime() {
-        if (!api) return
-        api.get("/api/dispatch/runtime-snapshot", text => {
+        const generation = sectionGeneration
+        if (!api || runtimeRequestGeneration === generation) return
+        runtimeRequestGeneration = generation
+        api.get("/api/dispatch/runtime-snapshot?includeLogs=false", text => {
+            if (runtimeRequestGeneration === generation) runtimeRequestGeneration = -1
+            if (sectionGeneration !== generation || !opened) return
             let snap = null
             try { snap = JSON.parse(text) } catch (e) {}
             if (snap && Array.isArray(snap.tasks)) runtimeTasks = demoSnapshot ? demoSnapshot.tasks : snap.tasks
@@ -633,6 +640,7 @@ FocusScope {
         forceActiveFocus()
     }
     function close() {
+        ++sectionGeneration
         if (!opened) return
         opened = false
         landed = false

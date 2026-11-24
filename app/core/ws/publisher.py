@@ -28,7 +28,7 @@ from pydantic import BaseModel, JsonValue
 from app.utils.logger import get_logger
 
 from .manager import MainConnection
-from .protocol import build_message
+from .protocol import TASK_INFO_UPDATED, TASK_LOG_UPDATED, build_message
 
 logger = get_logger("WS发布器")
 
@@ -56,6 +56,9 @@ class _WSPublisher:
         Returns:
             bool: 发送是否成功；未连接时返回 False。
         """
+        # Qt 从 HTTP 快照读取进度和日志；其它客户端及确认、通知等消息仍沿用原协议。
+        if type in (TASK_INFO_UPDATED, TASK_LOG_UPDATED) and MainConnection.polls_task_updates:
+            return False
         payload = (
             data.model_dump(mode="json")
             if isinstance(data, BaseModel)

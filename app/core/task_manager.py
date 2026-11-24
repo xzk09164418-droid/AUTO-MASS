@@ -1948,7 +1948,7 @@ class _TaskManager:
         remembered = self._recent_results.get(task_id)
         return remembered[1] if remembered is not None else None
 
-    def get_runtime_snapshot(self) -> TaskRuntimeSnapshot:
+    def get_runtime_snapshot(self, *, include_logs: bool = True) -> TaskRuntimeSnapshot:
         tasks: list[TaskRuntimeSnapshotItem] = []
         for task_uid, task_info in list(self.task_info.items()):
             handler = self.task_handler.get(task_uid)
@@ -1968,11 +1968,14 @@ class _TaskManager:
                         WSTaskCyclePreviewData(**item)
                         for item in task_info.cycle_next_list
                     ],
-                    log=task_info._last_pushed_log[-200_000:],
+                    log=task_info._last_pushed_log[-200_000:] if include_logs else "",
                     logSeq=task_info._log_seq,
-                    logFirstLine=task_info._last_pushed_log_first_line
-                    + task_info._last_pushed_log.count(
-                        "\n", 0, max(0, len(task_info._last_pushed_log) - 200_000)
+                    logFirstLine=(
+                        task_info._last_pushed_log_first_line
+                        + task_info._last_pushed_log.count(
+                            "\n", 0, max(0, len(task_info._last_pushed_log) - 200_000)
+                        )
+                        if include_logs else 1
                     ),
                 )
             )

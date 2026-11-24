@@ -66,6 +66,11 @@ class _MainConnectionManager:
         """当前是否存在主连接"""
         return self._websocket is not None
 
+    @property
+    def polls_task_updates(self) -> bool:
+        socket = self._websocket
+        return socket is not None and socket.query_params.get("taskUpdates") == "poll"
+
     def on_connect(self, hook: ConnectHook) -> None:
         """注册连接建立回调，应用启动时注册一次，每次主连接建立后触发。
 

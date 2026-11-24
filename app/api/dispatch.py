@@ -53,10 +53,10 @@ class NavigationActionOut(OutBase):
     response_model=TaskRuntimeSnapshot,
     status_code=200,
 )
-async def get_task_runtime_snapshot() -> TaskRuntimeSnapshot:
+async def get_task_runtime_snapshot(includeLogs: bool = True) -> TaskRuntimeSnapshot:
     """返回当前运行任务；WS 只承载后续状态、日志与完成事件。"""
 
-    return TaskManager.get_runtime_snapshot()
+    return TaskManager.get_runtime_snapshot(include_logs=includeLogs)
 
 
 @router.get(

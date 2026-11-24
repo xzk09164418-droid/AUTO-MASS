@@ -123,7 +123,7 @@ Item {
     function poll() {
         if (!api || reading || submitting) return
         reading = true
-        api.get("/api/dispatch/runtime-snapshot", text => {
+        api.get("/api/dispatch/runtime-snapshot?includeLogs=false", text => {
             reading = false
             try {
                 const snapshot = JSON.parse(text)

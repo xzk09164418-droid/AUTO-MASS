@@ -225,7 +225,7 @@ class BackendSupervisor(QObject):
         if self._stopping or self._replaced or self._socket.running:
             return
         self._socket.start(
-            f"ws://127.0.0.1:{self._port}/api/core/ws", self._expected_id
+            f"ws://127.0.0.1:{self._port}/api/core/ws?taskUpdates=poll", self._expected_id
         )
 
     def call(

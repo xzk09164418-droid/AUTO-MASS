@@ -22,6 +22,20 @@ Window {
     // --skip-boot 只在后端已就绪时直接跳过；后端还在启动时仍由启动动画的授权段承接等待（显示实时进度），就绪后快速收尾
     property bool bootHold: false
 
+    // 网络回复先返回 Qt 事件循环，再更新页面，避免在 Python 的 QJSValue.call 栈内重建场景。
+    QtObject {
+        id: uiApi
+        readonly property int port: root.backend?.port || 0
+        function deferred(callback) {
+            return text => Qt.callLater(() => callback(text))
+        }
+        function get(path, callback) { root.backend.get(path, deferred(callback)) }
+        function request(path, body, callback) { root.backend.request(path, body, deferred(callback)) }
+        function exportBackup(callback) { root.backend.exportBackup(deferred(callback)) }
+        function ports() { return root.backend.ports() }
+        function savePorts(portNumber) { return root.backend.savePorts(portNumber) }
+    }
+
     property var uiOptions: ({})
     flags: Qt.Window | Qt.WindowTitleHint | Qt.WindowSystemMenuHint | Qt.WindowMinMaxButtonsHint
         | (uiOptions.IfHideCloseButton ? Qt.CustomizeWindowHint : Qt.WindowCloseButtonHint)
@@ -160,7 +174,7 @@ Window {
             enhanced: root.enhanced
             arrayHostItem: arrayLoader.status === Loader.Ready ? arrayLoader.item : null
             onlineHome: root.backendEnabled
-            api: root.backendEnabled && root.backend && root.backend.status === "ready" ? root.backend : null
+            api: root.backendEnabled && root.backend && root.backend.status === "ready" ? uiApi : null
             onUiSettings: patch => root.uiOptions = Object.assign({},root.uiOptions,patch)
             onClosed: hub.focusCurrent()
         }
@@ -224,6 +238,6 @@ Window {
 
     // 电源操作倒计时：只在后端准备关机 / 睡眠等时出现，可取消
     PowerCountdown {
-        api: root.backendEnabled && root.booted && root.backend && root.backend.status === "ready" ? root.backend : null
+        api: root.backendEnabled && root.booted && root.backend && root.backend.status === "ready" ? uiApi : null
     }
 }
