@@ -25,7 +25,6 @@ from importlib import import_module
 _LAZY_EXPORTS = {
     "ConfigCenter": (".config_center", "ConfigCenter"),
     "ConfigCenterError": (".config_center", "ConfigCenterError"),
-    "Matomo": (".matomo", "Matomo"),
     "Notify": (".notification", "Notify"),
     "System": (".system", "System"),
     "Updater": (".update", "Updater"),

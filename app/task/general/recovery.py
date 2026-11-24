@@ -1,10 +1,8 @@
 """通用脚本的进程身份追踪与自定义清理；不接管其他专项。"""
 
 import asyncio
-import ctypes
 import ntpath
 import os
-import shlex
 from collections.abc import Awaitable, Callable
 
 import psutil
@@ -13,31 +11,12 @@ from app.models.schema import GeneralTaskKillData
 from app.utils import ProcessInfo, ProcessManager, get_logger
 from app.utils.platform.common.process import _in_execution_session, match_process
 from app.utils.platform.common.process_runner import ProcessRunner
+from app.utils.platform.windows.session import get_process_session_id
 
 logger = get_logger("通用脚本恢复")
 CLEANUP_INTERVAL = 5
 RECOVERY_SECONDS = 30 * 60
 EXIT_STABLE_SECONDS = 30
-
-
-def split_restart_arguments(arguments: str) -> list[str]:
-    """按 Windows 原生规则解析参数，保留带空格路径及参数中的引号。"""
-    if os.name != "nt":
-        return shlex.split(arguments)
-    count = ctypes.c_int()
-    shell = ctypes.WinDLL("shell32", use_last_error=True)
-    kernel = ctypes.WinDLL("kernel32", use_last_error=True)
-    shell.CommandLineToArgvW.argtypes = [ctypes.c_wchar_p, ctypes.POINTER(ctypes.c_int)]
-    shell.CommandLineToArgvW.restype = ctypes.POINTER(ctypes.c_wchar_p)
-    kernel.LocalFree.argtypes = [ctypes.c_void_p]
-    kernel.LocalFree.restype = ctypes.c_void_p
-    argv = shell.CommandLineToArgvW("program.exe " + arguments, ctypes.byref(count))
-    if not argv:
-        raise ctypes.WinError(ctypes.get_last_error())
-    try:
-        return [argv[i] for i in range(1, count.value)]
-    finally:
-        kernel.LocalFree(argv)
 
 
 class GeneralProcessManager(ProcessManager):
@@ -138,6 +117,9 @@ class ProcessTracker:
         )
         matched, inaccessible = [], []
         names = {target.Name.casefold() for target in targets}
+        session = (
+            get_process_session_id() if mode == "Session" and os.name == "nt" else None
+        )
         for proc in processes:
             try:
                 if not proc.is_running():
@@ -146,6 +128,12 @@ class ProcessTracker:
                     continue
                 if proc.name().casefold() not in names:
                     continue
+                if session is not None:
+                    try:
+                        if get_process_session_id(proc.pid) != session:
+                            continue
+                    except OSError:
+                        continue
                 if self.matches(proc, targets):
                     proc.create_time()
                     matched.append(proc)

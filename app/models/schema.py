@@ -489,9 +489,6 @@ class GlobalConfig_Function(_SchemaModel):
         default=None, description="同意哔哩哔哩用户协议"
     )
     IfBlockAd: Optional[bool] = Field(default=None, description="屏蔽模拟器广告")
-    IfEnableTelemetry: Optional[bool] = Field(
-        default=None, description="启用匿名错误与性能遥测"
-    )
     IfPersonalMss: Optional[bool] = Field(
         default=None, description="个人版 MaaStellaSora 的专属编排（灾变防线）"
     )
@@ -1096,6 +1093,12 @@ class GeneralConfig_Script(_SchemaModel):
 
     ScriptPath: Optional[str] = Field(default=None, description="脚本可执行文件路径")
     Arguments: Optional[str] = Field(default=None, description="脚本启动附加命令参数")
+    WorkingDirectory: Optional[str] = Field(
+        default=None, description="工作目录，留空使用程序目录"
+    )
+    UseLaunchListOnFirstRun: Optional[bool] = Field(
+        default=None, description="首轮也按有序启动清单执行"
+    )
     IfTrackProcess: Optional[bool] = Field(
         default=None, description="是否追踪脚本子进程"
     )
@@ -1163,6 +1166,12 @@ class GeneralConfig_Game(_SchemaModel):
 
 
 class GeneralConfig_Run(_SchemaModel):
+    TimeoutRecoveryEnabled: Optional[bool] = Field(
+        default=None, description="超时或日志停滞后允许额外补跑"
+    )
+    CheckExitCode: Optional[bool] = Field(
+        default=None, description="启动程序退出码非零时按失败处理"
+    )
     HardTimeLimit: Optional[int] = Field(
         default=None,
         ge=1,
@@ -2411,6 +2420,9 @@ class TaskStatusOut(OutBase):
     scriptId: Optional[str] = Field(default=None, description="脚本 ID")
     userId: Optional[str] = Field(default=None, description="用户 ID")
     stopping: bool = Field(default=False, description="任务是否正在停止")
+    task_info: list[WSTaskScriptInfoData] | None = Field(
+        default=None, description="后端收尾时的逐脚本及账号状态；无保存记录时为空"
+    )
     finishedAt: Optional[str] = Field(
         default=None,
         description="任务结束时间, 格式为YYYY-MM-DD HH:MM:SS, 运行中为空",

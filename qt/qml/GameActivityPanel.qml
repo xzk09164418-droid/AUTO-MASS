@@ -64,10 +64,11 @@ Column {
         color:Theme.warning; wrapMode:Text.Wrap; font.family:Theme.font; font.pixelSize:13
     }
     Repeater {
-        model:calendar.model.sections
+        model:calendar.model.sections.length
         Column {
             id: section
-            required property var modelData
+            required property int index
+            readonly property var modelData: calendar.model.sections[index]
             width:calendar.width; spacing:10
             RowLayout {
                 width:parent.width
@@ -86,10 +87,11 @@ Column {
             Grid {
                 width:parent.width; columns:section.modelData.kind==="pools"?Math.min(2,section.modelData.rows.length):1; spacing:10
                 Repeater {
-                    model:section.modelData.rows
+                    model:section.modelData.rows.length
                     Rectangle {
                         id: entry
-                        required property var modelData
+                        required property int index
+                        readonly property var modelData: section.modelData.rows[index]
                         readonly property bool pool:section.modelData.kind==="pools"
                         readonly property bool stacked:pool && section.modelData.rows.length>1
                         readonly property bool resource:section.modelData.kind==="resources"

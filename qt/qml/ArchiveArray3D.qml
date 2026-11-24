@@ -722,7 +722,8 @@ Item {
         Image {
             x: 133; y: 185; width: 270; height: 270
             asynchronous: true
-            source: art.icon ? "image://exeicon/cassette/" + encodeURIComponent(art.icon) : ""
+            source: art.icon.startsWith("file:") ? art.icon
+                  : art.icon ? "image://exeicon/cassette/" + encodeURIComponent(art.icon) : ""
             fillMode: Image.PreserveAspectFit
             smooth: true; mipmap: true
         }

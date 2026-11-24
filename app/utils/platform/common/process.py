@@ -22,6 +22,7 @@
 
 import asyncio
 import os
+import shlex
 import subprocess
 import time
 from contextlib import suppress
@@ -159,6 +160,24 @@ def get_main_window_handle(
         return None
 
 
+class NativeWindowsProcess:
+    """Keep the CreateProcess handle for PID, exit status and cancellation."""
+
+    def __init__(self, process: subprocess.Popen):
+        self._process = process
+        self.pid = process.pid
+
+    @property
+    def returncode(self) -> int | None:
+        return self._process.poll()
+
+    def terminate(self) -> None:
+        self._process.terminate()
+
+    async def wait(self) -> int:
+        return await asyncio.to_thread(self._process.wait)
+
+
 class ProcessManager:
     """进程监视器类, 用于跟踪主进程及其所有子进程的状态（支持本地远程桌面 Child Session 包装器模式）"""
 
@@ -243,11 +262,24 @@ class ProcessManager:
         breakaway: bool = False,
         env: dict[str, str] | None = None,
         use_child_session: bool | None = None,
+        raw_arguments: str | None = None,
     ) -> None:
         """
         启动子进程并跟踪目标进程。
         当启用本地远程桌面（Child Session）时，自动通过包装器（Wrapper）在本地远程桌面中启动进程并跟踪状态与退出码。
         """
+
+        if raw_arguments is not None:
+            if (
+                args
+                or elevated
+                or null_stream_to_pipe
+                or asyncio.subprocess.PIPE in (stdin, stdout, stderr)
+            ):
+                raise ValueError("原生命令行仅支持独立参数文本与非管道启动")
+            if os.name != "nt":
+                args = tuple(shlex.split(raw_arguments))
+                raw_arguments = None
 
         register_process(self)
         if await self.is_running():
@@ -291,6 +323,7 @@ class ProcessManager:
                 *args,
                 cwd=cwd,
                 env=env,
+                raw_arguments=raw_arguments,
             )
             if target_process is not None:
                 await self.search_process(
@@ -324,16 +357,39 @@ class ProcessManager:
                 stderr = asyncio.subprocess.PIPE
                 drain_streams.append("stderr")
 
-        self.process = await create_subprocess(
-            program,
-            *args,
-            breakaway=breakaway,
-            cwd=cwd or (Path(program).parent if Path(program).is_file() else None),
-            stdin=stdin,
-            stdout=stdout,
-            stderr=stderr,
-            env=env,
-        )
+        working_dir = cwd or (Path(program).parent if Path(program).is_file() else None)
+        if raw_arguments is not None:
+            # Only quote argv[0]. cmd /c (including start) and other executables
+            # receive the exact command tail the user supplied.
+            line = subprocess.list2cmdline([str(program)]) + " " + raw_arguments
+            options = dict(
+                executable=str(program),
+                cwd=working_dir,
+                stdin=stdin,
+                stdout=stdout,
+                stderr=stderr,
+                env=env,
+            )
+            flags = platform_process.creation_flags
+            extra = platform_process.breakaway_flags if breakaway else 0
+            try:
+                process = subprocess.Popen(line, creationflags=flags | extra, **options)
+            except PermissionError as exc:
+                if not extra or exc.winerror != 5:
+                    raise
+                process = subprocess.Popen(line, creationflags=flags, **options)
+            self.process = NativeWindowsProcess(process)
+        else:
+            self.process = await create_subprocess(
+                program,
+                *args,
+                breakaway=breakaway,
+                cwd=working_dir,
+                stdin=stdin,
+                stdout=stdout,
+                stderr=stderr,
+                env=env,
+            )
 
         # 启动协程消费管道流以防止阻塞
         if drain_streams:

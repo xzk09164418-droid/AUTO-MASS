@@ -183,6 +183,7 @@ function general(uid, c, ur, i) {
         { name: "启动", api: save.path, save: save, blocks: [
             SD.kv("启动程序", [
                 ["启动程序", B(SD.path(S.ScriptPath),"Script.ScriptPath")], ["启动参数",B(SD.inp(S.Arguments,true),"Script.Arguments")],
+                ["工作目录",B(Object.assign(SD.path(S.WorkingDirectory || ""), {browse:"选择文件夹",folder:true}),"Script.WorkingDirectory")],
                 ["回写配置", B(SD.seg(["从不","成功时","失败时","总是"],idx(["Never","Success","Failure","Always"],S.UpdateConfigMode)), "Script.UpdateConfigMode",["Never","Success","Failure","Always"])]
             ]),
             // 开启追踪后才显示追踪条件
@@ -201,11 +202,12 @@ function general(uid, c, ur, i) {
         ], ops:{"预处理规则":{workspace:"预处理规则",lock:true},"推送规则":{workspace:"推送规则",lock:true}},
           actions:["预处理规则","推送规则","保存"] },
         { name: "限制", api: save.path, save: save, blocks: [
-            SD.kv("运行限制", [["单账号总时限", B(SD.num(R.HardTimeLimit, "分钟"), "Run.HardTimeLimit"), "Run.HardTimeLimit"], ["单次运行时限", B(SD.num(R.RunTimeLimit, "分钟"), "Run.RunTimeLimit"), "Run.RunTimeLimit"], ["单次重试次数", B(SD.num(R.RunTimesLimit, "次"), "Run.RunTimesLimit"), "Run.RunTimesLimit"], ["每日代理上限", B(SD.num(R.ProxyTimesLimit, "次 · 0 为不限"), "Run.ProxyTimesLimit"), "Run.ProxyTimesLimit"]]),
+            SD.kv("运行限制", [["单账号总时限", B(SD.num(R.HardTimeLimit, "分钟"), "Run.HardTimeLimit"), "Run.HardTimeLimit"], ["单次运行时限", B(SD.num(R.RunTimeLimit, "分钟"), "Run.RunTimeLimit"), "Run.RunTimeLimit"], ["单次重试次数", B(SD.num(R.RunTimesLimit, "次"), "Run.RunTimesLimit"), "Run.RunTimesLimit"], ["每日代理上限", B(SD.num(R.ProxyTimesLimit, "次 · 0 为不限"), "Run.ProxyTimesLimit"), "Run.ProxyTimesLimit"], ["检查程序退出码", B(SD.tog(!!R.CheckExitCode), "Run.CheckExitCode"), "非零退出码按失败处理"], ["超时后额外补跑", B(SD.tog(R.TimeoutRecoveryEnabled !== false), "Run.TimeoutRecoveryEnabled")]]),
             SD.kv("清理与恢复", [
                 ["清理范围",B(SD.seg(["跨会话强力","仅本轮","当前会话"],idx(["Force","Tracked","Session"],S.TaskKillMode)),"Script.TaskKillMode",["Force","Tracked","Session"])],
                 ["清理清单", B({c:"entries", v:S.TaskKill || [], kind:"cleanup"},"Script.TaskKill")],
-                ["重启清单", B({c:"entries", v:S.Restart || [], kind:"restart"},"Script.Restart")]
+                ["首轮使用启动清单", B(SD.tog(!!S.UseLaunchListOnFirstRun),"Script.UseLaunchListOnFirstRun")],
+                ["启动与重启清单", B({c:"entries", v:S.Restart || [], kind:"restart"},"Script.Restart")]
             ])
         ], actions: ["保存"] },
         { name: "游戏", api: save.path, save: save, blocks: [
@@ -409,7 +411,7 @@ function settings(g, version, qq) {
     return [
         { name: "启动与界面", en: "START · UI", live: true, api: api, save: save, blocks: [SD.kv("启动与界面", [["开机自启", B(SD.tog(g.Start.IfSelfStart), "Start.IfSelfStart"), "Start.IfSelfStart"], ["启动后最小化", B(SD.tog(g.Start.IfMinimizeDirectly), "Start.IfMinimizeDirectly"), "Start.IfMinimizeDirectly"], ["关闭窗口", "隐藏到托盘，后端继续运行"], ["隐藏关闭按钮", B(SD.tog(g.UI.IfHideCloseButton), "UI.IfHideCloseButton"), "UI.IfHideCloseButton"], ["主题", SD.segk(["跟随系统", "浅色", "深色"], 0, "theme"), "客户端设置"], ["动态效果", SD.segk(["减少", "标准", "增强"], 1, "motion"), "客户端设置"]])], actions: ["保存"] },
         { name: "功能", en: "FUNCTION", live: true, api: api, save: save, blocks: [
-            SD.kv("运行", [["历史记录保留", B(SD.sel(["7 天", "15 天", "30 天", "60 天", "90 天", "180 天", "365 天", "永久"], idx(keep, F.HistoryRetentionTime)), "Function.HistoryRetentionTime", keep), "Function.HistoryRetentionTime"], ["运行时允许睡眠", B(SD.tog(F.IfAllowSleep), "Function.IfAllowSleep"), "Function.IfAllowSleep"], ["静默模式", B(SD.tog(F.IfSilence), "Function.IfSilence"), "Function.IfSilence"], ["屏蔽模拟器广告", B(SD.tog(F.IfBlockAd), "Function.IfBlockAd"), "Function.IfBlockAd"], ["哔哩哔哩协议弹窗", B(SD.tog(F.IfAgreeBilibili), "Function.IfAgreeBilibili"), "Function.IfAgreeBilibili"], ["匿名遥测", B(SD.tog(F.IfEnableTelemetry), "Function.IfEnableTelemetry"), "Function.IfEnableTelemetry"]]),
+            SD.kv("运行", [["历史记录保留", B(SD.sel(["7 天", "15 天", "30 天", "60 天", "90 天", "180 天", "365 天", "永久"], idx(keep, F.HistoryRetentionTime)), "Function.HistoryRetentionTime", keep), "Function.HistoryRetentionTime"], ["运行时允许睡眠", B(SD.tog(F.IfAllowSleep), "Function.IfAllowSleep"), "Function.IfAllowSleep"], ["静默模式", B(SD.tog(F.IfSilence), "Function.IfSilence"), "Function.IfSilence"], ["屏蔽模拟器广告", B(SD.tog(F.IfBlockAd), "Function.IfBlockAd"), "Function.IfBlockAd"], ["哔哩哔哩协议弹窗", B(SD.tog(F.IfAgreeBilibili), "Function.IfAgreeBilibili"), "Function.IfAgreeBilibili"]]),
             SD.kv("语音", [["语音提示", voiceOn, "Voice.Enabled"], ["语音风格", W(B(SD.seg(["简洁", "聒噪"], idx(["simple", "noisy"], g.Voice.Type)), "Voice.Type", ["simple", "noisy"]), voiceOn), "Voice.Type · 开启语音提示后可选"]])
         ], actions: ["保存"] },
         // 通知按「内容 / 邮件 / 其它渠道」拆成三张卡，各渠道的地址与密钥都可直接填写

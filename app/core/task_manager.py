@@ -22,11 +22,10 @@
 
 import asyncio
 import os
+import sqlite3
 import time
 import uuid
 from collections import OrderedDict
-from collections.abc import Iterator
-from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -66,8 +65,8 @@ from app.utils.network_policy import require_network_feature
 
 from .config import Config, GeneralConfig
 from .queue_control import QueueControl, QueueControlChanged
+from .queue_result_store import save_queue_result
 from .queue_cycle import (
-    SUCCESS_USER_STATUSES,
     CycleEntry,
     collect_cycle_entries,
     due_entries,
@@ -622,89 +621,6 @@ class Task(TaskExecuteBase):
             f"任务 {self.task_info.task_id} 检索完成，包含 {len(self.task_info.script_list)} 个脚本项"
         )
 
-    async def main_task(self):
-        from app.services.telemetry import (
-            observe_span,
-            record_count,
-            record_distribution,
-        )
-
-        attributes = {
-            "mode": self.task_info.mode,
-            "trigger": self.task_info.trigger_source,
-        }
-        started_at = time.perf_counter()
-        outcome = "success"
-
-        try:
-            with observe_span(
-                name="AUTO-MAS task",
-                op="auto_mas.task.run",
-                attributes=attributes,
-                force_transaction=True,
-            ):
-                await self._run_main_task()
-                outcome = self._exit_result
-        except asyncio.CancelledError:
-            outcome = "cancelled"
-            raise
-        except Exception:
-            outcome = "error"
-            raise
-        finally:
-            metric_attributes = {**attributes, "outcome": outcome}
-            record_count("auto_mas.task.runs", attributes=metric_attributes)
-            record_distribution(
-                "auto_mas.task.duration",
-                (time.perf_counter() - started_at) * 1000,
-                unit="millisecond",
-                attributes=metric_attributes,
-            )
-
-    @contextmanager
-    def _observe_script_run(
-        self, script_item: ScriptItem, script_config
-    ) -> Iterator[None]:
-        from app.services.telemetry import record_count
-
-        outcome = "error"
-        try:
-            yield
-            user_statuses = [
-                user.status
-                for user in script_item.user_list
-                if not user.maintenance_skipped
-            ]
-            if script_item.status == "异常":
-                outcome = "failed"
-            elif script_item.user_list and not user_statuses:
-                outcome = "skipped"
-            elif not user_statuses:
-                outcome = "failed" if script_item.status == "异常" else "no_user"
-            elif all(status in SUCCESS_USER_STATUSES for status in user_statuses):
-                outcome = "success"
-            elif "异常" in user_statuses:
-                outcome = "failed"
-            else:
-                outcome = "incomplete"
-        except ExternalHoldDeferred:
-            outcome = "deferred"
-            raise
-        except asyncio.CancelledError:
-            outcome = "cancelled"
-            raise
-        finally:
-            record_count(
-                "auto_mas.script.runs",
-                attributes={
-                    "script_type": _SCRIPT_TYPE_BY_CLASS.get(
-                        type(script_config).__name__, "unknown"
-                    ),
-                    "mode": self.task_info.mode,
-                    "outcome": outcome,
-                },
-            )
-
     def _build_task_item(
         self,
         script_item: ScriptItem,
@@ -1048,8 +964,7 @@ class Task(TaskExecuteBase):
                 logger.info(f"循环任务开始: {script_uid}")
                 await self._publish_cycle_preview(entries, running=entry)
 
-                with self._observe_script_run(script_item, script_config):
-                    await self._spawn_with_preview(task_item, entry, queue_uid)
+                await self._spawn_with_preview(task_item, entry, queue_uid)
 
                 success = is_script_success(
                     script_item.status,
@@ -1181,7 +1096,7 @@ class Task(TaskExecuteBase):
         self.task_info.cycle_next_list = preview[:CYCLE_PREVIEW_SIZE]
         self.task_info.schedule_on_change()
 
-    async def _run_main_task(self):
+    async def main_task(self):
         if self.task_info.is_cycle:
             await self._run_cycle_task()
             return
@@ -1558,44 +1473,42 @@ class Task(TaskExecuteBase):
                     control.index = idx
                     continue
 
-                with self._observe_script_run(script_item, script_config):
+                def start_child():
+                    if control.paused or control.index != idx:
+                        raise QueueControlChanged
+                    self.task_info.begin_script_run(script_item)
+                    child = self.spawn(task_item)
+                    self._active_child_task = child
+                    return child
 
-                    def start_child():
-                        if control.paused or control.index != idx:
-                            raise QueueControlChanged
-                        self.task_info.begin_script_run(script_item)
-                        child = self.spawn(task_item)
-                        self._active_child_task = child
-                        return child
-
-                    try:
-                        await external_holds.run(str(current_script_uid), start_child)
-                    except asyncio.CancelledError:
-                        if (
-                            self.task_info.manual_pause_requested
-                            and not self.is_closing
-                        ):
-                            script_item.status = "已暂停"
-                            nav_offset = 0
-                        elif (
-                            self._pending_nav_offset is not None and not self.is_closing
-                        ):
-                            nav_offset = self._pending_nav_offset
-                            self._pending_nav_offset = None
-                            current_task = asyncio.current_task()
-                            if current_task is not None:
-                                while current_task.cancelling():
-                                    current_task.uncancel()
-                            script_item.status = "跳过"
-                            logger.info(
-                                f"已响应全局热键切换任务 (offset={nav_offset:+d}): 中止当前脚本 {script_item.name}"
-                            )
-                        else:
-                            raise
-                    finally:
-                        if self.task_info.manual_pause_requested:
-                            self._finish_manual_pause(self._active_child_task)
-                        self._active_child_task = None
+                try:
+                    await external_holds.run(str(current_script_uid), start_child)
+                except asyncio.CancelledError:
+                    if (
+                        self.task_info.manual_pause_requested
+                        and not self.is_closing
+                    ):
+                        script_item.status = "已暂停"
+                        nav_offset = 0
+                    elif (
+                        self._pending_nav_offset is not None and not self.is_closing
+                    ):
+                        nav_offset = self._pending_nav_offset
+                        self._pending_nav_offset = None
+                        current_task = asyncio.current_task()
+                        if current_task is not None:
+                            while current_task.cancelling():
+                                current_task.uncancel()
+                        script_item.status = "跳过"
+                        logger.info(
+                            f"已响应全局热键切换任务 (offset={nav_offset:+d}): 中止当前脚本 {script_item.name}"
+                        )
+                    else:
+                        raise
+                finally:
+                    if self.task_info.manual_pause_requested:
+                        self._finish_manual_pause(self._active_child_task)
+                    self._active_child_task = None
             except QueueControlChanged:
                 script_item.status = "已暂停"
                 continue
@@ -1669,6 +1582,7 @@ class Task(TaskExecuteBase):
                 logger.opt(exception=True).warning(
                     f"推送队列汇总失败: {type(error).__name__}"
                 )
+        final_steps = self.task_info.asdict
         await Publisher.send(
             id=str(self.task_info.task_id),
             type=protocol.TASK_COMPLETED,
@@ -1676,24 +1590,29 @@ class Task(TaskExecuteBase):
                 result=result_text,
                 outcome=self._exit_result,
                 error=self._exit_error,
-                task_info=self.task_info.asdict,
+                task_info=final_steps,
             ),
         )
         if self._on_finished is not None:
-            self._on_finished(
-                TaskStatusOut(
-                    taskId=str(self.task_info.task_id),
-                    status=self._exit_result,
-                    detail=result_text,
-                    error=self._exit_error,
-                    mode=self.task_info.mode,
-                    isCycle=self.task_info.is_cycle,
-                    queueId=self.task_info.queue_id,
-                    scriptId=self.task_info.script_id,
-                    userId=self.task_info.user_id,
-                    finishedAt=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                )
+            result = TaskStatusOut(
+                taskId=str(self.task_info.task_id),
+                status=self._exit_result,
+                detail=result_text,
+                error=self._exit_error,
+                mode=self.task_info.mode,
+                isCycle=self.task_info.is_cycle,
+                queueId=self.task_info.queue_id,
+                scriptId=self.task_info.script_id,
+                userId=self.task_info.user_id,
+                task_info=final_steps,
+                finishedAt=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             )
+            self._on_finished(result)
+            if result.queueId:
+                try:
+                    await asyncio.to_thread(save_queue_result, result)
+                except (OSError, sqlite3.Error) as error:
+                    logger.warning(f"保存队列结束快照失败: {error}")
 
         if (
             not self.is_closing

@@ -79,13 +79,13 @@ Item {
                         width: parent.width
                         height: group.headingHeight
                         Text { x: 4; width: parent.width - groupState.width - 12; text: group.label; elide: Text.ElideRight; color: Theme.ink; font.family: Theme.font; font.pixelSize: 15; font.bold: true }
-                        Text { id: groupState; anchors.right: parent.right; text: group.phase === "ended" || group.status === "正在停止" ? group.status : group.steps.count + " 项"; color: Theme.muted; font.family: Theme.font; font.pixelSize: 13 }
+                        Text { id: groupState; anchors.right: parent.right; text: ["ended", "unavailable"].includes(group.phase) || group.status === "正在停止" ? group.status : group.steps.count + " 项"; color: Theme.muted; font.family: Theme.font; font.pixelSize: 13 }
                     }
                     ProgressLine {
                         visible: !group.split
                         title: group.label
                         stateText: group.status
-                        progress: group.fraction
+                        progress: group.phase === "unavailable" ? -1 : group.fraction
                     }
                     Repeater {
                         model: group.split ? group.steps : null
@@ -96,9 +96,10 @@ Item {
                             required property string account
                             required property real progressValue
                             title: String(index + 1).padStart(2,"0") + "   " + name
-                            stateText: group.phase === "ended" && !["完成","异常","跳过"].includes(state)
-                                ? "队列已结束" : account && state === "运行" ? state + " · " + account : state
-                            progress: progressValue
+                            stateText: group.phase === "unavailable" ? "逐项结果不可用"
+                                : group.phase === "ended" && ["等待","运行","已暂停"].includes(state) ? "结束时：" + state
+                                : account && state === "运行" ? state + " · " + account : state
+                            progress: group.phase === "unavailable" ? -1 : progressValue
                             inset: 16
                         }
                     }
@@ -117,6 +118,7 @@ Item {
         Text { id: nameText; x: inset; width: parent.width * 0.62 - inset; elide: Text.ElideRight; text: parent.title; color: Theme.ink; font.family: Theme.font; font.pixelSize: 15; font.bold: true }
         Text { anchors.left: nameText.right; anchors.right: parent.right; horizontalAlignment: Text.AlignRight; elide: Text.ElideRight; text: parent.stateText; color: Theme.muted; font.family: Theme.font; font.pixelSize: 14 }
         Rectangle {
+            visible: parent.progress >= 0
             x: parent.inset; y: 30; width: parent.width - x; height: 4; color: Theme.grid
             Rectangle { height: parent.height; width: parent.width * progress; color: Theme.accent }
         }

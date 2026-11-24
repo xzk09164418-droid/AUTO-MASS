@@ -294,11 +294,9 @@ class AppConfig(GlobalConfig):
         self._game_sign_result_date = today
 
         from app.services import System
-        from app.services.telemetry import set_telemetry_enabled
 
         self.bind("Start", "IfSelfStart", System.set_SelfStart)
         self.bind("Function", "IfAllowSleep", System.set_Sleep)
-        self.bind("Function", "IfEnableTelemetry", set_telemetry_enabled)
         # 注册自启动会读写注册表, 不阻塞初始化; 持有引用避免被 GC 且异常不被静默吞掉
         self_start_task = asyncio.create_task(
             System.set_SelfStart(self.get("Start", "IfSelfStart"))
@@ -313,7 +311,6 @@ class AppConfig(GlobalConfig):
 
         self_start_task.add_done_callback(_self_start_done)
         await System.set_Sleep(self.get("Function", "IfAllowSleep"))
-        set_telemetry_enabled(self.get("Function", "IfEnableTelemetry"))
 
         self.loop = asyncio.get_running_loop()
 

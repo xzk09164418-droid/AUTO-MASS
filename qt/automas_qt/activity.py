@@ -9,6 +9,8 @@ from datetime import datetime, timezone
 import httpx
 from PySide6.QtCore import QObject, QRunnable, QThreadPool, Signal, Slot
 
+from app.tools.reverse1999_calendar import activities_for_version
+
 SRA = {
     "starrail": "sr",
     "genshin": "ys",
@@ -255,21 +257,13 @@ def public_feed(game: str) -> dict:
                 else ""
             )
 
-        rows = [
-            dict(
-                name=item.get("name") or item.get("alias") or key,
-                startTime=stamp(item.get("start_time")),
-                endTime=stamp(item.get("end_time")),
-            )
-            for key, item in (version.get("activity") or {}).items()
-        ]
         return dict(
             version=key,
             versionName=version.get("version_name", ""),
             startTime=stamp(version.get("start_time")),
             endTime=stamp(version.get("end_time")),
             cover="https://re.bluepoch.com/assets/img/BG.jpg",
-            activities=rows,
+            activities=activities_for_version(version),
             source="1999.fan",
         )
 

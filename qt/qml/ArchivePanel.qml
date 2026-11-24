@@ -169,10 +169,13 @@ Item {
         }
         if (shown === null) { lastItem = item; apply(); startDec(); return }
         if (item !== lastItem && item?.runtimeKey && item.runtimeKey === lastItem?.runtimeKey) {
+            // 切卡淡出期间仍显示上一张卡，交给正在运行的动画一次性换入最新内容。
+            lastItem = item
+            if (swapOut.running) return
             const priorY = logViewport?.contentY || 0
             const follow = logViewport?.follow !== false
             const key = item.runtimeKey
-            lastItem = item
+            if (blockCount > page.blocks.length) blockCount = page.blocks.length
             shown = page
             blockCount = page.blocks.length
             if (logViewport) Qt.callLater(() => {

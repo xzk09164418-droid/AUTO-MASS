@@ -64,10 +64,9 @@ from .recovery import (
     CleanupFailed,
     GeneralProcessManager,
     ProcessTracker,
-    split_restart_arguments,
 )
 from .tools import push_notification
-from .tools.launch import launch_commands
+from .tools.launch import is_shared_interpreter, launch_commands
 
 logger = get_logger("通用脚本自动代理")
 
@@ -176,6 +175,12 @@ class AutoProxyTask(ScriptAutoProxyBase):
         self.cleanup_targets = recovery_config.TaskKill or []
         self.cleanup_mode = recovery_config.TaskKillMode or "Force"
         self.restart_entries = recovery_config.Restart or []
+        self.first_launch_list = bool(
+            self.restart_entries
+            and self.script_config.get("Script", "UseLaunchListOnFirstRun")
+        )
+        directory = self.script_config.get("Script", "WorkingDirectory")
+        self.script_working_directory = Path(directory) if directory else None
         self.process_tracker = ProcessTracker()
         self.general_process_manager = self._new_process_manager()
         self._launch_managers: list[ProcessManager] = []
@@ -186,14 +191,9 @@ class AutoProxyTask(ScriptAutoProxyBase):
 
         self.script_path = Path(self.script_config.get("Script", "ScriptPath"))
 
-        commands = launch_commands(
+        self.script_exe_path, self.script_arguments = launch_commands(
             self.script_path, str(self.script_config.get("Script", "Arguments"))
-        )
-        path_list = [path for path, _ in commands]
-        arguments_list = [arguments for _, arguments in commands]
-
-        self.script_exe_path = path_list[0] if len(path_list) > 0 else self.script_path
-        self.script_arguments = arguments_list[0] if len(arguments_list) > 0 else []
+        )[0]
 
         self.script_target_process_info = (
             ProcessInfo(
@@ -351,6 +351,7 @@ class AutoProxyTask(ScriptAutoProxyBase):
             not self.run_book
             and not self._cleanup_error
             and self._failure_kind in {"stalled", "timeout"}
+            and self.script_config.get("Run", "TimeoutRecoveryEnabled")
         ):
             self._recovery_used = True
             self._first_failure = self.cur_user_log.status
@@ -413,7 +414,7 @@ class AutoProxyTask(ScriptAutoProxyBase):
                 (Path(item.Path) for item in self.restart_entries if item.IsMain),
                 self.script_exe_path,
             )
-            if use_restart
+            if use_restart or self.first_launch_list
             else self.script_exe_path
         )
         self._log_baseline = self._snapshot_log_files()
@@ -468,18 +469,24 @@ class AutoProxyTask(ScriptAutoProxyBase):
         if self.wait_event.is_set():
             return
         await self.set_general()
+        if self.first_launch_list:
+            await self._launch_restart(first_launch=True)
+            return
         self._startup_deadline = time.monotonic() + _PROCESS_START_GRACE_SECONDS
         await self._launch_program(
-            self.script_exe_path, self.script_arguments, main=True
+            self.script_exe_path,
+            self.script_arguments,
+            main=True,
+            cwd=self.script_working_directory,
         )
 
     async def _launch_program(
-        self, path: Path, arguments: list[str], *, main: bool, cwd: Path | None = None
+        self, path: Path, arguments: str, *, main: bool, cwd: Path | None = None
     ) -> None:
         manager = self.general_process_manager if main else self._new_process_manager()
         self._launch_managers.append(manager)
         # 主体追踪由并行观察负责，避免启动器阻塞 60 秒导致错过日志或短命进程。
-        await manager.open_process(path, *arguments, cwd=cwd)
+        await manager.open_process(path, raw_arguments=arguments, cwd=cwd)
         if manager.process is not None:
             self.process_tracker.remember(manager.process.pid)
         if main:
@@ -487,17 +494,21 @@ class AutoProxyTask(ScriptAutoProxyBase):
             if self.script_target_process_info is None:
                 self._process_seen = True
 
-    async def _launch_restart(self) -> None:
+    async def _launch_restart(self, *, first_launch: bool = False) -> None:
         for entry in self.restart_entries:
             if self.wait_event.is_set():
                 return
             if entry.IsMain:
-                self._startup_deadline = time.monotonic() + entry.WaitSeconds - 5
+                grace = (
+                    _PROCESS_START_GRACE_SECONDS
+                    if first_launch
+                    else entry.WaitSeconds - 5
+                )
+                self._startup_deadline = time.monotonic() + grace
             try:
-                args = split_restart_arguments(entry.Arguments)
                 await self._launch_program(
                     Path(entry.Path),
-                    args,
+                    entry.Arguments,
                     main=entry.IsMain,
                     cwd=Path(entry.WorkingDirectory)
                     if entry.WorkingDirectory
@@ -546,7 +557,15 @@ class AutoProxyTask(ScriptAutoProxyBase):
                     if self._exit_since is None:
                         self._exit_since = now
                     elif now - self._exit_since >= EXIT_STABLE_SECONDS:
-                        self._set_result("Success!", kind="success")
+                        if (
+                            self.script_config.get("Run", "CheckExitCode")
+                            and not self.script_target_process_info
+                            and (rc := self.general_process_manager.returncode)
+                            not in (None, 0)
+                        ):
+                            self._set_result(f"程序退出码 {rc}")
+                        else:
+                            self._set_result("Success!", kind="success")
                 elif (
                     self._startup_deadline is not None and now >= self._startup_deadline
                 ):
@@ -666,8 +685,8 @@ class AutoProxyTask(ScriptAutoProxyBase):
                             )
                             await self.game_manager.open_process(
                                 self.game_path,
-                                *str(self.script_config.get("Game", "Arguments")).split(
-                                    " "
+                                raw_arguments=self.script_config.get(
+                                    "Game", "Arguments"
                                 ),
                                 breakaway=True,
                             )
@@ -748,7 +767,7 @@ class AutoProxyTask(ScriptAutoProxyBase):
                 and self.general_process_manager is not None
             ):
                 await self.general_process_manager.kill()
-            if hasattr(self, "script_exe_path") and self.script_exe_path is not None:
+            if not is_shared_interpreter(self.script_exe_path):
                 await System.kill_process(self.script_exe_path, kill_tree=True)
         except Exception as e:
             logger.opt(exception=True).warning(f"中止通用脚本进程失败: {e}")
@@ -778,7 +797,7 @@ class AutoProxyTask(ScriptAutoProxyBase):
         logger.info(
             "准备启动脚本: 清理可能未退出的残留进程（不下发/不回写外部配置文件）"
         )
-        if not self.cleanup_targets:
+        if not self.cleanup_targets and not is_shared_interpreter(self.script_exe_path):
             await System.kill_process(self.script_exe_path, kill_tree=True)
 
     def _format_push_log(

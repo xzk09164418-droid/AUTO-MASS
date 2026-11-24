@@ -31,7 +31,7 @@ from app.models.schema import WSTaskNoticeData
 from app.models.task import ScriptItem, TaskExecuteBase
 from app.services import System
 from app.task.general.tools.backup_archive import archive_native_backup
-from app.task.general.tools.launch import launch_commands
+from app.task.general.tools.launch import is_shared_interpreter, launch_commands
 from app.utils import ProcessManager, get_logger
 
 logger = get_logger("通用脚本设置")
@@ -68,17 +68,8 @@ class ScriptConfigTask(TaskExecuteBase):
         commands = launch_commands(
             self.script_path, str(self.script_config.get("Script", "Arguments"))
         )
-        path_list = [path for path, _ in commands]
-        arguments_list = [arguments for _, arguments in commands]
-
-        self.script_arguments = arguments_list[0] if len(arguments_list) > 0 else []
-        self.script_set_exe_path = (
-            path_list[1]
-            if len(path_list) > 1
-            else (path_list[0] if path_list else self.script_path)
-        )
-        self.script_set_arguments = (
-            arguments_list[1] if len(arguments_list) > 1 else self.script_arguments
+        self.script_set_exe_path, self.script_set_arguments = (
+            commands[1] if len(commands) > 1 else commands[0]
         )
 
     async def main_task(self):
@@ -88,8 +79,11 @@ class ScriptConfigTask(TaskExecuteBase):
         logger.info(
             f"运行脚本设置任务: {self.script_set_exe_path}, 参数: {self.script_set_arguments}"
         )
+        directory = self.script_config.get("Script", "WorkingDirectory")
         await self.general_process_manager.open_process(
-            self.script_set_exe_path, *self.script_set_arguments
+            self.script_set_exe_path,
+            raw_arguments=self.script_set_arguments,
+            cwd=Path(directory) if directory else None,
         )
 
         self.wait_event.clear()
@@ -113,11 +107,13 @@ class ScriptConfigTask(TaskExecuteBase):
     async def set_general(self) -> None:
         """清理残留进程（不再注入外部配置文件）"""
         logger.info(f"清理残留进程以启动脚本设置: {self.cur_user_item.user_id}")
-        await System.kill_process(self.script_set_exe_path, kill_tree=True)
+        if not is_shared_interpreter(self.script_set_exe_path):
+            await System.kill_process(self.script_set_exe_path, kill_tree=True)
 
     async def final_task(self):
         await self.general_process_manager.kill()
-        await System.kill_process(self.script_set_exe_path, kill_tree=True)
+        if not is_shared_interpreter(self.script_set_exe_path):
+            await System.kill_process(self.script_set_exe_path, kill_tree=True)
         del self.general_process_manager
         await self.archive_native_config()
         self.cur_user_item.status = "完成"

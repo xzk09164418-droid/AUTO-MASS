@@ -11,6 +11,17 @@ DEFAULT_PORTS = json.loads(
 )
 
 
+def configured_backend_host() -> str:
+    """Honor the local instance's loopback-only setting on every backend entry point."""
+    path = Path.cwd() / "config/HostInstance.json"
+    if (
+        path.is_file()
+        and json.loads(path.read_text(encoding="utf-8")).get("loopbackOnly") is True
+    ):
+        return "127.0.0.1"
+    return "0.0.0.0"
+
+
 def configured_backend_port(*, development: bool) -> int:
     path = Path.cwd() / "config/HostInstance.json"
     if path.exists():

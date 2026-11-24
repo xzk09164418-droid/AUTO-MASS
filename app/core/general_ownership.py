@@ -28,6 +28,8 @@ class GeneralOwnership:
         keys = (
             "ScriptPath",
             "Arguments",
+            "WorkingDirectory",
+            "UseLaunchListOnFirstRun",
             "IfTrackProcess",
             "TrackProcessName",
             "TrackProcessExe",

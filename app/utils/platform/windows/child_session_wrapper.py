@@ -83,6 +83,7 @@ def run_wrapper(
     command: list[str],
     cwd: Path | None = None,
     env_file: Path | None = None,
+    raw_arguments: str | None = None,
 ) -> int:
     stop_file = state_file.with_suffix(state_file.suffix + ".stop")
     started_at = time.time()
@@ -115,7 +116,10 @@ def run_wrapper(
 
     try:
         proc = subprocess.Popen(
-            command,
+            command
+            if raw_arguments is None
+            else subprocess.list2cmdline([command[0]]) + " " + raw_arguments,
+            executable=None if raw_arguments is None else command[0],
             cwd=str(cwd) if cwd else None,
             env=env,
             stdin=subprocess.DEVNULL,
@@ -207,6 +211,7 @@ def main(argv: list[str] | None = None) -> int:
         description="AUTO-MAS Child Session Process Wrapper"
     )
     parser.add_argument("--state-file", required=True, help="JSON 状态输出文件路径")
+    parser.add_argument("--raw-arguments", default=None)
     parser.add_argument("--cwd", default=None, help="工作目录")
     parser.add_argument("--env-file", default=None, help="附加环境变量 JSON 文件")
     parser.add_argument("command", nargs=argparse.REMAINDER, help="待执行的命令及参数")
@@ -221,7 +226,13 @@ def main(argv: list[str] | None = None) -> int:
     state_path = Path(args.state_file).resolve()
     cwd_path = Path(args.cwd).resolve() if args.cwd else None
     env_path = Path(args.env_file).resolve() if args.env_file else None
-    return run_wrapper(state_path, cmd, cwd=cwd_path, env_file=env_path)
+    return run_wrapper(
+        state_path,
+        cmd,
+        cwd=cwd_path,
+        env_file=env_path,
+        raw_arguments=args.raw_arguments,
+    )
 
 
 if __name__ == "__main__":

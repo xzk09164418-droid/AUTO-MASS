@@ -71,6 +71,7 @@ if _leaked_venv is not None:
 
 from app.services.instance_identity import (  # noqa: E402
     DEFAULT_PORTS,
+    configured_backend_host,
     configured_backend_port,
 )
 
@@ -274,20 +275,8 @@ def main(argv: list[str] | None = None):
     # 主桌面只校验会话配置并转发，不重复加载实际后端使用的业务服务。
     from app.core import Config
     from app.core.restore_bindings import resolve_restore_pools
-    from app.services.telemetry import (
-        init_sentry,
-        is_telemetry_enabled,
-        resolve_sentry_dist,
-    )
 
     Config.set_restore_pool_resolver(resolve_restore_pools)
-
-    init_sentry(
-        release=Config.VERSION,
-        development=development_environment,
-        enabled=is_telemetry_enabled(Path.cwd() / "config" / "Config.json"),
-        dist=resolve_sentry_dist(current_dir),
-    )
 
     from contextlib import asynccontextmanager, suppress
 
@@ -491,7 +480,7 @@ def main(argv: list[str] | None = None):
         async def shutdown_services() -> None:
             from app.core.ws import Dispatcher, MainConnection
             from app.runtime_tasks import RuntimeTasks
-            from app.services import Matomo, System, Updater
+            from app.services import System, Updater
 
             external_mail_task.cancel()
             with suppress(asyncio.CancelledError):
@@ -546,7 +535,6 @@ def main(argv: list[str] | None = None):
             from app.services.notification import Notify
 
             await Notify.stop()
-            await Matomo.close()
             logger.info("AUTO-MAS 后端服务清理完成")
 
         from app.core.lifecycle import ShutdownCoordinator
@@ -654,7 +642,7 @@ def main(argv: list[str] | None = None):
         logger.info(f"后端监听端口: {http_port} (无窗口模式={bool(cli_args.headless)})")
         config = uvicorn.Config(
             app,
-            host="0.0.0.0",
+            host=configured_backend_host(),
             port=http_port,
             log_level="info",
             log_config=None,

@@ -164,7 +164,7 @@ async def _shutdown_backend() -> None:
         logger.warning("后端开发模式下忽略退出请求，仅完成任务清理")
         return
 
-    # 执行完整 teardown（任务/定时器/遥测等），失败则不发送完成信号，
+    # 执行完整 teardown（任务/定时器等），失败则不发送完成信号，
     # 避免前端在清理未完成时就认为可以退出
     try:
         await ShutdownCoordinator.run_teardown()

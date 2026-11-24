@@ -432,6 +432,20 @@ class FileValidator(ValidatorBase):
         return resolved.as_posix()
 
 
+class ScriptExecutableValidator(FileValidator):
+    """Allow the Windows command interpreter as a launch target only."""
+
+    def validate(self, value):
+        if isinstance(value, str) and os.name == "nt":
+            system = Path(os.environ["SystemRoot"]) / "System32"
+            if Path(value) in (
+                system / "cmd.exe",
+                system / "WindowsPowerShell/v1.0/powershell.exe",
+            ):
+                return Path(value).is_file()
+        return super().validate(value)
+
+
 class FolderValidator(ValidatorBase):
     """文件夹路径验证器"""
 
@@ -680,26 +694,6 @@ class ArgumentValidator(ValidatorBase):
             return False
         try:
             shlex.split(value.strip())
-            return True
-        except ValueError:
-            return False
-
-    def correct(self, value):
-
-        return value if self.validate(value) else ""
-
-
-class AdvancedArgumentValidator(ValidatorBase):
-    def validate(self, value):
-        if not isinstance(value, str):
-            return False
-        try:
-            for segment in value.split("|"):
-                segment = segment.strip()
-                if not segment:
-                    continue
-                param_str = segment.split("%", 1)[-1].strip()
-                shlex.split(param_str)
             return True
         except ValueError:
             return False

@@ -21,6 +21,7 @@
 #   Contact: DLmaster_361@163.com
 
 
+import asyncio
 from typing import Any
 
 from fastapi import APIRouter, Body
@@ -29,6 +30,7 @@ from pydantic import Field
 from app.api.external_holds import router as external_holds_router
 from app.core import Config, TaskManager
 from app.core.hotkey_manager import HotkeyManager
+from app.core.queue_result_store import read_queue_result
 from app.models.schema import *
 from app.services import System
 from app.utils import get_logger
@@ -70,6 +72,8 @@ async def get_task_status(task_id: str) -> TaskStatusOut:
     """返回运行中或最近完成任务的终态；不包含日志。"""
 
     result = TaskManager.get_task_status(task_id)
+    if result is None:
+        result = await asyncio.to_thread(read_queue_result, task_id)
     if result is None:
         return TaskStatusOut(
             code=404,

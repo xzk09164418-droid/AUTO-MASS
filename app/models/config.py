@@ -21,7 +21,6 @@
 
 import calendar
 import json
-import uuid
 from datetime import datetime, timedelta, timezone, tzinfo
 from typing import Any
 
@@ -35,7 +34,6 @@ from app.utils.constants import (
 )
 
 from .ConfigBase import (
-    AdvancedArgumentValidator,
     ArgumentValidator,
     BoolValidator,
     ConfigBase,
@@ -44,16 +42,17 @@ from .ConfigBase import (
     EmulatorPathValidator,
     EncryptValidator,
     FileValidator,
+    FolderValidator,
     JSONValidator,
     MultipleConfig,
     MultipleOptionsValidator,
     MultipleUIDValidator,
     OptionsValidator,
     RangeValidator,
+    ScriptExecutableValidator,
     StringValidator,
     URLValidator,
     UserNameValidator,
-    UUIDValidator,
     ValidatorBase,
     VirtualConfigValidator,
 )
@@ -568,10 +567,18 @@ class GeneralConfig(ConfigBase):
 
         ## Script ----------------------------------------------------------
         ## 脚本路径
-        self.Script_ScriptPath = ConfigItem("Script", "ScriptPath", "", FileValidator())
+        self.Script_ScriptPath = ConfigItem(
+            "Script", "ScriptPath", "", ScriptExecutableValidator()
+        )
         ## 脚本参数
-        self.Script_Arguments = ConfigItem(
-            "Script", "Arguments", "", AdvancedArgumentValidator()
+        self.Script_Arguments = ConfigItem("Script", "Arguments", "")
+        ## 原生启动工作目录；留空使用程序目录
+        self.Script_WorkingDirectory = ConfigItem(
+            "Script", "WorkingDirectory", "", FolderValidator()
+        )
+        ## 首轮也使用有序启动清单
+        self.Script_UseLaunchListOnFirstRun = ConfigItem(
+            "Script", "UseLaunchListOnFirstRun", False, BoolValidator()
         )
         ## 自定义清理清单；留空时沿用原版进程清理
         self.Script_TaskKill = ConfigItem(
@@ -668,7 +675,7 @@ class GeneralConfig(ConfigBase):
         ## 游戏进程名称
         self.Game_ProcessName = ConfigItem("Game", "ProcessName", "")
         ## 游戏启动参数
-        self.Game_Arguments = ConfigItem("Game", "Arguments", "", ArgumentValidator())
+        self.Game_Arguments = ConfigItem("Game", "Arguments", "")
         ## 等待时间（秒）
         self.Game_WaitTime = ConfigItem("Game", "WaitTime", 0, RangeValidator(0, 9999))
         ## 是否强制关闭
@@ -686,6 +693,14 @@ class GeneralConfig(ConfigBase):
         self.Game_EmulatorIndex = ConfigItem("Game", "EmulatorIndex", "-")
 
         ## Run -------------------------------------------------------------
+        ## 仅在跟踪启动程序自身时按退出码判定失败
+        self.Run_CheckExitCode = ConfigItem(
+            "Run", "CheckExitCode", False, BoolValidator()
+        )
+        ## 超时或日志停滞后是否允许额外补跑
+        self.Run_TimeoutRecoveryEnabled = ConfigItem(
+            "Run", "TimeoutRecoveryEnabled", True, BoolValidator()
+        )
         ## 单账号运行总时限（分钟），包含等待和全部重试
         self.Run_HardTimeLimit = ConfigItem(
             "Run", "HardTimeLimit", 120, RangeValidator(1, 9999)
@@ -859,10 +874,6 @@ class GlobalConfig(ConfigBase):
         ## 是否屏蔽模拟器广告
         self.Function_IfBlockAd = ConfigItem(
             "Function", "IfBlockAd", False, BoolValidator()
-        )
-        ## 是否启用匿名遥测
-        self.Function_IfEnableTelemetry = ConfigItem(
-            "Function", "IfEnableTelemetry", True, BoolValidator()
         )
         ## 个人版 MSS 的专属编排（灾变防线），只对个人版项目生效，
         ## 普通版 MSS 与其它脚本都会忽略它。
@@ -1065,22 +1076,6 @@ class GlobalConfig(ConfigBase):
         )
 
         ## Data -------------------------------------------------------------
-        ## 唯一标识符
-        self.Data_UID = ConfigItem("Data", "UID", str(uuid.uuid4()), UUIDValidator())
-        ## 上次统计上传时间
-        self.Data_LastStatisticsUpload = ConfigItem(
-            "Data",
-            "LastStatisticsUpload",
-            "2000-01-01 00:00:00",
-            DateTimeValidator("%Y-%m-%d %H:%M:%S"),
-        )
-        ## 上次记录遥测日活的 UTC 日期
-        self.Data_LastTelemetryActive = ConfigItem(
-            "Data",
-            "LastTelemetryActive",
-            "2000-01-01",
-            DateTimeValidator("%Y-%m-%d"),
-        )
         ## 上次关卡更新时间
         self.Data_LastStageUpdated = ConfigItem(
             "Data",

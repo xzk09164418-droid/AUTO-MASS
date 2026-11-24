@@ -31,14 +31,20 @@ Item {
             model: [Qt.point(15, 15), Qt.point(245, 15), Qt.point(15, 155), Qt.point(245, 155)]
             Rectangle { required property point modelData; x: modelData.x - 2.5; y: modelData.y - 2.5; width: 5; height: 5; radius: 2.5; color: Qt.rgba(0.16, 0.16, 0.14, 0.5) }
         }
-        // 有启动程序时显示程序图标唱片，否则按所属部门（编号前两位）显示对应的默认标志
+        // 游戏活动使用本地游戏肖像；其他部门沿用程序唱片或部门标志。
+        readonly property string portrait: tape.record?.artwork || ""
         readonly property string iconPath: tape.record ? tape.record.icon || "" : ""
         readonly property var logos: ["01_archive", "02_custody", "03_emulator", "04_queue", "05_scheduler",
             "06_local", "07_sign", "08_history", "09_activity", "10_settings"]
         readonly property string logo: logos[parseInt(tape.code) - 1] || "11_cassette"
-        IconDisc { visible: parent.iconPath !== ""; x: 20; y: 30; width: 100; height: 100; path: parent.iconPath }
+        IconDisc {
+            visible: source !== ""
+            x: 20; y: 30; width: 100; height: 100
+            path: parent.iconPath
+            artwork: parent.portrait
+        }
         Image {
-            visible: parent.iconPath === ""
+            visible: !parent.portrait && parent.iconPath === ""
             x: 14; y: 24
             width: 112; height: 112
             source: Qt.resolvedUrl("../assets/logos/png/" + parent.logo + ".png")

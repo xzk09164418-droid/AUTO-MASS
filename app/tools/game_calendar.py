@@ -5,12 +5,11 @@
 """后台游戏日历取数，复用首页已使用的公开活动源。"""
 
 from collections.abc import Mapping
-from datetime import datetime
 
 import httpx
 
 from app.tools.sra_activity import fetch_sra_activities
-from app.utils.constants import UTC8
+from app.tools.reverse1999_calendar import activities_for_version
 
 # 与首页游戏键对应；后台使用中文档，避免切换界面语言改变活动标识。
 CALENDAR_GAMES = {
@@ -34,17 +33,6 @@ BLUEARCHIVE_SERVERS = {
 REVERSE1999_URL = "https://api.1999.fan/api/data/activity/cn.json"
 
 
-def _timestamp_iso(value: object) -> str:
-    """1999 的时间为 Unix 毫秒，输出带时区的时间。"""
-
-    if not isinstance(value, (int, float)):
-        return ""
-    try:
-        return datetime.fromtimestamp(value / 1000, tz=UTC8).isoformat()
-    except (ValueError, OverflowError, OSError):
-        return ""
-
-
 async def fetch_calendar_activities(source: str) -> list[Mapping[str, object]] | None:
     """查询完整活动列表；取数失败由定时器隔离，下次检查再重试。"""
 
@@ -62,29 +50,7 @@ async def fetch_calendar_activities(source: str) -> list[Mapping[str, object]] |
         raise ValueError("1999 活动数据格式无效")
 
     activities: list[Mapping[str, object]] = []
-    fallback_names = {
-        "combat": "版本活动",
-        "re-release": "复刻活动",
-        "anecdote": "轶事活动",
-    }
-    event_names = {"MainStory": "主线活动", "SideStory": "限时活动"}
     for version in versions.values():
-        if not isinstance(version, dict):
-            continue
-        items = version.get("activity")
-        if not isinstance(items, dict):
-            continue
-        for key, item in items.items():
-            if not isinstance(item, dict):
-                continue
-            activities.append(
-                {
-                    "name": item.get("name")
-                    or item.get("alias")
-                    or event_names.get(item.get("event_type"))
-                    or fallback_names.get(key, key),
-                    "startTime": _timestamp_iso(item.get("start_time")),
-                    "endTime": _timestamp_iso(item.get("end_time")),
-                }
-            )
+        if isinstance(version, dict):
+            activities.extend(activities_for_version(version))
     return activities

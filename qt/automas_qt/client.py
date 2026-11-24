@@ -121,6 +121,9 @@ class ClientController(QObject):
 
     def set_window(self, window) -> None:
         self.window = window
+        self.tray.setToolTip(
+            "AUTO-MAS（前端已打开）" if window is not None else "AUTO-MAS（前端已退出，后端仍在运行）"
+        )
         if sys.platform != "win32":
             return
         if window is None:
@@ -233,7 +236,6 @@ class ClientController(QObject):
             self.errorOccurred.emit("系统托盘不可用，已保留界面。")
             return
         self.releaseRequested.emit()
-        self.tray.setToolTip("AUTO-MAS（前端已退出，后端仍在运行）")
 
     def _set_busy(self, value: bool) -> None:
         self.busy = value

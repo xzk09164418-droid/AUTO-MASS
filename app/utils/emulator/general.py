@@ -22,7 +22,6 @@
 
 import asyncio
 import re
-import shlex
 import time
 from pathlib import Path
 from typing import Dict
@@ -76,11 +75,11 @@ class GeneralDeviceManager(DeviceBase):
         if idx not in self.process_managers:
             self.process_managers[idx] = ProcessManager()
 
-        args, _ = self.parse_index(idx)
+        arguments, _ = self.parse_index(idx)
 
         # 启动进程
         await self.process_managers[idx].open_process(
-            self.emulator_path, *args, breakaway=True
+            self.emulator_path, raw_arguments=arguments, breakaway=True
         )
 
         # 等待进程启动
@@ -199,19 +198,18 @@ class GeneralDeviceManager(DeviceBase):
                 return hwnd
         return None
 
-    def parse_index(self, idx: str):
+    def parse_index(self, idx: str) -> tuple[str, str]:
 
         if "|" not in idx:
             raise ValueError("缺少 '|' 分隔符")
 
         cmd_part, addr_part = idx.rsplit("|", 1)
-        args = shlex.split(cmd_part.strip())
 
         addr = addr_part.replace("：", ":").replace("。", ".")
         addr = re.sub(r"\s+", "", addr)
 
         if addr in {"usb", "local", "shell"} or addr.startswith("emulator-"):
-            return args, addr
+            return cmd_part, addr
 
         if ":" not in addr:
             raise ValueError(f"ADB 地址缺少端口: {addr}")
@@ -224,7 +222,7 @@ class GeneralDeviceManager(DeviceBase):
         if not host:
             raise ValueError("主机名为空")
 
-        return args, f"{host}:{port_str}"
+        return cmd_part, f"{host}:{port_str}"
 
     async def cleanup(self) -> None:
         """

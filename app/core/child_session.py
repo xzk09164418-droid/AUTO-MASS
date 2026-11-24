@@ -586,6 +586,7 @@ class _ChildSessionManager:
         *args: str,
         cwd: Path | None = None,
         env: dict[str, str] | None = None,
+        raw_arguments: str | None = None,
     ) -> ChildSessionWrappedProcess:
         """通过包装器模式（Wrapper）在本地远程桌面（Child Session）中启动程序并跟踪运行状态与退出码。"""
 
@@ -624,6 +625,8 @@ class _ChildSessionManager:
         ]
         if env_file is not None:
             wrapper_args_list.extend(["--env-file", str(env_file)])
+        if raw_arguments is not None:
+            wrapper_args_list.append("--raw-arguments=" + raw_arguments)
         wrapper_args_list.append("--")
         wrapper_args_list.extend(target_cmd)
 

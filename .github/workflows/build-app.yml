@@ -77,21 +77,9 @@ jobs:
 
       - name: 发布前置检查
         env:
-          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
-          SENTRY_ORG: ${{ vars.SENTRY_ORG }}
-          SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT }}
           SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
           VERSION_TAG: ${{ steps.generate_version_info.outputs.version_tag }}
         run: |
-          if ([string]::IsNullOrWhiteSpace($env:SENTRY_AUTH_TOKEN)) {
-            throw '缺少 GitHub Actions secret: SENTRY_AUTH_TOKEN'
-          }
-          if ([string]::IsNullOrWhiteSpace($env:SENTRY_ORG)) {
-            throw '缺少 GitHub Actions variable: SENTRY_ORG'
-          }
-          if ([string]::IsNullOrWhiteSpace($env:SENTRY_PROJECT)) {
-            throw '缺少 GitHub Actions variable: SENTRY_PROJECT'
-          }
           if ([string]::IsNullOrWhiteSpace($env:SIGNPATH_API_TOKEN)) {
             throw '缺少 GitHub Actions secret: SIGNPATH_API_TOKEN'
           }
@@ -113,9 +101,6 @@ jobs:
         uses: ./.github/actions/build-windows-unpacked
         with:
           github-token: ${{ github.token }}
-          sentry-auth-token: ${{ secrets.SENTRY_AUTH_TOKEN }}
-          sentry-org: ${{ vars.SENTRY_ORG }}
-          sentry-project: ${{ vars.SENTRY_PROJECT }}
 
       - name: 准备待签名的原生启动器
         shell: pwsh
@@ -257,21 +242,9 @@ jobs:
 
             ## 隐私政策 / Privacy Policy
 
-            为更好地提供服务，AUTO-MAS 将自动收集以下信息：
+            本 Qt 版本不向远端发送错误报告、性能追踪或使用统计。
 
-            - 软件版本号
-            - 运行时错误信息
-            - 性能追踪信息
-
-            AUTO-MAS 尊重并保护用户隐私。上述信息会在客户端完成脱敏后发送至 Sentry SaaS（美国区域）进行错误与性能分析；不会发送用户身份、Cookie、请求头、请求体、URL 查询参数、局部变量或本机绝对路径。匿名遥测默认开启，可在「设置 -> 功能设置」中关闭；关闭后前后端均不再发送遥测数据。
-
-            To better serve you, AUTO-MAS will automatically collect the following information:
-
-            - Software version number
-            - Runtime error information
-            - Performance tracing information
-
-            AUTO-MAS respects and protects user privacy. This information is redacted on the client before being sent to Sentry SaaS (US region) for error and performance analysis. User identity, cookies, request headers, request bodies, URL query parameters, local variables, and absolute local paths are not sent. Anonymous telemetry is enabled by default and can be disabled under 「Settings -> Function Settings」; once disabled, neither the frontend nor backend sends telemetry data.
+            This Qt build does not send error reports, performance traces or usage statistics.
 
             [已有 Mirror酱 CDK ？前往 Mirror酱 高速下载](https://mirrorchyan.com/zh/projects?rid=AUTO_MAS&source=auto-mas-release)
           files: artifacts/*
@@ -293,43 +266,6 @@ jobs:
           else
             gh issue create --title "$ISSUE_TITLE" --body "$ISSUE_BODY"
           fi
-
-      - name: 标记 Sentry 生产部署
-        env:
-          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
-          SENTRY_ORG: ${{ vars.SENTRY_ORG }}
-          SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT }}
-          VERSION_TAG: ${{ needs.build.outputs.version_tag }}
-          REPOSITORY: ${{ github.repository }}
-        run: |
-          if (-not $env:SENTRY_AUTH_TOKEN -or -not $env:SENTRY_ORG -or -not $env:SENTRY_PROJECT) {
-            Write-Warning '缺少 Sentry 配置，跳过部署登记。'
-            exit 0
-          }
-          $releaseVersion = "auto-mas@$env:VERSION_TAG"
-          $encodedOrg = [Uri]::EscapeDataString($env:SENTRY_ORG)
-          $encodedRelease = [Uri]::EscapeDataString($releaseVersion)
-          $releaseUrl = "https://github.com/$env:REPOSITORY/releases/tag/$env:VERSION_TAG"
-          $payload = @{
-            environment = 'production'
-            name = "GitHub Release $env:VERSION_TAG"
-            url = $releaseUrl
-            projects = @($env:SENTRY_PROJECT)
-          } | ConvertTo-Json
-          $headers = @{
-            Authorization = "Bearer $env:SENTRY_AUTH_TOKEN"
-          }
-          try {
-            Invoke-RestMethod `
-              -Method Post `
-              -Uri "https://sentry.io/api/0/organizations/$encodedOrg/releases/$encodedRelease/deploys/" `
-              -Headers $headers `
-              -ContentType 'application/json' `
-              -Body $payload | Out-Null
-          } catch {
-            Write-Warning "登记 Sentry 部署失败，不影响发布：$($_.Exception.Message)"
-          }
-        shell: pwsh
 
   cnb:
     name: 发布 CNB 发行版

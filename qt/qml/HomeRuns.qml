@@ -69,7 +69,7 @@ Item {
     }
     function trimFinished() {
         for (let i = entries.count - 1; i >= 0; i--)
-            if (entries.get(i).phase === "ended") entries.remove(i)
+            if (["ended", "unavailable"].includes(entries.get(i).phase)) entries.remove(i)
     }
     function sync(tasks) {
         snapshotReady = true
@@ -115,8 +115,16 @@ Item {
                 const labels = {success:"完成", error:"异常", cancelled:"已停止"}
                 const terminal = r.code === 200 && labels[r.status]
                 const previous = entries.get(pos)
-                put(id, previous.label, terminal || (r.code === 404 ? "已结束" : "等待同步"),
-                    terminal && r.status === "success" ? 1 : previous.fraction, terminal || r.code === 404 ? "ended" : "running")
+                if (terminal) {
+                    const hasSteps = Array.isArray(r.task_info)
+                    const children = hasSteps ? scriptSteps(r.task_info) : undefined
+                    put(id, previous.label, terminal, r.status === "success" ? 1 : previous.fraction,
+                        hasSteps ? "ended" : "unavailable", children)
+                } else if (r.code === 404) {
+                    put(id, previous.label, "结果不可用", previous.fraction, "unavailable")
+                } else {
+                    put(id, previous.label, "等待同步", previous.fraction, "running")
+                }
             })
         }
     }

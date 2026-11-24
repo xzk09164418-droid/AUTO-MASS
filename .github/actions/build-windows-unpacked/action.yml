@@ -5,18 +5,6 @@ inputs:
   github-token:
     description: 兼容发布调用的保留输入，Qt 构建无需下载 Runtime。
     required: true
-  sentry-auth-token:
-    description: 可选的 Sentry Auth Token；CI 构建留空。
-    required: false
-    default: ''
-  sentry-org:
-    description: 可选的 Sentry Organization；CI 构建留空。
-    required: false
-    default: ''
-  sentry-project:
-    description: 可选的 Sentry Project；CI 构建留空。
-    required: false
-    default: ''
 
 runs:
   using: composite
@@ -28,10 +16,6 @@ runs:
         python-version: '3.12'
 
     - name: 构建应用程序
-      env:
-        SENTRY_AUTH_TOKEN: ${{ inputs.sentry-auth-token }}
-        SENTRY_ORG: ${{ inputs.sentry-org }}
-        SENTRY_PROJECT: ${{ inputs.sentry-project }}
       shell: pwsh
       run: |
         uv sync --locked --no-dev

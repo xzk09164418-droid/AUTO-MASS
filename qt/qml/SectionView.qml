@@ -32,7 +32,7 @@ FocusScope {
                 rowIcons:it.rowIcons || null, configRow:it.configRow !== false, icon:it.icon || ""}))
         if (d.key === "scripts")
             return items.map(it => ({uid:it.uid,name:it.name, icon:it.icon || "", rows:SD.pages(it).map(p => p.name)}))
-        return [{name:d.zh, rows:items.map(it => it.name), rowIcons:items.map(it => it.icon || "")}]
+        return [{name:d.zh, rows:items.map(it => it.name), rowIcons:items.map(it => it.artwork || it.icon || "")}]
     }
     property bool arrayPanelUsed: false
     property bool syncingArray: false
@@ -85,7 +85,6 @@ FocusScope {
     })
     readonly property var items: emulatorPage ? emulatorConfigs.records : showingOnlineHome ? homeCards.concat(controlGuide)
         : d?.key === "scripts" ? scriptShelf.filtered : d && live[d.key] ? live[d.key]
-        : onlineHome && d?.key === "activity" ? activityShelf.records()
         : onlineHome ? [connectionCard] : conf ? conf.items : []
     onItemsChanged: {
         if (!opened) return
@@ -301,8 +300,8 @@ FocusScope {
         snapshotPending = false
         if (!api) { liveState = ""; return }
         if (key === "activity") {
-            setLive(key,activityShelf.records())
-            if (opened) activityShelf.load(activityShelf.games[target]?.[0] || activityShelf.games[0][0],false)
+            liveState = "loading"
+            activityShelf.refresh(generation)
             return
         }
         if (key === "home") { loadQuickStart(); loadOverview(); return }
@@ -311,7 +310,12 @@ FocusScope {
         liveState = "loading"
         if (key === "scripts") {
             callAll([["s", "/api/scripts/get", { includeUsers: true }], ["e", "/api/info/combox/emulator", {}]],
-                    m => m.s.code === 200 ? setLive(key, Live.scripts(m.s, m.e.code === 200 ? m.e.data : [])) : fail(m.s))
+                    m => Qt.callLater(() => {
+                        // 在网络回调返回后再构建托管卡片，切页时丢弃旧请求。
+                        if (generation !== sectionGeneration || !opened || d?.key !== key) return
+                        if (m.s.code === 200) setLive(key, Live.scripts(m.s, m.e.code === 200 ? m.e.data : []))
+                        else fail(m.s)
+                    }))
         } else if (key === "queue") {
             callAll([["q", "/api/queue/get", {}], ["s", "/api/info/combox/script", {}], ["sc", "/api/scripts/get", {}]], m => {
                 if (m.q.code !== 200) { fail(m.q); return }
@@ -462,7 +466,7 @@ FocusScope {
     onItemChanged: if (workspace.record && workspace.source !== item) workspace.leave()
     onTargetChanged: {
         workspace.leave()
-        if(opened && api && d?.key==="activity") activityShelf.load(activityShelf.games[target]?.[0],false)
+        if(opened && api && d?.key==="activity" && liveState==="ok") activityShelf.load(activityShelf.games[target]?.[0],false)
     }
 
     function exec(op) {
@@ -630,7 +634,6 @@ FocusScope {
         panel.tab = items[target] && items[target]._tab ? items[target]._tab : 0
         landed = false
         opened = true
-        if (d.key==="activity" && api) activityShelf.load(activityShelf.games[target][0],false)
         // 增强阵列：方块直接消失不再重建，阵列飞入
         if (arrayMode) { landed = true; setupArray() }
         else morph.start(r, tileItem, false)
