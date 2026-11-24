@@ -27,7 +27,7 @@ from PySide6.QtCore import (
     qVersion,
 )
 from PySide6.QtGui import QGuiApplication, QIcon, QSurfaceFormat
-from PySide6.QtNetwork import QLocalServer, QLocalSocket
+from PySide6.QtNetwork import QLocalServer, QLocalSocket, QSslSocket
 from PySide6.QtQml import QQmlApplicationEngine
 from PySide6.QtWidgets import QApplication
 
@@ -146,6 +146,25 @@ def configure_graphics_cache() -> None:
         os.environ.setdefault("QSG_RHI_PIPELINE_CACHE_LOAD", str(source))
 
 
+def configure_windows_tls() -> None:
+    if sys.platform != "win32":
+        return
+    # Qt 选择 Schannel 时也会探测 OpenSSL。探测期间优先使用 Python 自带的
+    # DLL 对，避免活动封面与 httpx 活动请求在同一进程加载不同版本。
+    runtime_dlls = Path(sys.base_prefix) / "DLLs"
+    old_path = os.environ.get("PATH")
+    try:
+        os.environ["PATH"] = (
+            f"{runtime_dlls}{os.pathsep}{old_path}" if old_path else str(runtime_dlls)
+        )
+        QSslSocket.setActiveBackend("schannel")
+    finally:
+        if old_path is None:
+            os.environ.pop("PATH", None)
+        else:
+            os.environ["PATH"] = old_path
+
+
 def main() -> int:
     args = parse_args()
     if sys.stderr is None or sys.stdout is None:
@@ -155,9 +174,6 @@ def main() -> int:
         sys.stderr = sys.stderr or output
         sys.stdout = sys.stdout or output
     motion = args.motion or saved_motion()
-    # 增强挡位：后台线程先把 3D 相关 DLL 映射进来，之后预加载 3D 阵列时主线程不再为读盘卡顿
-    if motion == "enhanced":
-        preload_libraries_async()
     # 显式要求垂直同步：交换链按显示器刷新节拍呈现，避免圆环等大幅运动时撕裂
     fmt = QSurfaceFormat.defaultFormat()
     fmt.setSwapInterval(1)
@@ -165,6 +181,10 @@ def main() -> int:
     fmt.setSamples(4)
     QSurfaceFormat.setDefaultFormat(fmt)
     app = QApplication(sys.argv)
+    configure_windows_tls()
+    # 增强挡位：后台线程先把 3D 相关 DLL 映射进来，之后预加载 3D 阵列时主线程不再为读盘卡顿
+    if motion == "enhanced":
+        preload_libraries_async()
     app.setApplicationName("AUTO-MASS")
     app.setOrganizationName("AUTO-MAS")
     configure_graphics_cache()
